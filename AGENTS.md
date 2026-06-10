@@ -66,6 +66,9 @@ Keep the tool small and predictable. Do not turn it into:
   start, shutdown, reboot, and stop.
 - Put clone, config, resize, migrate, snapshot, delete, output formats, and
   scripting details in `docs/usage.md`.
+- Keep `FEATURES.md` and `FEATURES-zhCN.md` synchronized with user-facing tool
+  capabilities. Whenever commands, flags, output contracts, safety behavior, or
+  supported workflows change, update both files in the same change.
 - Keep dangerous commands such as delete and snapshot rollback separate from
   daily examples.
 - Before creating or pushing a release tag, update `CHANGELOG.md` with the new
