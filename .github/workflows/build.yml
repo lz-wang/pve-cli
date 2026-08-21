@@ -47,7 +47,7 @@ jobs:
           else
             COMMIT=$(echo "${{ github.sha }}" | cut -c1-7)
             DATE=$(TZ=Asia/Shanghai date +%Y%m%d)
-            VERSION="v${DATE}-${COMMIT}"
+            VERSION="dev-${DATE}-${COMMIT}"
             CHECKOUT_REF="${{ github.sha }}"
             IS_RELEASE="false"
             RELEASE_TAG=""
@@ -113,21 +113,27 @@ jobs:
           - goos: linux
             goarch: amd64
             suffix: ""
+            archive: tar.gz
           - goos: linux
             goarch: arm64
             suffix: ""
+            archive: tar.gz
           - goos: darwin
             goarch: amd64
             suffix: ""
+            archive: tar.gz
           - goos: darwin
             goarch: arm64
             suffix: ""
+            archive: tar.gz
           - goos: windows
             goarch: amd64
             suffix: ".exe"
+            archive: zip
           - goos: windows
             goarch: arm64
             suffix: ".exe"
+            archive: zip
     steps:
       - uses: actions/checkout@v6
         with:
@@ -149,6 +155,36 @@ jobs:
           output="pvectl-${VERSION}-${GOOS}-${GOARCH}${{ matrix.suffix }}"
           CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=${VERSION} -X main.commit=${COMMIT} -X main.date=${DATE}" -o "${output}" ./main.go
           sha256sum "${output}" > "${output}.sha256"
+
+      - name: Package WebDAV archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${{ needs.test.outputs.version }}"
+          name="pvectl_${version}_${{ matrix.goos }}_${{ matrix.goarch }}"
+          package_dir="release/${name}"
+          mkdir -p "${package_dir}"
+          cp "pvectl-${version}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.suffix }}" "${package_dir}/pvectl${{ matrix.suffix }}"
+          if [[ "${{ matrix.archive }}" == 'zip' ]]; then
+            archive="release/${name}.zip"
+            (cd "${package_dir}" && zip -qr "${GITHUB_WORKSPACE}/${archive}" .)
+          else
+            archive="release/${name}.tar.gz"
+            tar -C "${package_dir}" -czf "${archive}" .
+          fi
+          sha256sum "${archive}" > "${archive}.sha256"
+
+      - name: Upload archive and checksum to WebDAV
+        continue-on-error: true
+        uses: bxb100/action-upload-webdav@v1
+        with:
+          webdav_address: ${{ secrets.WEBDAV_SERVER }}
+          webdav_username: ${{ secrets.WEBDAV_USERNAME }}
+          webdav_password: ${{ secrets.WEBDAV_PASSWORD }}
+          webdav_upload_path: "/Shares/github/${{ github.repository }}/${{ needs.test.outputs.version }}"
+          files: |
+            release/pvectl_${{ needs.test.outputs.version }}_${{ matrix.goos }}_${{ matrix.goarch }}.${{ matrix.archive }}
+            release/pvectl_${{ needs.test.outputs.version }}_${{ matrix.goos }}_${{ matrix.goarch }}.${{ matrix.archive }}.sha256
 
       - name: Upload release artifact
         if: ${{ needs.test.outputs.is_release == 'true' }}
