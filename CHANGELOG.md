@@ -15,6 +15,9 @@
 
 ### Changed
 
+- Order help commands by HomeLab role and typical use, with daily inspection
+  and lifecycle commands first, local setup tools later, and guest deletion
+  and snapshot rollback at the end of their command lists.
 - Rename the CLI executable from `pvectl` to `pve`, including help, version
   output, local build/install targets, release assets, archives, and the
   Homebrew formula (`lz-wang/tap/pve`). No `pvectl` executable alias is provided.

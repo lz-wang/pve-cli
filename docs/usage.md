@@ -3,6 +3,29 @@
 `pve` is a personal HomeLab Proxmox VE CLI for daily VM/QEMU and LXC
 operations.
 
+## Help Command Order
+
+`pve --help` groups commands by their role and places daily HomeLab workflows
+before local setup tools. The command list follows this order:
+
+| Role | Commands, in display order |
+| --- | --- |
+| Overview and health | `status`, `check` |
+| Daily guest management | `guest`, `vm`, `lxc` |
+| Infrastructure and task inventory | `node`, `task`, `storage`, `backup`, `network`, `firewall` |
+| Local setup and troubleshooting | `config`, `doctor`, `version` |
+
+Nested help follows the same approach: list/detail queries first, then lifecycle
+operations, configuration and maintenance, backup/recovery, and destructive
+operations. VM/LXC lifecycle commands use `start`, `shutdown`, `reboot`, `stop`
+in that order. VM guest-agent tools follow lifecycle commands, and cloud-init
+is next to `config`. `delete` is the last VM/LXC operation; snapshot help lists
+`ls`, `create`, `delete`, `rollback`, placing rollback last.
+
+Config help lists `view`, `current-profile`, `use-profile`, `init`, `set-profile`
+to prioritize viewing and switching existing configurations. The built-in
+`help` command remains last at each level.
+
 ## Configuration
 
 The default config file is `~/.config/pve/config.yaml`. Use `--config PATH`

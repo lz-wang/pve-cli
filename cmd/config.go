@@ -18,6 +18,64 @@ func newConfigCommand(deps Dependencies) *cli.Command {
 		Usage: "Manage pve config",
 		Subcommands: []*cli.Command{
 			{
+				Name:  "view",
+				Usage: "Print the config file, or guide initialization when it is missing",
+				Action: func(c *cli.Context) error {
+					if err := requireNoExtraArgs(c, 0); err != nil {
+						return err
+					}
+					cfg, err := config.Load(c.String("config"))
+					if errors.Is(err, os.ErrNotExist) {
+						return guideConfigInit(c, deps)
+					}
+					if err != nil {
+						return fmt.Errorf("config error: %w", err)
+					}
+					data, err := config.ToYAML(cfg)
+					if err != nil {
+						return err
+					}
+					_, err = c.App.Writer.Write(data)
+					return err
+				},
+			},
+			{
+				Name:  "current-profile",
+				Usage: "Print the current profile",
+				Action: func(c *cli.Context) error {
+					if err := requireNoExtraArgs(c, 0); err != nil {
+						return err
+					}
+					cfg, err := config.Load(c.String("config"))
+					if err != nil {
+						return fmt.Errorf("config error: %w", err)
+					}
+					if cfg.CurrentProfile == "" {
+						return fmt.Errorf("config error: current_profile is empty")
+					}
+					_, err = fmt.Fprintln(c.App.Writer, cfg.CurrentProfile)
+					return err
+				},
+			},
+			{
+				Name:      "use-profile",
+				Usage:     "Set the current profile",
+				ArgsUsage: "NAME",
+				Action: func(c *cli.Context) error {
+					if err := requireNoExtraArgs(c, 1); err != nil {
+						return err
+					}
+					cfg, err := config.Load(c.String("config"))
+					if err != nil {
+						return fmt.Errorf("config error: %w", err)
+					}
+					if err := cfg.UseProfile(c.Args().First()); err != nil {
+						return fmt.Errorf("config error: %w", err)
+					}
+					return config.Save(c.String("config"), cfg)
+				},
+			},
+			{
 				Name:  "init",
 				Usage: "Initialize a default HomeLab profile",
 				Flags: []cli.Flag{
@@ -107,64 +165,6 @@ func newConfigCommand(deps Dependencies) *cli.Command {
 						return fmt.Errorf("config error: %w", err)
 					}
 					return config.Save(c.String("config"), cfg)
-				},
-			},
-			{
-				Name:      "use-profile",
-				Usage:     "Set the current profile",
-				ArgsUsage: "NAME",
-				Action: func(c *cli.Context) error {
-					if err := requireNoExtraArgs(c, 1); err != nil {
-						return err
-					}
-					cfg, err := config.Load(c.String("config"))
-					if err != nil {
-						return fmt.Errorf("config error: %w", err)
-					}
-					if err := cfg.UseProfile(c.Args().First()); err != nil {
-						return fmt.Errorf("config error: %w", err)
-					}
-					return config.Save(c.String("config"), cfg)
-				},
-			},
-			{
-				Name:  "current-profile",
-				Usage: "Print the current profile",
-				Action: func(c *cli.Context) error {
-					if err := requireNoExtraArgs(c, 0); err != nil {
-						return err
-					}
-					cfg, err := config.Load(c.String("config"))
-					if err != nil {
-						return fmt.Errorf("config error: %w", err)
-					}
-					if cfg.CurrentProfile == "" {
-						return fmt.Errorf("config error: current_profile is empty")
-					}
-					_, err = fmt.Fprintln(c.App.Writer, cfg.CurrentProfile)
-					return err
-				},
-			},
-			{
-				Name:  "view",
-				Usage: "Print the config file, or guide initialization when it is missing",
-				Action: func(c *cli.Context) error {
-					if err := requireNoExtraArgs(c, 0); err != nil {
-						return err
-					}
-					cfg, err := config.Load(c.String("config"))
-					if errors.Is(err, os.ErrNotExist) {
-						return guideConfigInit(c, deps)
-					}
-					if err != nil {
-						return fmt.Errorf("config error: %w", err)
-					}
-					data, err := config.ToYAML(cfg)
-					if err != nil {
-						return err
-					}
-					_, err = c.App.Writer.Write(data)
-					return err
 				},
 			},
 			removedContextCommand("set-context", "set-profile"),

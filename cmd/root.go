@@ -114,20 +114,24 @@ func NewAppWithBuildInfoAndDependencies(info BuildInfo, deps Dependencies) *cli.
 			},
 		},
 		Commands: []*cli.Command{
-			newVersionCommand(info),
-			newConfigCommand(deps),
-			newDoctorCommand(deps),
+			// HomeLab overview and health checks.
 			newStatusCommand(deps),
 			newCheckCommand(deps),
-			newNodeCommand(deps),
+			// Daily guest inspection and lifecycle operations.
 			newGuestAggregateCommand(deps),
-			newTaskCommand(deps),
-			newBackupCommand(deps),
-			newStorageCommand(deps),
-			newNetworkCommand(deps),
-			newFirewallCommand(deps),
 			newVMCommand(deps),
 			newLXCCommand(deps),
+			// Infrastructure and task inventory.
+			newNodeCommand(deps),
+			newTaskCommand(deps),
+			newStorageCommand(deps),
+			newBackupCommand(deps),
+			newNetworkCommand(deps),
+			newFirewallCommand(deps),
+			// Local setup and troubleshooting tools.
+			newConfigCommand(deps),
+			newDoctorCommand(deps),
+			newVersionCommand(info),
 		},
 	}
 	return app

@@ -6,6 +6,9 @@ daily VM/QEMU and LXC workflows.
 
 ## Global CLI Capabilities
 
+- Orders help commands by role and typical use: overview/health, daily guests,
+  infrastructure/tasks, and local setup/tools. Nested help places inspection
+  and lifecycle commands first, with guest deletion and snapshot rollback last.
 - Uses the `pve` executable for local builds, installs, and release packages;
   Homebrew installs it with `brew install lz-wang/tap/pve`.
 - Supports `table`, `json`, and `yaml` output via `--output` or `-o`.

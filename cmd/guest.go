@@ -7,9 +7,7 @@ import (
 )
 
 func newVMCommand(deps Dependencies) *cli.Command {
-	vmCommand := newGuestCommand("vm", "Manage QEMU virtual machines", deps)
-	vmCommand.Subcommands = append(vmCommand.Subcommands, newVMAgentCommand(deps), newVMCloudInitCommand(deps))
-	return vmCommand
+	return newGuestCommand("vm", "Manage QEMU virtual machines", deps)
 }
 
 func newLXCCommand(deps Dependencies) *cli.Command {
@@ -17,25 +15,34 @@ func newLXCCommand(deps Dependencies) *cli.Command {
 }
 
 func newGuestCommand(kind, usage string, deps Dependencies) *cli.Command {
+	commands := []*cli.Command{
+		guestListCommand(kind, deps),
+		guestGetCommand(kind, deps),
+		guestControlCommand(kind, "start", "Start a guest", deps),
+		guestControlCommand(kind, "shutdown", "Shutdown a guest gracefully", deps),
+		guestControlCommand(kind, "reboot", "Reboot a guest", deps),
+		guestControlCommand(kind, "stop", "Stop a guest immediately", deps),
+	}
+	if kind == "vm" {
+		commands = append(commands, newVMAgentCommand(deps))
+	}
+	commands = append(commands, guestConfigCommand(kind, deps))
+	if kind == "vm" {
+		commands = append(commands, newVMCloudInitCommand(deps))
+	}
+	commands = append(commands,
+		guestResizeCommand(kind, deps),
+		guestMigrateCommand(kind, deps),
+		guestCloneCommand(kind, deps),
+		guestSnapshotCommand(kind, deps),
+		guestBackupCommand(kind, deps),
+		guestRestoreCommand(kind, deps),
+		guestDeleteCommand(kind, deps),
+	)
 	return &cli.Command{
-		Name:  kind,
-		Usage: usage,
-		Subcommands: []*cli.Command{
-			guestListCommand(kind, deps),
-			guestGetCommand(kind, deps),
-			guestControlCommand(kind, "start", "Start a guest", deps),
-			guestControlCommand(kind, "shutdown", "Shutdown a guest gracefully", deps),
-			guestControlCommand(kind, "stop", "Stop a guest immediately", deps),
-			guestControlCommand(kind, "reboot", "Reboot a guest", deps),
-			guestCloneCommand(kind, deps),
-			guestConfigCommand(kind, deps),
-			guestDeleteCommand(kind, deps),
-			guestMigrateCommand(kind, deps),
-			guestResizeCommand(kind, deps),
-			guestSnapshotCommand(kind, deps),
-			guestBackupCommand(kind, deps),
-			guestRestoreCommand(kind, deps),
-		},
+		Name:        kind,
+		Usage:       usage,
+		Subcommands: commands,
 	}
 }
 

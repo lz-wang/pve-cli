@@ -64,45 +64,6 @@ func guestSnapshotCommand(kind string, deps Dependencies) *cli.Command {
 				},
 			},
 			{
-				Name:      "rollback",
-				Usage:     "Rollback to a snapshot",
-				ArgsUsage: "VMID SNAPNAME",
-				Flags: []cli.Flag{
-					&cli.StringFlag{Name: "node", Usage: "PVE node name"},
-					&cli.BoolFlag{Name: "force", Usage: "skip local rollback confirmation"},
-					&cli.BoolFlag{Name: "wait", Usage: "wait for async task completion"},
-					&cli.DurationFlag{Name: "wait-timeout", Usage: "task wait timeout"},
-				},
-				Action: func(c *cli.Context) error {
-					if err := requireNoExtraArgs(c, 2); err != nil {
-						return err
-					}
-					vmid, err := parseVMID(c.Args().Get(0))
-					if err != nil {
-						return err
-					}
-					snapshotName, err := parseSnapshotName(c.Args().Get(1))
-					if err != nil {
-						return err
-					}
-					rt, err := buildRuntime(c, deps)
-					if err != nil {
-						return err
-					}
-					svc := guestService(kind, rt)
-					if !c.Bool("force") {
-						row, err := svc.Get(c.Context, vmid, c.String("node"))
-						if err != nil {
-							return err
-						}
-						if err := confirmRollback(deps.withDefaults().Stdin, rt.stderr, kind, row.VMID, row.Node, snapshotName); err != nil {
-							return err
-						}
-					}
-					return svc.RollbackSnapshot(c.Context, vmid, c.String("node"), snapshotName)
-				},
-			},
-			{
 				Name:      "delete",
 				Usage:     "Delete a snapshot",
 				ArgsUsage: "VMID SNAPNAME",
@@ -139,6 +100,45 @@ func guestSnapshotCommand(kind string, deps Dependencies) *cli.Command {
 						}
 					}
 					return svc.DeleteSnapshot(c.Context, vmid, c.String("node"), snapshotName)
+				},
+			},
+			{
+				Name:      "rollback",
+				Usage:     "Rollback to a snapshot",
+				ArgsUsage: "VMID SNAPNAME",
+				Flags: []cli.Flag{
+					&cli.StringFlag{Name: "node", Usage: "PVE node name"},
+					&cli.BoolFlag{Name: "force", Usage: "skip local rollback confirmation"},
+					&cli.BoolFlag{Name: "wait", Usage: "wait for async task completion"},
+					&cli.DurationFlag{Name: "wait-timeout", Usage: "task wait timeout"},
+				},
+				Action: func(c *cli.Context) error {
+					if err := requireNoExtraArgs(c, 2); err != nil {
+						return err
+					}
+					vmid, err := parseVMID(c.Args().Get(0))
+					if err != nil {
+						return err
+					}
+					snapshotName, err := parseSnapshotName(c.Args().Get(1))
+					if err != nil {
+						return err
+					}
+					rt, err := buildRuntime(c, deps)
+					if err != nil {
+						return err
+					}
+					svc := guestService(kind, rt)
+					if !c.Bool("force") {
+						row, err := svc.Get(c.Context, vmid, c.String("node"))
+						if err != nil {
+							return err
+						}
+						if err := confirmRollback(deps.withDefaults().Stdin, rt.stderr, kind, row.VMID, row.Node, snapshotName); err != nil {
+							return err
+						}
+					}
+					return svc.RollbackSnapshot(c.Context, vmid, c.String("node"), snapshotName)
 				},
 			},
 		},
