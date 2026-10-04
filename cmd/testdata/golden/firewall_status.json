@@ -1,0 +1,5 @@
+{
+  "scope": "node",
+  "node": "pve1",
+  "enabled": true
+}

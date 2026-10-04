@@ -1,0 +1,16 @@
+{
+  "vmid": 100,
+  "node": "pve1",
+  "user": "debian",
+  "password_configured": true,
+  "ssh_keys": "ssh-ed25519 AAAAtest key@host",
+  "ip_configs": [
+    {
+      "device": "ipconfig0",
+      "config": "ip=dhcp"
+    }
+  ],
+  "nameserver": "192.168.2.67",
+  "searchdomain": "lan",
+  "type": "nocloud"
+}

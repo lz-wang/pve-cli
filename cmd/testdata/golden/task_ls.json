@@ -1,0 +1,13 @@
+[
+  {
+    "upid": "UPID:pve1:0000F2A3:00000000:6839F4A1:vzdump:100:root@pam:",
+    "node": "pve1",
+    "type": "vzdump",
+    "id": "100",
+    "user": "root@pam:",
+    "status": "ok",
+    "exit_status": "OK",
+    "start_time": 1710000000,
+    "end_time": 1710000600
+  }
+]

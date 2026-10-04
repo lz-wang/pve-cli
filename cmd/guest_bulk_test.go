@@ -176,3 +176,32 @@ func TestGuestBulkWithoutScopeFails(t *testing.T) {
 		t.Fatal("expected missing scope error")
 	}
 }
+
+func TestGuestBulkKeepsProgressOnStderrAndResultsOnStdout(t *testing.T) {
+	cfgPath := writeTestConfig(t, "json")
+	backend := bulkTestBackend()
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	err := RunWithDependencies([]string{
+		"pvectl", "--config", cfgPath,
+		"guest", "shutdown",
+		"--tag", "infra",
+		"--force",
+		"-o", "json",
+	}, "test", commandDeps(&stdout, &stderr, backend))
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+
+	assertValidJSON(t, stdout.String())
+	if !strings.Contains(stdout.String(), `"action": "shutdown"`) {
+		t.Fatalf("stdout missing structured results: %s", stdout.String())
+	}
+	if strings.Contains(stdout.String(), ": ok") {
+		t.Fatalf("stdout includes progress lines: %s", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), ": ok") {
+		t.Fatalf("stderr missing progress lines: %s", stderr.String())
+	}
+}

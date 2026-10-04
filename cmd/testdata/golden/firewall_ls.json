@@ -1,0 +1,14 @@
+[
+  {
+    "scope": "node",
+    "node": "pve1",
+    "position": 1,
+    "enabled": true,
+    "direction": "in",
+    "action": "ACCEPT",
+    "source": "192.168.2.0/24",
+    "protocol": "tcp",
+    "dest_port": "22",
+    "comment": "ssh from lan"
+  }
+]

@@ -1,0 +1,49 @@
+{
+  "nodes": {
+    "total": 1,
+    "online": 1,
+    "offline": 0,
+    "rows": [
+      {
+        "name": "pve1",
+        "status": "online",
+        "cpu": 0.25,
+        "mem": 1073741824,
+        "max_mem": 4294967296,
+        "disk": 2147483648,
+        "max_disk": 8589934592,
+        "uptime": 3660
+      }
+    ]
+  },
+  "guests": {
+    "total": 2,
+    "running": 1,
+    "stopped": 1,
+    "vm": 1,
+    "lxc": 1
+  },
+  "storages": {
+    "total": 1,
+    "active": 1,
+    "rows": [
+      {
+        "node": "pve1",
+        "storage": "backup",
+        "type": "dir",
+        "active": true,
+        "enabled": true,
+        "shared": false,
+        "content": "backup,iso",
+        "used": 1024,
+        "avail": 2048,
+        "total": 3072,
+        "used_fraction": 0.3333333333
+      }
+    ]
+  },
+  "backups": {
+    "count": 1,
+    "latest_ctime": 1710000000
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "kind": "vm",
+  "vmid": 101,
+  "node": "pve1",
+  "archive": "backup:backup/vzdump-qemu-100-2026_06_06-00_00_00.vma.zst",
+  "storage": "local-lvm"
+}

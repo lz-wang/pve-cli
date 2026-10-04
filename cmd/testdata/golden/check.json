@@ -1,0 +1,14 @@
+[
+  {
+    "check": "node-online",
+    "status": "ok",
+    "resource": "pve1",
+    "message": "online"
+  },
+  {
+    "check": "storage",
+    "status": "ok",
+    "resource": "pve1/backup",
+    "message": "active"
+  }
+]

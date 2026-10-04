@@ -76,6 +76,61 @@ func TestCommandJSONGoldenOutputs(t *testing.T) {
 			args:       []string{"pvectl", "version", "-o", "json"},
 			goldenFile: "version.json",
 		},
+		{
+			name:       "task ls",
+			args:       []string{"pvectl", "--config", cfgPath, "task", "ls", "-o", "json"},
+			goldenFile: "task_ls.json",
+		},
+		{
+			name:       "status",
+			args:       []string{"pvectl", "--config", cfgPath, "status", "-o", "json"},
+			goldenFile: "status.json",
+		},
+		{
+			name:       "node get",
+			args:       []string{"pvectl", "--config", cfgPath, "node", "get", "pve1", "-o", "json"},
+			goldenFile: "node_get.json",
+		},
+		{
+			name:       "storage usage",
+			args:       []string{"pvectl", "--config", cfgPath, "storage", "usage", "-o", "json"},
+			goldenFile: "storage_usage.json",
+		},
+		{
+			name:       "check",
+			args:       []string{"pvectl", "--config", cfgPath, "check", "-o", "json"},
+			goldenFile: "check.json",
+		},
+		{
+			name:       "vm restore",
+			args:       []string{"pvectl", "--config", cfgPath, "vm", "restore", "backup:backup/vzdump-qemu-100-2026_06_06-00_00_00.vma.zst", "--node", "pve1", "--vmid", "101", "--storage", "local-lvm", "-o", "json"},
+			goldenFile: "vm_restore.json",
+		},
+		{
+			name:       "vm agent network",
+			args:       []string{"pvectl", "--config", cfgPath, "vm", "agent", "network", "100", "-o", "json"},
+			goldenFile: "vm_agent_network.json",
+		},
+		{
+			name:       "vm cloud-init get",
+			args:       []string{"pvectl", "--config", cfgPath, "vm", "cloud-init", "get", "100", "-o", "json"},
+			goldenFile: "vm_cloudinit_get.json",
+		},
+		{
+			name:       "network ls",
+			args:       []string{"pvectl", "--config", cfgPath, "network", "ls", "-o", "json"},
+			goldenFile: "network_ls.json",
+		},
+		{
+			name:       "firewall status",
+			args:       []string{"pvectl", "--config", cfgPath, "firewall", "status", "--node", "pve1", "-o", "json"},
+			goldenFile: "firewall_status.json",
+		},
+		{
+			name:       "firewall ls",
+			args:       []string{"pvectl", "--config", cfgPath, "firewall", "ls", "--node", "pve1", "-o", "json"},
+			goldenFile: "firewall_ls.json",
+		},
 	}
 
 	for _, tc := range cases {
@@ -91,6 +146,19 @@ func TestCommandJSONGoldenOutputs(t *testing.T) {
 			}
 
 			got := stdout.String()
+			if os.Getenv("PVECTL_UPDATE_GOLDEN") == "1" {
+				// Restore the placeholders so regenerated goldens stay stable
+				// across machines.
+				restore := strings.NewReplacer(
+					cfgPath, "{{CONFIG_PATH}}",
+					goruntime.Version(), "{{GO_VERSION}}",
+					goruntime.GOOS, "{{GOOS}}",
+					goruntime.GOARCH, "{{GOARCH}}",
+				)
+				if err := os.WriteFile(filepath.Join("testdata", "golden", tc.goldenFile), []byte(restore.Replace(got)), 0o644); err != nil {
+					t.Fatalf("write golden: %v", err)
+				}
+			}
 			want := goldenOutput(t, tc.goldenFile, cfgPath)
 			if got != want {
 				t.Fatalf("stdout mismatch\nwant:\n%s\ngot:\n%s", want, got)
@@ -174,6 +242,48 @@ func goldenBackend() *commandBackend {
 			Name: "pve1", Status: "online", CPU: 0.25, Mem: 1073741824,
 			MaxMem: 4294967296, Disk: 2147483648, MaxDisk: 8589934592, Uptime: 3660,
 		}},
+		nodeDetails: map[string]output.NodeDetail{
+			"pve1": {
+				Name: "pve1", Status: "online", CPU: 0.25, Mem: 1073741824,
+				MaxMem: 4294967296, Disk: 2147483648, MaxDisk: 8589934592, Uptime: 3660,
+				PVEVersion: "8.4.1", KernelVersion: "6.8.12-4-pve", LoadAverage: "0.50, 0.40, 0.30",
+				CPUModel: "Test CPU", CPUCores: 8, CPUSockets: 1,
+			},
+		},
+		taskRows: map[string][]output.TaskRow{
+			"pve1": {{
+				UPID: "UPID:pve1:0000F2A3:00000000:6839F4A1:vzdump:100:root@pam:",
+				Node: "pve1", Type: "vzdump", ID: "100", User: "root@pam:",
+				Status: "ok", ExitStatus: "OK", StartTime: 1710000000, EndTime: 1710000600,
+			}},
+		},
+		agentNetwork: []output.AgentNetworkRow{
+			{Name: "eth0", HardwareAddress: "bc:24:11:2f:ab:12", Addresses: []string{"192.168.2.10/24"}},
+		},
+		cloudInitConfigs: map[int]output.CloudInitConfig{
+			100: {
+				VMID: 100, Node: "pve1", User: "debian", PasswordConfigured: true,
+				SSHKeys: "ssh-ed25519 AAAAtest key@host",
+				IPConfigs: []output.CloudInitIPConfig{{Device: "ipconfig0", Config: "ip=dhcp"}},
+				Nameserver: "192.168.2.67", SearchDomain: "lan", Type: "nocloud",
+			},
+		},
+		networkRows: map[string][]output.NetworkRow{
+			"pve1": {{
+				Node: "pve1", Name: "vmbr0", Type: "bridge", Active: true, Autostart: true,
+				CIDR: "192.168.2.2/24", Gateway: "192.168.2.1", BridgePorts: "enp1s0",
+			}},
+		},
+		firewallStatus: map[string]output.FirewallStatusRow{
+			"node": {Scope: "node", Node: "pve1", Enabled: true},
+		},
+		firewallRules: map[string][]output.FirewallRuleRow{
+			"node": {{
+				Scope: "node", Node: "pve1", Position: 1, Enabled: true,
+				Direction: "in", Action: "ACCEPT", DestPort: "22", Protocol: "tcp",
+				Source: "192.168.2.0/24", Comment: "ssh from lan",
+			}},
+		},
 		vms:       map[string][]output.GuestRow{"pve1": {vmRow}},
 		lxcs:      map[string][]output.GuestRow{"pve1": {lxcRow}},
 		vmGuests:  map[string]map[int]*commandGuest{"pve1": {100: {row: vmRow}}},

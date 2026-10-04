@@ -1,0 +1,16 @@
+{
+  "name": "pve1",
+  "status": "online",
+  "cpu": 0.25,
+  "mem": 1073741824,
+  "max_mem": 4294967296,
+  "disk": 2147483648,
+  "max_disk": 8589934592,
+  "uptime": 3660,
+  "pve_version": "8.4.1",
+  "kernel_version": "6.8.12-4-pve",
+  "load_average": "0.50, 0.40, 0.30",
+  "cpu_model": "Test CPU",
+  "cpu_cores": 8,
+  "cpu_sockets": 1
+}

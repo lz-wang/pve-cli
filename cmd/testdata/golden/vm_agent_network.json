@@ -1,0 +1,9 @@
+[
+  {
+    "name": "eth0",
+    "hardware_address": "bc:24:11:2f:ab:12",
+    "addresses": [
+      "192.168.2.10/24"
+    ]
+  }
+]

@@ -1,0 +1,15 @@
+[
+  {
+    "node": "pve1",
+    "storage": "backup",
+    "type": "dir",
+    "active": true,
+    "enabled": true,
+    "shared": false,
+    "content": "backup,iso",
+    "used": 1024,
+    "avail": 2048,
+    "total": 3072,
+    "used_fraction": 0.3333333333
+  }
+]

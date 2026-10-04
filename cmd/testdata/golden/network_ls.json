@@ -1,0 +1,13 @@
+[
+  {
+    "node": "pve1",
+    "name": "vmbr0",
+    "type": "bridge",
+    "active": true,
+    "autostart": true,
+    "cidr": "192.168.2.2/24",
+    "gateway": "192.168.2.1",
+    "bridge_ports": "enp1s0",
+    "vlan_aware": false
+  }
+]
