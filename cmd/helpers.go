@@ -91,3 +91,20 @@ func confirmRollback(in io.Reader, out io.Writer, kind string, vmid uint64, node
 	}
 	return nil
 }
+
+func confirmSnapshotDelete(in io.Reader, out io.Writer, kind string, vmid uint64, node, snapshot string) error {
+	if in == nil {
+		return fmt.Errorf("snapshot delete aborted")
+	}
+	if out != nil {
+		fmt.Fprintf(out, "delete snapshot %s of %s %d on node %s? type %q to confirm: ", snapshot, kind, vmid, node, snapshot)
+	}
+	scanner := bufio.NewScanner(in)
+	if !scanner.Scan() {
+		return fmt.Errorf("snapshot delete aborted")
+	}
+	if strings.TrimSpace(scanner.Text()) != snapshot {
+		return fmt.Errorf("snapshot delete aborted")
+	}
+	return nil
+}

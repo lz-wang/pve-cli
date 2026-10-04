@@ -727,6 +727,60 @@ func TestSnapshotRollbackCommandConfirms(t *testing.T) {
 	}
 }
 
+func TestVMSnapshotDeleteCommandForceWaits(t *testing.T) {
+	cfgPath := writeTestConfig(t, "table")
+	task := &commandTask{upid: "UPID:pve1:snapdelete"}
+	guest := &commandGuest{
+		row:  output.GuestRow{Kind: "vm", VMID: 101, Node: "pve1"},
+		task: task,
+	}
+	backend := &commandBackend{
+		nodes:    []output.NodeRow{{Name: "pve1"}},
+		vmGuests: map[string]map[int]*commandGuest{"pve1": {101: guest}},
+	}
+
+	err := RunWithDependencies([]string{
+		"pvectl", "--config", cfgPath,
+		"vm", "snapshot", "delete", "101", "before-upgrade",
+		"--force",
+		"--wait",
+	}, "test", testDeps(&bytes.Buffer{}, backend))
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if guest.deletedSnapshot != "before-upgrade" {
+		t.Fatalf("deleted snapshot = %q", guest.deletedSnapshot)
+	}
+	if !task.waited {
+		t.Fatal("expected wait")
+	}
+}
+
+func TestSnapshotDeleteCommandConfirms(t *testing.T) {
+	cfgPath := writeTestConfig(t, "table")
+	guest := &commandGuest{
+		row:  output.GuestRow{Kind: "lxc", VMID: 201, Node: "pve1"},
+		task: &commandTask{upid: "UPID:pve1:lxcsnapdelete"},
+	}
+	backend := &commandBackend{
+		nodes:     []output.NodeRow{{Name: "pve1"}},
+		lxcGuests: map[string]map[int]*commandGuest{"pve1": {201: guest}},
+	}
+	deps := testDeps(&bytes.Buffer{}, backend)
+	deps.Stdin = strings.NewReader("wrong-name\n")
+
+	err := RunWithDependencies([]string{
+		"pvectl", "--config", cfgPath,
+		"lxc", "snapshot", "delete", "201", "before-upgrade",
+	}, "test", deps)
+	if err == nil {
+		t.Fatal("expected confirmation mismatch to abort")
+	}
+	if guest.deletedSnapshot != "" {
+		t.Fatal("snapshot should not be deleted after confirmation mismatch")
+	}
+}
+
 func TestConfigSetProfileCommandDoesNotRequireSecretEnv(t *testing.T) {
 	cfgPath := filepath.Join(t.TempDir(), "config.yaml")
 	err := RunWithDependencies([]string{
