@@ -668,6 +668,31 @@ func WriteStorageContentRows(w io.Writer, format string, rows []StorageContentRo
 	})
 }
 
+// WriteBulkPlan renders a bulk-operation selection. Structured output reuses
+// GuestRow; the table view shows only the identifying columns.
+func WriteBulkPlan(w io.Writer, format string, rows []GuestRow) error {
+	return Write(w, format, rows, func(w io.Writer) error {
+		tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+		if _, err := fmt.Fprintln(tw, "KIND\tVMID\tNODE\tNAME\tSTATUS"); err != nil {
+			return err
+		}
+		for _, row := range rows {
+			if _, err := fmt.Fprintf(
+				tw,
+				"%s\t%d\t%s\t%s\t%s\n",
+				row.Kind,
+				row.VMID,
+				row.Node,
+				empty(row.Name),
+				empty(row.Status),
+			); err != nil {
+				return err
+			}
+		}
+		return tw.Flush()
+	})
+}
+
 func WriteStatusReport(w io.Writer, format string, report StatusReport) error {
 	return Write(w, format, report, func(w io.Writer) error {
 		tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)

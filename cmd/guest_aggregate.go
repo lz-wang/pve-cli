@@ -14,6 +14,10 @@ func newGuestAggregateCommand(deps Dependencies) *cli.Command {
 		Subcommands: []*cli.Command{
 			guestAggregateListCommand(deps),
 			guestAggregateGetCommand(deps),
+			guestBulkCommand("start", "Start matching guests in bulk", deps),
+			guestBulkCommand("shutdown", "Shutdown matching guests in bulk", deps),
+			guestBulkCommand("reboot", "Reboot matching guests in bulk", deps),
+			guestBulkCommand("stop", "Stop matching guests in bulk", deps),
 		},
 	}
 }
