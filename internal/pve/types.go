@@ -9,19 +9,6 @@ import (
 
 var ErrNotFound = errors.New("not found")
 
-type Backend interface {
-	Nodes(ctx context.Context) ([]output.NodeRow, error)
-	VMs(ctx context.Context, node string) ([]output.GuestRow, error)
-	VM(ctx context.Context, node string, vmid int) (Guest, error)
-	LXCs(ctx context.Context, node string) ([]output.GuestRow, error)
-	LXC(ctx context.Context, node string, vmid int) (Guest, error)
-	Backups(ctx context.Context, node, storage string) ([]output.BackupRow, error)
-	BackupGuest(ctx context.Context, node string, options BackupOptions) (Task, error)
-	Storages(ctx context.Context, node string) ([]output.StorageRow, error)
-	Storage(ctx context.Context, node, storage string) (output.StorageRow, error)
-	StorageContents(ctx context.Context, node, storage string) ([]output.StorageContentRow, error)
-}
-
 type Guest interface {
 	Row() output.GuestRow
 	Start(ctx context.Context) (Task, error)

@@ -10,10 +10,10 @@ import (
 )
 
 type NodeService struct {
-	backend Backend
+	backend NodeBackend
 }
 
-func NewNodeService(backend Backend) *NodeService {
+func NewNodeService(backend NodeBackend) *NodeService {
 	return &NodeService{backend: backend}
 }
 
@@ -23,17 +23,17 @@ func (s *NodeService) List(ctx context.Context) ([]output.NodeRow, error) {
 
 type GuestService struct {
 	kind    string
-	backend Backend
+	backend GuestBackend
 	tasks   TaskRunner
 	logger  *slog.Logger
 	verbose bool
 }
 
-func NewVMService(backend Backend, tasks TaskRunner, logger *slog.Logger, verbose bool) *GuestService {
+func NewVMService(backend GuestBackend, tasks TaskRunner, logger *slog.Logger, verbose bool) *GuestService {
 	return &GuestService{kind: "vm", backend: backend, tasks: tasks, logger: logger, verbose: verbose}
 }
 
-func NewLXCService(backend Backend, tasks TaskRunner, logger *slog.Logger, verbose bool) *GuestService {
+func NewLXCService(backend GuestBackend, tasks TaskRunner, logger *slog.Logger, verbose bool) *GuestService {
 	return &GuestService{kind: "lxc", backend: backend, tasks: tasks, logger: logger, verbose: verbose}
 }
 

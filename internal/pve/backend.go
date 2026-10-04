@@ -8,6 +8,46 @@ import (
 	"github.com/lz-wang/pvectl/internal/output"
 )
 
+// NodeBackend lists cluster nodes. It is embedded by the other capability
+// interfaces because per-node queries need node discovery.
+type NodeBackend interface {
+	Nodes(ctx context.Context) ([]output.NodeRow, error)
+}
+
+// GuestBackend covers VM/QEMU and LXC guest queries plus node discovery.
+type GuestBackend interface {
+	NodeBackend
+	VMs(ctx context.Context, node string) ([]output.GuestRow, error)
+	VM(ctx context.Context, node string, vmid int) (Guest, error)
+	LXCs(ctx context.Context, node string) ([]output.GuestRow, error)
+	LXC(ctx context.Context, node string, vmid int) (Guest, error)
+}
+
+// BackupBackend covers backup listing, one-off backup trigger, and the guest
+// resolution needed to locate a guest before backing it up.
+type BackupBackend interface {
+	GuestBackend
+	Backups(ctx context.Context, node, storage string) ([]output.BackupRow, error)
+	BackupGuest(ctx context.Context, node string, options BackupOptions) (Task, error)
+}
+
+// StorageBackend covers storage inventory plus node discovery.
+type StorageBackend interface {
+	NodeBackend
+	Storages(ctx context.Context, node string) ([]output.StorageRow, error)
+	Storage(ctx context.Context, node, storage string) (output.StorageRow, error)
+	StorageContents(ctx context.Context, node, storage string) ([]output.StorageContentRow, error)
+}
+
+// Backend composes every capability. Services should depend on the smallest
+// capability interface they need instead of the full Backend.
+type Backend interface {
+	NodeBackend
+	GuestBackend
+	BackupBackend
+	StorageBackend
+}
+
 type ProxmoxBackend struct {
 	client *proxmox.Client
 }

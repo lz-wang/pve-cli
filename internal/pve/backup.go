@@ -26,11 +26,11 @@ const (
 )
 
 type BackupService struct {
-	backend Backend
+	backend BackupBackend
 	tasks   TaskRunner
 }
 
-func NewBackupService(backend Backend, tasks TaskRunner) *BackupService {
+func NewBackupService(backend BackupBackend, tasks TaskRunner) *BackupService {
 	return &BackupService{backend: backend, tasks: tasks}
 }
 

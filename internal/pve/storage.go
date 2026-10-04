@@ -26,10 +26,10 @@ type StorageContentListOptions struct {
 }
 
 type StorageService struct {
-	backend Backend
+	backend StorageBackend
 }
 
-func NewStorageService(backend Backend) *StorageService {
+func NewStorageService(backend StorageBackend) *StorageService {
 	return &StorageService{backend: backend}
 }
 

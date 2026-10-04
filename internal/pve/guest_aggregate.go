@@ -32,12 +32,12 @@ type GuestGetOptions struct {
 }
 
 type GuestAggregateService struct {
-	backend Backend
+	backend GuestBackend
 	logger  *slog.Logger
 	verbose bool
 }
 
-func NewGuestAggregateService(backend Backend, logger *slog.Logger, verbose bool) *GuestAggregateService {
+func NewGuestAggregateService(backend GuestBackend, logger *slog.Logger, verbose bool) *GuestAggregateService {
 	return &GuestAggregateService{backend: backend, logger: logger, verbose: verbose}
 }
 
