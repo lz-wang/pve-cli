@@ -669,6 +669,31 @@ func WriteStorageRows(w io.Writer, format string, rows []StorageRow) error {
 	})
 }
 
+// WriteStorageUsageRows renders a daily-use storage usage view. Structured
+// output reuses StorageRow; no separate schema is introduced.
+func WriteStorageUsageRows(w io.Writer, format string, rows []StorageRow) error {
+	return Write(w, format, rows, func(w io.Writer) error {
+		tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+		if _, err := fmt.Fprintln(tw, "NODE\tSTORAGE\tUSED\tTOTAL\tUSAGE"); err != nil {
+			return err
+		}
+		for _, row := range rows {
+			if _, err := fmt.Fprintf(
+				tw,
+				"%s\t%s\t%s\t%s\t%.0f%%\n",
+				row.Node,
+				row.Storage,
+				FormatBytes(row.Used),
+				FormatBytes(row.Total),
+				row.UsedFraction*100,
+			); err != nil {
+				return err
+			}
+		}
+		return tw.Flush()
+	})
+}
+
 func WriteStorageDetail(w io.Writer, format string, row StorageRow) error {
 	return Write(w, format, row, func(w io.Writer) error {
 		tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)

@@ -39,6 +39,31 @@ func TestNodeGetCommandWritesDetail(t *testing.T) {
 	}
 }
 
+func TestStorageUsageCommandWritesUsage(t *testing.T) {
+	cfgPath := writeTestConfig(t, "json")
+	backend := &commandBackend{
+		nodes: []output.NodeRow{{Name: "pve1"}},
+		storages: map[string][]output.StorageRow{
+			"pve1": {
+				{Node: "pve1", Storage: "local", Type: "dir", Active: true, Used: 35 * 1024 * 1024 * 1024, Avail: 57 * 1024 * 1024 * 1024, Total: 92 * 1024 * 1024 * 1024, UsedFraction: 0.38},
+			},
+		},
+	}
+	var stdout bytes.Buffer
+
+	err := RunWithDependencies([]string{
+		"pvectl", "--config", cfgPath,
+		"storage", "usage",
+	}, "test", testDeps(&stdout, backend))
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	out := stdout.String()
+	if !strings.Contains(out, `"storage": "local"`) || !strings.Contains(out, `"used_fraction": 0.38`) {
+		t.Fatalf("stdout = %s", out)
+	}
+}
+
 func TestStatusCommandWritesReport(t *testing.T) {
 	cfgPath := writeTestConfig(t, "json")
 	backend := &commandBackend{
