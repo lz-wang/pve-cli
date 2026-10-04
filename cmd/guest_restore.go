@@ -42,10 +42,15 @@ func guestRestoreCommand(kind string, deps Dependencies) *cli.Command {
 				VMID:    vmid,
 				Storage: c.String("storage"),
 			})
-			if err != nil {
-				return err
+			// Write the structured result on success, and also when the
+			// wait fails after the task was submitted, so automation can
+			// inspect the UPID; `task wait` follows the same pattern.
+			if err == nil || result.Task != "" {
+				if writeErr := output.WriteRestoreResult(rt.stdout, rt.format, result); writeErr != nil {
+					return writeErr
+				}
 			}
-			return output.WriteRestoreResult(rt.stdout, rt.format, result)
+			return err
 		},
 	}
 }

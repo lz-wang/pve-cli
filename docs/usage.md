@@ -313,8 +313,11 @@ pvectl lxc restore backup:backup/vzdump-lxc-200-2026_06_06-00_00_00.tar.zst \
 
 `--node` and `--vmid` are required. The restore refuses to run when the target
 VMID already exists anywhere in the cluster; there is no `--force` overwrite.
-Results are written to stdout and include the task ID; wait progress goes to
-stderr. When the archive name encodes a vzdump kind (`vzdump-qemu-` or
+The VMID check must see every node, so it aborts before starting when any
+node's guest inventory cannot be queried. Results are written to stdout and
+include the task ID; wait progress goes to stderr. When a submitted task
+fails during `--wait`, the result row is still written to stdout before the
+command exits non-zero. When the archive name encodes a vzdump kind (`vzdump-qemu-` or
 `vzdump-lxc-`), the kind must match the command.
 
 `pvectl` does not manage scheduled backup jobs, prune policies, backup

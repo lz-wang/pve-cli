@@ -3,6 +3,7 @@ package pve
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/lz-wang/pvectl/internal/output"
@@ -98,23 +99,28 @@ func TestRestoreServiceTriggersRestore(t *testing.T) {
 	}
 }
 
-func TestRestoreServiceWaitFailurePropagates(t *testing.T) {
+func TestRestoreServiceWaitFailurePreservesResult(t *testing.T) {
 	backend := &fakeRestoreBackend{
 		fakeBackend: fakeBackend{nodes: []output.NodeRow{{Name: "pve1"}}},
 		task:        &fakeTask{upid: "UPID:pve1:restore", failed: true, exitStatus: "ERROR"},
 	}
 	svc := NewRestoreService(backend, TaskRunner{Wait: true}, nil, false)
 
-	_, err := svc.Restore(context.Background(), RestoreOptions{
+	result, err := svc.Restore(context.Background(), RestoreOptions{
 		Kind: "vm", Archive: "backup:backup/vzdump-qemu-100.vma.zst",
 		Node: "pve1", VMID: 101,
 	})
 	if err == nil {
 		t.Fatal("expected restore task failure")
 	}
+	// The task was submitted before the wait failed, so the structured
+	// result must survive for stdout.
+	if result.Task != "UPID:pve1:restore" || result.VMID != 101 || result.Node != "pve1" {
+		t.Fatalf("result = %#v", result)
+	}
 }
 
-func TestRestoreServiceVMIDCheckToleratesNodeFailure(t *testing.T) {
+func TestRestoreServiceVMIDCheckFailsClosedOnNodeFailure(t *testing.T) {
 	backend := &fakeRestoreBackend{
 		fakeBackend: fakeBackend{
 			nodes:   []output.NodeRow{{Name: "pve1"}, {Name: "pve2"}},
@@ -126,13 +132,25 @@ func TestRestoreServiceVMIDCheckToleratesNodeFailure(t *testing.T) {
 	}
 	svc := NewRestoreService(backend, TaskRunner{}, nil, false)
 
-	if _, err := svc.Restore(context.Background(), RestoreOptions{
+	// An unverifiable node inventory must abort the restore even though the
+	// target VMID looks free on the reachable node.
+	_, err := svc.Restore(context.Background(), RestoreOptions{
 		Kind: "vm", Archive: "backup:backup/vzdump-qemu-100.vma.zst",
-		Node: "pve2", VMID: 100,
-	}); err == nil {
-		t.Fatal("expected vmid 100 to be detected on pve2 despite pve1 failure")
+		Node: "pve2", VMID: 105,
+	})
+	if err == nil {
+		t.Fatal("expected restore to fail closed when a node inventory cannot be verified")
+	}
+	if !strings.Contains(err.Error(), "pve1") {
+		t.Fatalf("error = %v", err)
+	}
+	if backend.restoreOptions != nil {
+		t.Fatal("restore must not run when the vmid check is incomplete")
 	}
 
+	// A fully queryable cluster still allows free VMIDs.
+	backend.vmErrs = nil
+	backend.lxcErrs = nil
 	if _, err := svc.Restore(context.Background(), RestoreOptions{
 		Kind: "vm", Archive: "backup:backup/vzdump-qemu-100.vma.zst",
 		Node: "pve2", VMID: 105,

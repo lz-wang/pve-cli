@@ -88,8 +88,11 @@ func (s *RestoreService) Restore(ctx context.Context, options RestoreOptions) (o
 	if task != nil {
 		result.Task = task.UPID()
 	}
+	// The restore task is already submitted when the wait fails, so the
+	// structured result must survive for stdout; `task wait` follows the
+	// same pattern.
 	if err := s.tasks.Handle(ctx, task); err != nil {
-		return output.RestoreResult{}, err
+		return result, err
 	}
 	return result, nil
 }
@@ -119,8 +122,9 @@ func checkRestoreArchiveKind(kind, archive string) error {
 }
 
 // ensureVMIDFree refuses restores into VMIDs that already exist anywhere in
-// the cluster. Node-level listing failures are tolerated because the restore
-// itself will still fail server-side if the VMID is taken.
+// the cluster. The check must be reliable: a mutation has to fail closed, so
+// when any node's guest inventory cannot be queried the restore aborts
+// before anything is started.
 func (s *RestoreService) ensureVMIDFree(ctx context.Context, vmid int) error {
 	nodes, err := s.backend.Nodes(ctx)
 	if err != nil {
@@ -131,42 +135,34 @@ func (s *RestoreService) ensureVMIDFree(ctx context.Context, vmid int) error {
 		if node.Name == "" {
 			continue
 		}
-		if owner, ok := s.findGuestOwner(ctx, node.Name, vmid); ok {
-			return fmt.Errorf("vmid %d already exists on node %s; delete it first or choose another vmid", vmid, owner)
+		if err := s.checkVMIDFreeOnNode(ctx, node.Name, vmid); err != nil {
+			return err
 		}
 	}
 	return nil
 }
 
-func (s *RestoreService) findGuestOwner(ctx context.Context, nodeName string, vmid int) (string, bool) {
+func (s *RestoreService) checkVMIDFreeOnNode(ctx context.Context, nodeName string, vmid int) error {
 	vmRows, err := s.backend.VMs(ctx, nodeName)
-	if err == nil {
-		for _, row := range vmRows {
-			if row.VMID == uint64(vmid) {
-				return nodeName, true
-			}
+	if err != nil {
+		return fmt.Errorf("verify vmid %d: list vm on node %s: %w", vmid, nodeName, err)
+	}
+	for _, row := range vmRows {
+		if row.VMID == uint64(vmid) {
+			return fmt.Errorf("vmid %d already exists on node %s; delete it first or choose another vmid", vmid, nodeName)
 		}
-	} else {
-		s.debug("skip vm list", "node", nodeName, "error", err)
 	}
 
 	lxcRows, err := s.backend.LXCs(ctx, nodeName)
-	if err == nil {
-		for _, row := range lxcRows {
-			if row.VMID == uint64(vmid) {
-				return nodeName, true
-			}
+	if err != nil {
+		return fmt.Errorf("verify vmid %d: list lxc on node %s: %w", vmid, nodeName, err)
+	}
+	for _, row := range lxcRows {
+		if row.VMID == uint64(vmid) {
+			return fmt.Errorf("vmid %d already exists on node %s; delete it first or choose another vmid", vmid, nodeName)
 		}
-	} else {
-		s.debug("skip lxc list", "node", nodeName, "error", err)
 	}
-	return "", false
-}
-
-func (s *RestoreService) debug(msg string, args ...any) {
-	if s.verbose && s.logger != nil {
-		s.logger.Debug(msg, args...)
-	}
+	return nil
 }
 
 // Restore triggers the restore task on the PVE side. VM restore reuses the
