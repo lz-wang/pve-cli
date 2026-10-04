@@ -8,7 +8,7 @@ LDFLAGS := -ldflags "-s -w -X main.version=$(VERSION) -X main.commit=$(COMMIT) -
 GOENV := CGO_ENABLED=0
 SHA256SUM := $(shell command -v sha256sum >/dev/null 2>&1 && echo sha256sum || echo "shasum -a 256")
 
-.PHONY: all build dist install uninstall fmt check test clean help
+.PHONY: all build dist install uninstall fmt check test test-race clean help
 
 all: fmt check test build
 
@@ -43,6 +43,9 @@ check:
 test:
 	go test ./...
 
+test-race:
+	go test -race ./...
+
 clean:
 	rm -rf bin dist coverage.out
 
@@ -54,4 +57,5 @@ help:
 	@echo "make fmt    - format code"
 	@echo "make check  - run go vet"
 	@echo "make test   - run tests"
+	@echo "make test-race - run tests with the race detector"
 	@echo "make clean  - clean generated artifacts"

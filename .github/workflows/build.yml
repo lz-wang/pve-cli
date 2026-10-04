@@ -102,6 +102,10 @@ jobs:
         if: ${{ steps.duplicate.outputs.SKIP_RUN != 'true' }}
         run: make test
 
+      - name: Run tests with race detector
+        if: ${{ steps.duplicate.outputs.SKIP_RUN != 'true' }}
+        run: make test-race
+
   build:
     runs-on: ubuntu-latest
     needs: test

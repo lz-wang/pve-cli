@@ -117,6 +117,20 @@ type BulkExecuteOptions struct {
 	ErrWriter io.Writer
 }
 
+// syncWriter serializes progress writes. Every guest runs in its own
+// goroutine and shares one ErrWriter, which io.Writer does not guarantee to
+// be concurrency-safe (bytes.Buffer, commonly used in tests, is not).
+type syncWriter struct {
+	mu sync.Mutex
+	w  io.Writer
+}
+
+func (w *syncWriter) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.w.Write(p)
+}
+
 // bulkGuestOutcome records what happened to one guest. Failures are kept per
 // guest so one bad guest never aborts the whole run.
 type bulkGuestOutcome struct {
@@ -143,6 +157,15 @@ func (s *BulkService) ExecuteRows(ctx context.Context, action string, rows []out
 		jobs = 2
 	}
 
+	// Concurrent TaskRunner handles share one progress writer; serialize it
+	// so bulk progress stays race-free even for non-thread-safe writers.
+	errWriter := options.ErrWriter
+	if errWriter != nil {
+		errWriter = &syncWriter{w: options.ErrWriter}
+	}
+	execOptions := options
+	execOptions.ErrWriter = errWriter
+
 	outcomes := make([]bulkGuestOutcome, len(rows))
 	sem := make(chan struct{}, jobs)
 	var wg sync.WaitGroup
@@ -152,7 +175,7 @@ func (s *BulkService) ExecuteRows(ctx context.Context, action string, rows []out
 			defer wg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()
-			outcomes[i] = s.executeOne(ctx, action, row, options)
+			outcomes[i] = s.executeOne(ctx, action, row, execOptions)
 		}(i, row)
 	}
 	wg.Wait()
@@ -173,9 +196,9 @@ func (s *BulkService) ExecuteRows(ctx context.Context, action string, rows []out
 			failed++
 			result.Status = BulkResultStatusError
 			result.Error = outcome.err.Error()
-			s.progress(options.ErrWriter, "%s %d %s: error: %v\n", outcome.row.Kind, outcome.row.VMID, outcome.row.Name, outcome.err)
+			s.progress(errWriter, "%s %d %s: error: %v\n", outcome.row.Kind, outcome.row.VMID, outcome.row.Name, outcome.err)
 		} else {
-			s.progress(options.ErrWriter, "%s %d %s: ok\n", outcome.row.Kind, outcome.row.VMID, outcome.row.Name)
+			s.progress(errWriter, "%s %d %s: ok\n", outcome.row.Kind, outcome.row.VMID, outcome.row.Name)
 		}
 		results[i] = result
 	}

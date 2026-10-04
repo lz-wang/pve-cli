@@ -84,6 +84,38 @@ func TestVMAgentPingCommand(t *testing.T) {
 	}
 }
 
+// TestVMAgentPingCommandResolvesNodeWhenOmitted locks the documented
+// contract: --node is optional for VMID-oriented commands and an omitted
+// node is located across the cluster, matching `vm get`.
+func TestVMAgentPingCommandResolvesNodeWhenOmitted(t *testing.T) {
+	cfgPath := writeTestConfig(t, "table")
+	backend := &commandBackend{
+		nodes: []output.NodeRow{{Name: "pve1"}},
+		vmGuests: map[string]map[int]*commandGuest{
+			"pve1": {100: {row: output.GuestRow{Kind: "vm", VMID: 100, Node: "pve1"}}},
+		},
+	}
+	var stdout bytes.Buffer
+
+	err := RunWithDependencies([]string{
+		"pvectl", "--config", cfgPath,
+		"vm", "agent", "ping", "100",
+	}, "test", testDeps(&stdout, backend))
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "agent ok") {
+		t.Fatalf("stdout = %s", stdout.String())
+	}
+
+	if err := RunWithDependencies([]string{
+		"pvectl", "--config", cfgPath,
+		"vm", "agent", "ping", "999",
+	}, "test", testDeps(&bytes.Buffer{}, backend)); err == nil {
+		t.Fatal("expected not-found error for missing vm")
+	}
+}
+
 func TestVMAgentNetworkCommandWritesRows(t *testing.T) {
 	cfgPath := writeTestConfig(t, "json")
 	backend := &commandBackend{

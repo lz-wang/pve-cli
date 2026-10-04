@@ -1,8 +1,10 @@
 package pve
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -127,6 +129,48 @@ func TestBulkServiceExecuteRowsReturnsPerGuestResults(t *testing.T) {
 	}
 	if results[1].Status != BulkResultStatusOK || results[1].Task != "UPID:pve1:bulk101" {
 		t.Fatalf("result[1] = %#v", results[1])
+	}
+}
+
+// TestBulkServiceExecuteRowsSerializesProgressWrites runs many guests
+// concurrently through one shared bytes.Buffer ErrWriter; run with
+// go test -race to keep the progress path race-free.
+func TestBulkServiceExecuteRowsSerializesProgressWrites(t *testing.T) {
+	guests := make([]output.GuestRow, 0, 8)
+	vmGuests := make(map[int]*fakeGuest)
+	for i := 0; i < 8; i++ {
+		vmid := 100 + i
+		guests = append(guests, output.GuestRow{Kind: "vm", VMID: uint64(vmid), Node: "pve1", Name: fmt.Sprintf("g%d", i)})
+		vmGuests[vmid] = &fakeGuest{
+			row:  output.GuestRow{Kind: "vm", VMID: uint64(vmid), Node: "pve1", Name: fmt.Sprintf("g%d", i)},
+			task: &fakeTask{upid: fmt.Sprintf("UPID:pve1:%d", vmid)},
+		}
+	}
+	backend := &fakeBackend{
+		nodes: []output.NodeRow{{Name: "pve1"}},
+		vms:   map[string]map[int]*fakeGuest{"pve1": vmGuests},
+	}
+	svc := NewBulkService(backend, TaskRunner{}, nil, false)
+
+	var stderr bytes.Buffer
+	results, err := svc.ExecuteRows(context.Background(), BulkActionReboot, guests, BulkExecuteOptions{
+		Jobs:      4,
+		Wait:      true,
+		ErrWriter: &stderr,
+	})
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if len(results) != len(guests) {
+		t.Fatalf("results = %d, want %d", len(results), len(guests))
+	}
+	for _, result := range results {
+		if result.Status != BulkResultStatusOK || result.Task == "" {
+			t.Fatalf("result = %#v", result)
+		}
+	}
+	if strings.Count(stderr.String(), ": ok\n") != len(guests) {
+		t.Fatalf("progress lines = %q", stderr.String())
 	}
 }
 

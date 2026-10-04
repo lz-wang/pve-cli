@@ -57,6 +57,43 @@ func TestGuestListCommandTagFiltering(t *testing.T) {
 	}
 }
 
+// TestGuestListCommandStatusAndTagFiltersTogether locks the end-to-end
+// production semantics: real PVE tags arrive as ";"-joined strings, and the
+// value flags must survive argument normalization when combined.
+func TestGuestListCommandStatusAndTagFiltersTogether(t *testing.T) {
+	cfgPath := writeTestConfig(t, "json")
+	backend := &commandBackend{
+		nodes: []output.NodeRow{{Name: "pve1"}},
+		vms: map[string][]output.GuestRow{
+			"pve1": {
+				{Kind: "vm", VMID: 100, Name: "debian", Node: "pve1", Status: "running", Tags: "infra;production"},
+				{Kind: "vm", VMID: 101, Name: "play", Node: "pve1", Status: "stopped", Tags: "infra;production"},
+			},
+		},
+		lxcs: map[string][]output.GuestRow{
+			"pve1": {{Kind: "lxc", VMID: 200, Name: "agh", Node: "pve1", Status: "running", Tags: "sandbox"}},
+		},
+	}
+
+	var stdout bytes.Buffer
+	err := RunWithDependencies([]string{
+		"pvectl", "--config", cfgPath,
+		"guest", "ls",
+		"--status", "running",
+		"--tag", "infra",
+	}, "test", testDeps(&stdout, backend))
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	out := stdout.String()
+	if !strings.Contains(out, `"vmid": 100`) {
+		t.Fatalf("running tagged vm missing: %s", out)
+	}
+	if strings.Contains(out, `"vmid": 101`) || strings.Contains(out, `"vmid": 200`) {
+		t.Fatalf("filters must exclude stopped and untagged guests: %s", out)
+	}
+}
+
 func TestGuestListCommandWritesTableWithKind(t *testing.T) {
 	cfgPath := writeTestConfig(t, "table")
 	var stdout bytes.Buffer

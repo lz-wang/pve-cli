@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"testing"
 
 	"github.com/lz-wang/pvectl/internal/output"
@@ -445,9 +446,15 @@ type fakeBackend struct {
 	backupCalls      int
 	backupListCalls  map[string]int
 	storageCalls     map[string]int
+
+	// mu guards the call counters: bulk execution queries the backend from
+	// several goroutines at once, and go test -race runs over these fakes.
+	mu sync.Mutex
 }
 
 func (b *fakeBackend) Nodes(context.Context) ([]output.NodeRow, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
 	b.nodeCalls++
 	return b.nodes, nil
 }
@@ -460,6 +467,8 @@ func (b *fakeBackend) Node(_ context.Context, name string) (output.NodeDetail, e
 }
 
 func (b *fakeBackend) VMs(_ context.Context, node string) ([]output.GuestRow, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
 	if b.vmListCalls == nil {
 		b.vmListCalls = make(map[string]int)
 	}
@@ -471,6 +480,8 @@ func (b *fakeBackend) VMs(_ context.Context, node string) ([]output.GuestRow, er
 }
 
 func (b *fakeBackend) VM(_ context.Context, node string, vmid int) (Guest, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
 	b.vmCalls++
 	if guest := b.vms[node][vmid]; guest != nil {
 		return guest, nil
@@ -479,6 +490,8 @@ func (b *fakeBackend) VM(_ context.Context, node string, vmid int) (Guest, error
 }
 
 func (b *fakeBackend) LXCs(_ context.Context, node string) ([]output.GuestRow, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
 	if b.lxcListCalls == nil {
 		b.lxcListCalls = make(map[string]int)
 	}
@@ -490,6 +503,8 @@ func (b *fakeBackend) LXCs(_ context.Context, node string) ([]output.GuestRow, e
 }
 
 func (b *fakeBackend) LXC(_ context.Context, node string, vmid int) (Guest, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
 	b.lxcCalls++
 	if guest := b.lxcs[node][vmid]; guest != nil {
 		return guest, nil
@@ -498,6 +513,8 @@ func (b *fakeBackend) LXC(_ context.Context, node string, vmid int) (Guest, erro
 }
 
 func (b *fakeBackend) Backups(_ context.Context, node, storage string) ([]output.BackupRow, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
 	if b.backupListCalls == nil {
 		b.backupListCalls = make(map[string]int)
 	}
@@ -512,6 +529,8 @@ func (b *fakeBackend) Backups(_ context.Context, node, storage string) ([]output
 }
 
 func (b *fakeBackend) BackupGuest(_ context.Context, node string, options BackupOptions) (Task, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
 	b.backupCalls++
 	b.backupNode = node
 	b.backupOptions = options
@@ -519,6 +538,8 @@ func (b *fakeBackend) BackupGuest(_ context.Context, node string, options Backup
 }
 
 func (b *fakeBackend) Storages(_ context.Context, node string) ([]output.StorageRow, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
 	if b.storageCalls == nil {
 		b.storageCalls = make(map[string]int)
 	}
