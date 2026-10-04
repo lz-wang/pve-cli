@@ -488,7 +488,9 @@ pvectl vm cloud-init set 100 --password-env VM_PASSWORD
 
 `cloud-init get` never echoes the password; it only reports
 `password_configured`. `cloud-init update` regenerates the cloud-init image so
-the next boot picks up pending changes.
+the next boot picks up pending changes. `--ssh-key-file` expects one full
+OpenSSH public key per line; each line is preserved as-is, and empty or `#`
+comment lines are skipped.
 
 ## Network Commands (read-only)
 

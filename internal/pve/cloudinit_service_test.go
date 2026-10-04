@@ -2,6 +2,7 @@ package pve
 
 import (
 	"context"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -34,7 +35,8 @@ func TestCloudInitValuesReadsPasswordFromEnv(t *testing.T) {
 
 func TestCloudInitValuesEncodesSSHKeysFromFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "id.pub")
-	if err := os.WriteFile(path, []byte("ssh-ed25519 AAAAtest key@host\n"), 0o600); err != nil {
+	content := "# lab keys\nssh-ed25519 AAAAtest key@host\n\nssh-rsa AAAArsa other@host\n"
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatalf("write key: %v", err)
 	}
 
@@ -44,6 +46,16 @@ func TestCloudInitValuesEncodesSSHKeysFromFile(t *testing.T) {
 	}
 	if values["sshkeys"] == "" || strings.Contains(values["sshkeys"], "\n") {
 		t.Fatalf("sshkeys = %q", values["sshkeys"])
+	}
+	// Decoding must reproduce every full key line; splitting on whitespace
+	// would shred each "type base64 comment" key into fragments.
+	decoded, err := url.QueryUnescape(values["sshkeys"])
+	if err != nil {
+		t.Fatalf("decode sshkeys %q: %v", values["sshkeys"], err)
+	}
+	want := "ssh-ed25519 AAAAtest key@host\nssh-rsa AAAArsa other@host"
+	if decoded != want {
+		t.Fatalf("decoded sshkeys = %q, want %q", decoded, want)
 	}
 
 	empty := filepath.Join(t.TempDir(), "empty.pub")

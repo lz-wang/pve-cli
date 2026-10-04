@@ -175,9 +175,9 @@ func cloudInitValues(options CloudInitSetOptions) (map[string]string, error) {
 		if err != nil {
 			return nil, fmt.Errorf("read ssh key file: %w", err)
 		}
-		keys := strings.Fields(string(data))
+		keys := parseSSHKeyLines(string(data))
 		if len(keys) == 0 {
-			return nil, fmt.Errorf("ssh key file %s is empty", options.SSHKeyFile)
+			return nil, fmt.Errorf("ssh key file %s contains no public keys", options.SSHKeyFile)
 		}
 		values["sshkeys"] = proxmox.EncodeSSHKeys(keys...)
 	}
@@ -202,4 +202,20 @@ func cloudInitValues(options CloudInitSetOptions) (map[string]string, error) {
 		return nil, fmt.Errorf("at least one cloud-init option is required")
 	}
 	return values, nil
+}
+
+// parseSSHKeyLines returns one entry per non-empty, non-comment line. An
+// OpenSSH public key is "type base64 comment" on a single line, so splitting
+// on whitespace would shred every key into fragments and corrupt the
+// cloud-init sshkeys config.
+func parseSSHKeyLines(data string) []string {
+	var keys []string
+	for _, line := range strings.Split(data, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		keys = append(keys, line)
+	}
+	return keys
 }
