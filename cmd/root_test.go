@@ -781,6 +781,58 @@ func TestSnapshotDeleteCommandConfirms(t *testing.T) {
 	}
 }
 
+func TestVMRestoreCommandWritesResultAndWaits(t *testing.T) {
+	cfgPath := writeTestConfig(t, "json")
+	task := &commandTask{upid: "UPID:pve1:restore"}
+	backend := &commandBackend{
+		nodes:      []output.NodeRow{{Name: "pve1"}},
+		backupTask: task,
+	}
+	var stdout bytes.Buffer
+
+	err := RunWithDependencies([]string{
+		"pvectl", "--config", cfgPath,
+		"vm", "restore", "backup:backup/vzdump-qemu-100.vma.zst",
+		"--node", "pve1",
+		"--vmid", "101",
+		"--storage", "local-lvm",
+		"--wait",
+	}, "test", testDeps(&stdout, backend))
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if !strings.Contains(stdout.String(), `"vmid": 101`) || !strings.Contains(stdout.String(), `"task": "UPID:pve1:restore"`) {
+		t.Fatalf("stdout = %s", stdout.String())
+	}
+	if !task.waited {
+		t.Fatal("expected restore task to be waited")
+	}
+	if backend.restoreOptions.VMID != 101 || backend.restoreOptions.Storage != "local-lvm" {
+		t.Fatalf("restore options = %#v", backend.restoreOptions)
+	}
+}
+
+func TestRestoreCommandRejectsExistingVMID(t *testing.T) {
+	cfgPath := writeTestConfig(t, "table")
+	backend := &commandBackend{
+		nodes: []output.NodeRow{{Name: "pve1"}},
+		vms:   map[string][]output.GuestRow{"pve1": {{Kind: "vm", VMID: 101, Node: "pve1"}}},
+	}
+
+	err := RunWithDependencies([]string{
+		"pvectl", "--config", cfgPath,
+		"vm", "restore", "backup:backup/vzdump-qemu-100.vma.zst",
+		"--node", "pve1",
+		"--vmid", "101",
+	}, "test", testDeps(&bytes.Buffer{}, backend))
+	if err == nil {
+		t.Fatal("expected existing vmid error")
+	}
+	if strings.Contains(err.Error(), "already exists") == false {
+		t.Fatalf("error = %v", err)
+	}
+}
+
 func TestConfigSetProfileCommandDoesNotRequireSecretEnv(t *testing.T) {
 	cfgPath := filepath.Join(t.TempDir(), "config.yaml")
 	err := RunWithDependencies([]string{
