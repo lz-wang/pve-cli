@@ -35,7 +35,7 @@ func guestRestoreCommand(kind string, deps Dependencies) *cli.Command {
 			if err != nil {
 				return err
 			}
-			result, err := pve.NewRestoreService(rt.backend, rt.tasks, rt.logger, rt.verbose).Restore(c.Context, pve.RestoreOptions{
+			result, err := pve.NewRestoreService(rt.backend, rt.tasks).Restore(c.Context, pve.RestoreOptions{
 				Kind:    kind,
 				Archive: c.Args().First(),
 				Node:    c.String("node"),

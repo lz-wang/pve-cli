@@ -3,7 +3,6 @@ package pve
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"path"
 	"strings"
 
@@ -33,12 +32,10 @@ type RestoreBackend interface {
 type RestoreService struct {
 	backend RestoreBackend
 	tasks   TaskRunner
-	logger  *slog.Logger
-	verbose bool
 }
 
-func NewRestoreService(backend RestoreBackend, tasks TaskRunner, logger *slog.Logger, verbose bool) *RestoreService {
-	return &RestoreService{backend: backend, tasks: tasks, logger: logger, verbose: verbose}
+func NewRestoreService(backend RestoreBackend, tasks TaskRunner) *RestoreService {
+	return &RestoreService{backend: backend, tasks: tasks}
 }
 
 // Restore validates the request, refuses existing VMIDs, and triggers the

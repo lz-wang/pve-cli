@@ -18,7 +18,7 @@ func TestRestoreServiceRejectsExistingVMID(t *testing.T) {
 			},
 		},
 	}
-	svc := NewRestoreService(backend, TaskRunner{}, nil, false)
+	svc := NewRestoreService(backend, TaskRunner{})
 
 	_, err := svc.Restore(context.Background(), RestoreOptions{
 		Kind: "vm", Archive: "backup:backup/vzdump-qemu-100.vma.zst",
@@ -33,7 +33,7 @@ func TestRestoreServiceRejectsExistingVMID(t *testing.T) {
 }
 
 func TestRestoreServiceValidatesInput(t *testing.T) {
-	svc := NewRestoreService(&fakeRestoreBackend{}, TaskRunner{}, nil, false)
+	svc := NewRestoreService(&fakeRestoreBackend{}, TaskRunner{})
 
 	cases := []RestoreOptions{
 		{Kind: "qemu", Archive: "a", Node: "pve1", VMID: 101},
@@ -50,7 +50,7 @@ func TestRestoreServiceValidatesInput(t *testing.T) {
 
 func TestRestoreServiceChecksArchiveKind(t *testing.T) {
 	backend := &fakeRestoreBackend{fakeBackend: fakeBackend{nodes: []output.NodeRow{{Name: "pve1"}}}}
-	svc := NewRestoreService(backend, TaskRunner{}, nil, false)
+	svc := NewRestoreService(backend, TaskRunner{})
 
 	_, err := svc.Restore(context.Background(), RestoreOptions{
 		Kind: "vm", Archive: "backup:backup/vzdump-lxc-200.tar.zst",
@@ -66,7 +66,7 @@ func TestRestoreServiceChecksArchiveKind(t *testing.T) {
 
 func TestRestoreServiceAllowsUnknownArchiveShape(t *testing.T) {
 	backend := &fakeRestoreBackend{fakeBackend: fakeBackend{nodes: []output.NodeRow{{Name: "pve1"}}}}
-	svc := NewRestoreService(backend, TaskRunner{}, nil, false)
+	svc := NewRestoreService(backend, TaskRunner{})
 
 	_, err := svc.Restore(context.Background(), RestoreOptions{
 		Kind: "vm", Archive: "pbs:store/vm/101/2026-01-01T00:00:00Z",
@@ -82,7 +82,7 @@ func TestRestoreServiceTriggersRestore(t *testing.T) {
 		fakeBackend: fakeBackend{nodes: []output.NodeRow{{Name: "pve1"}}},
 		task:        &fakeTask{upid: "UPID:pve1:restore"},
 	}
-	svc := NewRestoreService(backend, TaskRunner{}, nil, false)
+	svc := NewRestoreService(backend, TaskRunner{})
 
 	result, err := svc.Restore(context.Background(), RestoreOptions{
 		Kind: "lxc", Archive: "backup:backup/vzdump-lxc-200.tar.zst",
@@ -104,7 +104,7 @@ func TestRestoreServiceWaitFailurePreservesResult(t *testing.T) {
 		fakeBackend: fakeBackend{nodes: []output.NodeRow{{Name: "pve1"}}},
 		task:        &fakeTask{upid: "UPID:pve1:restore", failed: true, exitStatus: "ERROR"},
 	}
-	svc := NewRestoreService(backend, TaskRunner{Wait: true}, nil, false)
+	svc := NewRestoreService(backend, TaskRunner{Wait: true})
 
 	result, err := svc.Restore(context.Background(), RestoreOptions{
 		Kind: "vm", Archive: "backup:backup/vzdump-qemu-100.vma.zst",
@@ -130,7 +130,7 @@ func TestRestoreServiceVMIDCheckFailsClosedOnNodeFailure(t *testing.T) {
 		},
 		task: &fakeTask{upid: "UPID:pve2:restore"},
 	}
-	svc := NewRestoreService(backend, TaskRunner{}, nil, false)
+	svc := NewRestoreService(backend, TaskRunner{})
 
 	// An unverifiable node inventory must abort the restore even though the
 	// target VMID looks free on the reachable node.
