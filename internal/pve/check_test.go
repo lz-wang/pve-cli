@@ -336,3 +336,145 @@ func parseableGuestResource(resource string) bool {
 	_, err := parseCheckVMID(resource)
 	return err == nil
 }
+
+func TestCheckServiceBackupCoveragePartialSourceFailureIsIndeterminate(t *testing.T) {
+	now := uint64(time.Now().Unix())
+	backend := &fakeBackend{
+		nodes: []output.NodeRow{
+			{Name: "pve1", Status: "online"},
+			{Name: "pve2", Status: "online"},
+		},
+		vmRows: map[string][]output.GuestRow{
+			"pve1": {
+				{Kind: "vm", VMID: 100, Node: "pve1", Tags: "backup"},
+				{Kind: "vm", VMID: 101, Node: "pve1", Tags: "backup"},
+			},
+		},
+		lxcs:    map[string]map[int]*fakeGuest{},
+		lxcRows: map[string][]output.GuestRow{},
+		storageRows: map[string][]output.StorageRow{
+			"pve1": {{Node: "pve1", Storage: "backup", Active: true, Enabled: true, Content: "backup"}},
+			"pve2": {{Node: "pve2", Storage: "vault", Active: true, Enabled: true, Content: "backup"}},
+		},
+		backupRows: map[string]map[string][]output.BackupRow{
+			"pve1": {
+				"backup": {{Node: "pve1", Storage: "backup", Kind: "vm", VMID: 100, CTime: now - 3600}},
+			},
+		},
+		backupErrs: map[string]error{"pve2/vault": errors.New("timeout")},
+	}
+	svc := NewCheckService(backend)
+
+	result, err := svc.Run(context.Background(), CheckOptions{
+		BackupTag:    "backup",
+		BackupMaxAge: 36 * time.Hour,
+	})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+
+	byVMID := map[uint64]output.CheckRow{}
+	for _, row := range result.Rows {
+		if row.Check == "backup-coverage" {
+			if vmid, err := parseCheckVMID(row.Resource); err == nil {
+				byVMID[vmid] = row
+			}
+		}
+	}
+	// vm 100 has a proven fresh backup, so the failing source cannot
+	// overturn its OK verdict.
+	if row := byVMID[100]; row.Status != output.DoctorStatusOK {
+		t.Fatalf("vm 100 row = %#v", row)
+	}
+	// vm 101 was not found on the reachable source, but the failing source
+	// may hide a newer backup: the verdict must stay indeterminate instead
+	// of claiming "no backup found".
+	if row := byVMID[101]; row.Status != output.DoctorStatusWarn || row.Message != "backup status unavailable" {
+		t.Fatalf("vm 101 row = %#v, want backup status unavailable", row)
+	}
+}
+
+func TestCheckServiceBackupCoveragePartialFailureBeatsStaleVerdict(t *testing.T) {
+	now := uint64(time.Now().Unix())
+	backend := &fakeBackend{
+		nodes: []output.NodeRow{
+			{Name: "pve1", Status: "online"},
+			{Name: "pve2", Status: "online"},
+		},
+		vmRows: map[string][]output.GuestRow{
+			"pve1": {{Kind: "vm", VMID: 100, Node: "pve1", Tags: "backup"}},
+		},
+		lxcs:    map[string]map[int]*fakeGuest{},
+		lxcRows: map[string][]output.GuestRow{},
+		storageRows: map[string][]output.StorageRow{
+			"pve1": {{Node: "pve1", Storage: "backup", Active: true, Enabled: true, Content: "backup"}},
+			"pve2": {{Node: "pve2", Storage: "vault", Active: true, Enabled: true, Content: "backup"}},
+		},
+		backupRows: map[string]map[string][]output.BackupRow{
+			"pve1": {
+				"backup": {{Node: "pve1", Storage: "backup", Kind: "vm", VMID: 100, CTime: now - 72*3600}},
+			},
+		},
+		backupErrs: map[string]error{"pve2/vault": errors.New("timeout")},
+	}
+	svc := NewCheckService(backend)
+
+	result, err := svc.Run(context.Background(), CheckOptions{
+		BackupTag:    "backup",
+		BackupMaxAge: 36 * time.Hour,
+	})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	for _, row := range result.Rows {
+		if row.Check == "backup-coverage" && row.Resource == "vm 100" {
+			// The stale backup on pve1 is not proof that no fresher backup
+			// exists on the unqueryable source.
+			if row.Status != output.DoctorStatusWarn || row.Message != "backup status unavailable" {
+				t.Fatalf("vm 100 row = %#v, want backup status unavailable", row)
+			}
+			return
+		}
+	}
+	t.Fatalf("no vm 100 coverage row: %#v", result.Rows)
+}
+
+func TestCheckServiceBackupCoverageStaleWhenAllSourcesSucceed(t *testing.T) {
+	now := uint64(time.Now().Unix())
+	backend := &fakeBackend{
+		nodes: []output.NodeRow{{Name: "pve1", Status: "online"}},
+		vmRows: map[string][]output.GuestRow{
+			"pve1": {{Kind: "vm", VMID: 100, Node: "pve1", Tags: "backup"}},
+		},
+		lxcs:    map[string]map[int]*fakeGuest{},
+		lxcRows: map[string][]output.GuestRow{},
+		storageRows: map[string][]output.StorageRow{
+			"pve1": {{Node: "pve1", Storage: "backup", Active: true, Enabled: true, Content: "backup"}},
+		},
+		backupRows: map[string]map[string][]output.BackupRow{
+			"pve1": {
+				"backup": {{Node: "pve1", Storage: "backup", Kind: "vm", VMID: 100, CTime: now - 72*3600}},
+			},
+		},
+	}
+	svc := NewCheckService(backend)
+
+	result, err := svc.Run(context.Background(), CheckOptions{
+		BackupTag:    "backup",
+		BackupMaxAge: 36 * time.Hour,
+	})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	for _, row := range result.Rows {
+		if row.Check == "backup-coverage" && row.Resource == "vm 100" {
+			// With every source queryable, a stale latest backup is a real
+			// coverage gap and must keep the stale diagnosis.
+			if row.Status != output.DoctorStatusWarn || row.Message != "latest backup is 3d old" {
+				t.Fatalf("vm 100 row = %#v, want stale diagnosis", row)
+			}
+			return
+		}
+	}
+	t.Fatalf("no vm 100 coverage row: %#v", result.Rows)
+}

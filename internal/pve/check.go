@@ -215,16 +215,27 @@ func (s *CheckService) checkBackupCoverage(ctx context.Context, nodes []string, 
 			Message:  fmt.Sprintf("list backups: %v", backupErrs[source]),
 		})
 	}
-	// When every backup source failed, "no backup found" would misreport a
-	// query outage as a coverage gap; keep the two diagnoses apart.
-	unavailable := len(backupErrs) > 0 && len(backupErrs) >= len(backupSources(storages))
+	// A failing source can always hide a newer backup, so without a proven
+	// recent backup no guest may be judged "no backup found" or "stale"
+	// while any source is unqueryable; keep query outages and coverage gaps
+	// apart for cron and agent consumers.
+	hasUncertainSource := len(backupErrs) > 0
 	now := uint64(time.Now().Unix())
 	cutoff := now - uint64(options.BackupMaxAge.Seconds())
 	for _, guest := range guests {
 		resource := fmt.Sprintf("%s %d", guest.Kind, guest.VMID)
 		ctime, ok := latest[backupGuestKey(guest.Kind, guest.VMID)]
 		switch {
-		case !ok && unavailable:
+		case ok && ctime >= cutoff:
+			// A compliant backup was proven to exist; a failing source
+			// cannot overturn that verdict.
+			result.add(output.CheckRow{
+				Check:    "backup-coverage",
+				Status:   output.DoctorStatusOK,
+				Resource: resource,
+				Message:  fmt.Sprintf("latest backup is %s old", output.FormatUptime(now-ctime)),
+			})
+		case hasUncertainSource:
 			result.add(output.CheckRow{
 				Check:    "backup-coverage",
 				Status:   output.DoctorStatusWarn,
@@ -238,17 +249,10 @@ func (s *CheckService) checkBackupCoverage(ctx context.Context, nodes []string, 
 				Resource: resource,
 				Message:  "no backup found",
 			})
-		case ctime < cutoff:
-			result.add(output.CheckRow{
-				Check:    "backup-coverage",
-				Status:   output.DoctorStatusWarn,
-				Resource: resource,
-				Message:  fmt.Sprintf("latest backup is %s old", output.FormatUptime(now-ctime)),
-			})
 		default:
 			result.add(output.CheckRow{
 				Check:    "backup-coverage",
-				Status:   output.DoctorStatusOK,
+				Status:   output.DoctorStatusWarn,
 				Resource: resource,
 				Message:  fmt.Sprintf("latest backup is %s old", output.FormatUptime(now-ctime)),
 			})
