@@ -207,6 +207,35 @@ func TestStructuredOutputContracts(t *testing.T) {
 				{"arch", stringType},
 			},
 		},
+		{
+			name: "TaskRow",
+			value: TaskRow{
+				UPID: "UPID:pve1:0001:0000:vzdump:100:root@pam:", Node: "pve1", Type: "vzdump",
+				ID: "100", User: "root@pam", Status: "ok", ExitStatus: "OK",
+				StartTime: 1710000000, EndTime: 1710000600,
+			},
+			fields: []contractField{
+				{"upid", stringType},
+				{"node", stringType},
+				{"type", stringType},
+				{"id", stringType},
+				{"user", stringType},
+				{"status", stringType},
+				{"exit_status", stringType},
+				{"start_time", int64Type},
+				{"end_time", int64Type},
+			},
+		},
+		{
+			name: "TaskLogRow",
+			value: TaskLogRow{
+				Line: 1, Text: "INFO: starting new backup job",
+			},
+			fields: []contractField{
+				{"line", intType},
+				{"text", stringType},
+			},
+		},
 	}
 
 	for _, tc := range cases {

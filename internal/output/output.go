@@ -136,6 +136,23 @@ type DoctorRow struct {
 	Message string       `json:"message" yaml:"message"`
 }
 
+type TaskRow struct {
+	UPID       string `json:"upid" yaml:"upid"`
+	Node       string `json:"node" yaml:"node"`
+	Type       string `json:"type" yaml:"type"`
+	ID         string `json:"id,omitempty" yaml:"id,omitempty"`
+	User       string `json:"user,omitempty" yaml:"user,omitempty"`
+	Status     string `json:"status" yaml:"status"`
+	ExitStatus string `json:"exit_status,omitempty" yaml:"exit_status,omitempty"`
+	StartTime  int64  `json:"start_time,omitempty" yaml:"start_time,omitempty"`
+	EndTime    int64  `json:"end_time,omitempty" yaml:"end_time,omitempty"`
+}
+
+type TaskLogRow struct {
+	Line int    `json:"line" yaml:"line"`
+	Text string `json:"text" yaml:"text"`
+}
+
 type VersionInfo struct {
 	Version   string `json:"version" yaml:"version"`
 	Commit    string `json:"commit" yaml:"commit"`
@@ -223,6 +240,68 @@ func WriteDoctorRows(w io.Writer, format string, rows []DoctorRow) error {
 		}
 		for _, row := range rows {
 			if _, err := fmt.Fprintf(tw, "%s\t%s\t%s\n", row.Check, row.Status, row.Message); err != nil {
+				return err
+			}
+		}
+		return tw.Flush()
+	})
+}
+
+func WriteTaskRows(w io.Writer, format string, rows []TaskRow) error {
+	return Write(w, format, rows, func(w io.Writer) error {
+		tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+		if _, err := fmt.Fprintln(tw, "NODE\tTYPE\tID\tUSER\tSTATUS\tSTARTTIME\tENDTIME\tEXITSTATUS\tUPID"); err != nil {
+			return err
+		}
+		for _, row := range rows {
+			if _, err := fmt.Fprintf(
+				tw,
+				"%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+				empty(row.Node),
+				empty(row.Type),
+				empty(row.ID),
+				empty(row.User),
+				empty(row.Status),
+				formatUnixTime(row.StartTime),
+				formatUnixTime(row.EndTime),
+				empty(row.ExitStatus),
+				row.UPID,
+			); err != nil {
+				return err
+			}
+		}
+		return tw.Flush()
+	})
+}
+
+func WriteTaskDetail(w io.Writer, format string, row TaskRow) error {
+	return Write(w, format, row, func(w io.Writer) error {
+		tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+		lines := [][2]string{
+			{"UPID", row.UPID},
+			{"Node", empty(row.Node)},
+			{"Type", empty(row.Type)},
+			{"ID", empty(row.ID)},
+			{"User", empty(row.User)},
+			{"Status", empty(row.Status)},
+			{"ExitStatus", empty(row.ExitStatus)},
+			{"StartTime", formatUnixTime(row.StartTime)},
+			{"EndTime", formatUnixTime(row.EndTime)},
+		}
+		for _, line := range lines {
+			if _, err := fmt.Fprintf(tw, "%s:\t%s\n", line[0], line[1]); err != nil {
+				return err
+			}
+		}
+		return tw.Flush()
+	})
+}
+
+func WriteTaskLogRows(w io.Writer, format string, rows []TaskLogRow) error {
+	return Write(w, format, rows, func(w io.Writer) error {
+		tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+		for _, row := range rows {
+			if _, err := fmt.Fprintf(tw, "%d\t%s\n", row.Line, row.Text); err != nil {
 				return err
 			}
 		}
