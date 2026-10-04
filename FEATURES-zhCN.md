@@ -28,11 +28,13 @@
 - `config set-profile NAME` 创建或更新指定 profile。
 - `config use-profile NAME` 切换当前 profile。
 - `config current-profile` 打印当前 profile 名称。
-- `config view` 打印当前配置文件。
+- `config view` 打印当前配置文件，包括明文 token。
 
-配置文件保存 Proxmox endpoint、token ID、token-secret 环境变量名、TLS
-行为、timeout 和默认输出格式。它只保存 `token_secret_env`，不会保存 token
-secret 值。
+配置文件保存 Proxmox endpoint、token ID、TLS 行为、timeout 和默认输出格式。
+可通过 `--token-secret` 将 token 值直接明文保存到 `token_secret`，也可通过
+`--token-secret-env` 保存 `token_secret_env` 环境变量引用。`config init` 和
+`config set-profile` 至少需要一种 token 来源；非空明文值优先于环境变量引用。
+Unix 上保存配置时使用 `0600` 文件权限，已有文件也会收紧到该权限。
 
 ## 诊断
 
@@ -45,7 +47,7 @@ API 连接。
 - YAML 解析
 - 当前选中的 profile
 - profile 必填字段
-- token-secret 环境变量是否存在
+- 明文 token 或 token-secret 环境变量是否存在
 - timeout 和默认输出设置
 - endpoint 形态和 TLS 模式
 - API 连接

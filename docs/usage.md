@@ -14,12 +14,10 @@ For a typical HomeLab setup, initialize one default profile and run a
 diagnostic check:
 
 ```bash
-export PVE_HOME_TOKEN_SECRET="your-token-secret"
-
 pve config init \
   --endpoint https://pve.lan:8006/api2/json \
-  --token-id automation@pve!pve \
-  --token-secret-env PVE_HOME_TOKEN_SECRET \
+  --token-id 'automation@pve!pve' \
+  --token-secret 'your-token-secret' \
   --insecure
 
 pve doctor
@@ -35,16 +33,30 @@ profiles:
   home:
     endpoint: https://pve.lan:8006/api2/json
     token_id: automation@pve!pve
-    token_secret_env: PVE_HOME_TOKEN_SECRET
+    token_secret: your-token-secret
     insecure_skip_verify: true
     timeout: 30s
     default_output: table
 ```
 
-The token secret is read from the named environment variable at runtime.
-`pve` does not write token secrets to disk.
-Environment variable names are user-defined; `PVE_HOME_TOKEN_SECRET` is only
-an example and can be replaced with any name referenced by `token_secret_env`.
+`token_secret` stores the token value directly in plaintext. It can be set by
+editing the YAML file or by passing `--token-secret` to `config init` or
+`config set-profile`. Both commands require at least one token source.
+
+For environment-based configuration, replace `token_secret` with
+`token_secret_env: PVE_HOME_TOKEN_SECRET` in YAML, or pass
+`--token-secret-env PVE_HOME_TOKEN_SECRET` instead of `--token-secret`:
+
+```bash
+export PVE_HOME_TOKEN_SECRET='your-token-secret'
+```
+
+A non-empty `token_secret` takes precedence over `token_secret_env`; the
+environment variable is read only when the plaintext value is empty or absent.
+Environment variable names are user-defined. Config files are saved with
+permissions `0600` on Unix, including when replacing an existing file.
+`config view` prints the complete stored YAML, including plaintext
+`token_secret`. Doctor reports the credential source without printing its value.
 
 Use `config set-profile` and `config use-profile` when you need to manage more
 than one profile:
@@ -74,7 +86,7 @@ pve doctor -o json
 ```
 
 `doctor` checks the config path, config file, YAML parsing, selected profile,
-required profile fields, token secret environment variable, timeout,
+required profile fields, plaintext token or token-secret environment variable, timeout,
 default output, endpoint shape, Proxmox API connectivity, and node listing
 permission. It never prints token secret values.
 

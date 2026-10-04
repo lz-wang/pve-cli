@@ -119,7 +119,7 @@ func (s *DoctorService) Run(ctx context.Context, options DoctorOptions) DoctorRe
 		Insecure:    options.Insecure,
 	})
 	if err != nil {
-		result.add("API_CONNECTIVITY", output.DoctorStatusFail, err.Error())
+		result.add("API_CONNECTIVITY", output.DoctorStatusFail, strings.ReplaceAll(err.Error(), tokenSecret, "[REDACTED]"))
 		result.add("NODES", output.DoctorStatusSkip, "skipped due to API_CONNECTIVITY failure")
 		result.skipNode(options.Node, "skipped due to API_CONNECTIVITY failure")
 		return result
@@ -127,7 +127,7 @@ func (s *DoctorService) Run(ctx context.Context, options DoctorOptions) DoctorRe
 
 	nodes, err := backend.Nodes(ctx)
 	if err != nil {
-		result.add("API_CONNECTIVITY", output.DoctorStatusFail, fmt.Sprintf("list nodes: %v", err))
+		result.add("API_CONNECTIVITY", output.DoctorStatusFail, "list nodes: "+strings.ReplaceAll(err.Error(), tokenSecret, "[REDACTED]"))
 		result.add("NODES", output.DoctorStatusSkip, "skipped due to API_CONNECTIVITY failure")
 		result.skipNode(options.Node, "skipped due to API_CONNECTIVITY failure")
 		return result
@@ -202,14 +202,18 @@ func (r *DoctorResult) checkProfileFields(profile config.Profile) bool {
 	if profile.TokenID == "" {
 		missing = append(missing, "token_id")
 	}
-	if profile.TokenSecretEnv == "" {
-		missing = append(missing, "token_secret_env")
+	if profile.TokenSecret == "" && profile.TokenSecretEnv == "" {
+		missing = append(missing, "token_secret or token_secret_env")
 	}
 	if len(missing) > 0 {
 		r.add("PROFILE_FIELDS", output.DoctorStatusFail, "missing "+strings.Join(missing, ", "))
 		return false
 	}
-	r.add("PROFILE_FIELDS", output.DoctorStatusOK, "endpoint, token_id, token_secret_env")
+	credentialField := "token_secret_env"
+	if profile.TokenSecret != "" {
+		credentialField = "token_secret"
+	}
+	r.add("PROFILE_FIELDS", output.DoctorStatusOK, "endpoint, token_id, "+credentialField)
 	return true
 }
 
@@ -218,6 +222,11 @@ func (r *DoctorResult) checkTokenSecret(profile config.Profile) (string, bool) {
 	if err != nil {
 		r.add("TOKEN_SECRET_ENV", output.DoctorStatusFail, err.Error())
 		return "", false
+	}
+	if profile.TokenSecret != "" {
+		r.add("TOKEN_SECRET", output.DoctorStatusOK, "token_secret is configured")
+		r.add("TOKEN_SECRET_ENV", output.DoctorStatusSkip, "using token_secret from config")
+		return secret, true
 	}
 	r.add("TOKEN_SECRET_ENV", output.DoctorStatusOK, fmt.Sprintf("%s is set", profile.TokenSecretEnv))
 	return secret, true

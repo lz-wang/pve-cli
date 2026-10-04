@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Added
+
+- Support plaintext `token_secret` in YAML profiles and `--token-secret` for
+  `pve config init` and `pve config set-profile`. A non-empty plaintext value
+  takes precedence over `token_secret_env`; at least one token source is required.
+- Add doctor diagnostics for plaintext tokens without printing their values,
+  and redact token values from backend error messages.
+
 ### Changed
 
 - Rename the CLI executable from `pvectl` to `pve`, including help, version
@@ -12,6 +20,8 @@
   be moved to the new path or selected explicitly with `--config`.
 - Update CLI documentation and examples to use `pve` and `PVE_*` environment
   variable names. Token-secret environment variable names remain user-defined.
+- Save config files with permissions `0600` on Unix, including existing files.
+- Include stored plaintext `token_secret` in `pve config view` output.
 
 ## v1.1.0 - 2026-10-04
 

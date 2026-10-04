@@ -9,7 +9,87 @@ import (
 
 	"github.com/lz-wang/pvectl/internal/config"
 	"github.com/lz-wang/pvectl/internal/output"
+	"github.com/lz-wang/pvectl/internal/pve"
 )
+
+func TestConfigCommandsWithPlaintextToken(t *testing.T) {
+	for _, command := range []string{"init", "set-profile"} {
+		t.Run(command, func(t *testing.T) {
+			cfgPath := filepath.Join(t.TempDir(), "config.yaml")
+			args := []string{"pve", "--config", cfgPath, "config", command}
+			if command == "set-profile" {
+				args = append(args, "home")
+			}
+			args = append(args,
+				"--endpoint", "https://pve.example:8006/api2/json",
+				"--token-id", "automation@pve!test",
+				"--token-secret", "fake-plaintext-token",
+			)
+			var stdout, stderr bytes.Buffer
+			deps := Dependencies{
+				Stdout: &stdout,
+				Stderr: &stderr,
+				BackendFactory: func(_ config.Profile, options pve.ClientOptions) (pve.Backend, error) {
+					if options.TokenSecret != "fake-plaintext-token" {
+						t.Fatal("backend did not receive the plaintext token")
+					}
+					return &commandBackend{nodes: []output.NodeRow{{Name: "pve1"}}}, nil
+				},
+			}
+			if err := RunWithDependencies(args, "test", deps); err != nil {
+				t.Fatalf("configure: %v", err)
+			}
+			cfg, err := config.Load(cfgPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			profile := cfg.Profiles["home"]
+			if profile.TokenSecret != "fake-plaintext-token" || profile.TokenSecretEnv != "" {
+				t.Fatal("config did not store the plaintext token directly")
+			}
+			if err := RunWithDependencies([]string{"pve", "--config", cfgPath, "config", "view"}, "test", deps); err != nil {
+				t.Fatalf("config view: %v", err)
+			}
+			if !strings.Contains(stdout.String(), "token_secret: fake-plaintext-token") {
+				t.Fatal("config view did not include the stored plaintext field")
+			}
+			stdout.Reset()
+			if err := RunWithDependencies([]string{"pve", "--config", cfgPath, "node", "ls"}, "test", deps); err != nil {
+				t.Fatalf("runtime: %v", err)
+			}
+			if !strings.Contains(stdout.String(), "pve1") {
+				t.Fatal("node listing did not use the configured backend")
+			}
+			stdout.Reset()
+			if err := RunWithDependencies([]string{"pve", "--config", cfgPath, "doctor", "--offline", "-o", "json"}, "test", deps); err != nil {
+				t.Fatalf("doctor: %v", err)
+			}
+			if !strings.Contains(stdout.String(), "TOKEN_SECRET") || strings.Contains(stdout.String()+stderr.String(), "fake-plaintext-token") {
+				t.Fatal("doctor should report the credential source without its value")
+			}
+		})
+	}
+}
+
+func TestConfigCommandsRequireTokenSource(t *testing.T) {
+	for _, command := range []string{"init", "set-profile"} {
+		t.Run(command, func(t *testing.T) {
+			cfgPath := filepath.Join(t.TempDir(), "config.yaml")
+			args := []string{"pve", "--config", cfgPath, "config", command}
+			if command == "set-profile" {
+				args = append(args, "home")
+			}
+			args = append(args, "--endpoint", "https://pve.example:8006/api2/json", "--token-id", "automation@pve!test")
+			err := RunWithDependencies(args, "test", Dependencies{Stdout: &bytes.Buffer{}, Stderr: &bytes.Buffer{}})
+			if err == nil || !strings.Contains(err.Error(), "token-secret or token-secret-env is required") {
+				t.Fatalf("missing credential source: %v", err)
+			}
+			if _, err := os.Stat(cfgPath); !os.IsNotExist(err) {
+				t.Fatal("invalid input should not write a config file")
+			}
+		})
+	}
+}
 
 func TestConfigInitCommandWritesProfile(t *testing.T) {
 	cfgPath := filepath.Join(t.TempDir(), "config.yaml")

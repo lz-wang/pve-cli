@@ -3,6 +3,8 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -146,9 +148,9 @@ func TestInitProfileValidatesRequiredFields(t *testing.T) {
 			wantErr: "token-id is required",
 		},
 		{
-			name:    "token secret env",
+			name:    "token secret source",
 			mutate:  func(profile *Profile) { profile.TokenSecretEnv = "" },
-			wantErr: "token-secret-env is required",
+			wantErr: "token-secret or token-secret-env is required",
 		},
 	}
 
@@ -165,19 +167,88 @@ func TestInitProfileValidatesRequiredFields(t *testing.T) {
 }
 
 func TestResolveTokenSecret(t *testing.T) {
-	t.Setenv("PVE_TEST_TOKEN", "secret")
+	t.Setenv("PVE_TEST_TOKEN", "fake-environment-token")
+	t.Setenv("PVE_EMPTY_TEST_TOKEN", "")
+	cases := []struct {
+		name    string
+		profile Profile
+		want    string
+		wantErr string
+	}{
+		{name: "environment", profile: Profile{TokenSecretEnv: "PVE_TEST_TOKEN"}, want: "fake-environment-token"},
+		{name: "plaintext", profile: Profile{TokenSecret: "fake-plaintext-token"}, want: "fake-plaintext-token"},
+		{name: "plaintext wins", profile: Profile{TokenSecret: "fake-plaintext-token", TokenSecretEnv: "PVE_TEST_TOKEN"}, want: "fake-plaintext-token"},
+		{name: "plaintext ignores empty environment", profile: Profile{TokenSecret: "fake-plaintext-token", TokenSecretEnv: "PVE_EMPTY_TEST_TOKEN"}, want: "fake-plaintext-token"},
+		{name: "empty plaintext falls back", profile: Profile{TokenSecret: "", TokenSecretEnv: "PVE_TEST_TOKEN"}, want: "fake-environment-token"},
+		{name: "missing source", wantErr: "token_secret or token_secret_env is required"},
+		{name: "empty environment", profile: Profile{TokenSecretEnv: "PVE_EMPTY_TEST_TOKEN"}, wantErr: "environment variable PVE_EMPTY_TEST_TOKEN is empty"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			secret, err := ResolveTokenSecret(tc.profile)
+			if tc.wantErr != "" {
+				if err == nil || err.Error() != tc.wantErr {
+					t.Fatalf("error = %v, want %q", err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil || secret != tc.want {
+				t.Fatalf("resolved token mismatch: error = %v", err)
+			}
+		})
+	}
+}
 
-	secret, err := ResolveTokenSecret(Profile{TokenSecretEnv: "PVE_TEST_TOKEN"})
+func TestPlaintextProfileSaveLoadAndReplace(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	// Saving over an existing file must also restrict its permissions.
+	if err := os.WriteFile(path, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	profile := testProfile()
+	profile.TokenSecret = "fake-token: with # YAML characters\nand a newline"
+	profile.TokenSecretEnv = ""
+	cfg := Empty()
+	if err := cfg.InitProfile(InitOptions{Name: "home", Profile: profile, Use: true}); err != nil {
+		t.Fatal(err)
+	}
+	if err := Save(path, cfg); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := Load(path)
 	if err != nil {
-		t.Fatalf("resolve secret: %v", err)
+		t.Fatal(err)
 	}
-	if secret != "secret" {
-		t.Fatalf("secret = %q", secret)
+	secret, err := ResolveTokenSecret(loaded.Profiles["home"])
+	if err != nil || secret != profile.TokenSecret {
+		t.Fatalf("plaintext token did not survive save/load: %v", err)
 	}
-
-	os.Unsetenv("PVE_TEST_TOKEN")
-	if _, err := ResolveTokenSecret(Profile{TokenSecretEnv: "PVE_TEST_TOKEN"}); err == nil {
-		t.Fatal("expected missing env error")
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if runtime.GOOS != "windows" && info.Mode().Perm() != 0o600 {
+		t.Fatalf("config permissions = %o, want 600", info.Mode().Perm())
+	}
+	data, err := ToYAML(loaded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "token_secret:") || strings.Contains(string(data), "token_secret_env:") {
+		t.Fatal("plaintext configuration should contain token_secret only")
+	}
+	if err := loaded.SetProfile("home", testProfile()); err != nil {
+		t.Fatal(err)
+	}
+	if err := Save(path, loaded); err != nil {
+		t.Fatal(err)
+	}
+	data, err = os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "token_secret:") || !strings.Contains(string(data), "token_secret_env:") {
+		t.Fatal("switching to an environment reference should remove the plaintext token")
 	}
 }
 

@@ -32,23 +32,23 @@ sudo make install
 ## Configure
 
 For a typical HomeLab setup, one default profile is enough. Create an API token
-in Proxmox VE, export the token secret, initialize the profile, then run a
+in Proxmox VE, initialize the profile with its token secret, then run a
 diagnostic check:
 
 ```bash
-export PVE_HOME_TOKEN_SECRET="your-token-secret"
-
 pve config init \
   --endpoint https://pve.lan:8006/api2/json \
-  --token-id automation@pve!pve \
-  --token-secret-env PVE_HOME_TOKEN_SECRET \
+  --token-id 'automation@pve!pve' \
+  --token-secret 'your-token-secret' \
   --insecure
 
 pve doctor
 ```
 
-`pve` stores only the environment variable name in
-`~/.config/pve/config.yaml`; it does not write token secrets to disk.
+`--token-secret` stores the value directly as plaintext `token_secret` in
+`~/.config/pve/config.yaml`, with file permissions `0600` on Unix. Alternatively,
+use `--token-secret-env PVE_HOME_TOKEN_SECRET` to reference an environment
+variable. A non-empty `token_secret` takes precedence when both are configured.
 Use `pve config set-profile` when you need more than one profile.
 
 ## Daily Usage

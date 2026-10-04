@@ -68,6 +68,7 @@ var flagsWithValues = map[string]bool{
 	"--input":            true,
 	"--endpoint":         true,
 	"--token-id":         true,
+	"--token-secret":     true,
 	"--token-secret-env": true,
 	"--default-output":   true,
 }

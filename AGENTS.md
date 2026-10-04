@@ -23,7 +23,7 @@ Keep the tool small and predictable. Do not turn it into:
 - `internal/pve/` contains the Proxmox backend, guest services, task handling,
   and `go-proxmox` wrappers.
 - `internal/config/` contains YAML config loading, saving, profile selection,
-  and token-secret environment resolution.
+  and plaintext/environment token-secret resolution.
 - `internal/output/` contains table, JSON, and YAML rendering.
 - `docs/usage.md` contains the complete command reference.
 - `README.md` should stay short and focused on the main HomeLab path.
@@ -79,7 +79,8 @@ Keep the tool small and predictable. Do not turn it into:
 ## Security Rules
 
 - Never commit API token secrets or real credentials.
-- Config files should store only `token_secret_env`, not token secret values.
+- Config files support plaintext `token_secret` and `token_secret_env` references.
+  A non-empty `token_secret` takes precedence over the environment reference.
 - Prefer examples that use placeholder endpoints, token IDs, and environment
   variable names.
 

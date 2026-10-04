@@ -30,11 +30,14 @@ are user-defined; documentation uses `PVE_*` examples.
 - `config set-profile NAME` creates or updates a named profile.
 - `config use-profile NAME` switches the current profile.
 - `config current-profile` prints the active profile name.
-- `config view` prints the current config file.
+- `config view` prints the current config file, including plaintext tokens.
 
-Config stores the Proxmox endpoint, token ID, token-secret environment variable
-name, TLS behavior, timeout, and default output format. It intentionally stores
-only `token_secret_env`, not the token secret value.
+Config stores the Proxmox endpoint, token ID, TLS behavior, timeout, and default
+output format. Tokens can be stored directly as plaintext `token_secret` via
+`--token-secret`, or referenced by `token_secret_env` via `--token-secret-env`.
+`config init` and `config set-profile` require at least one token source; a
+non-empty plaintext value takes precedence over the environment reference.
+Config files are saved with permissions `0600` on Unix, including existing files.
 
 ## Diagnostics
 
@@ -47,7 +50,7 @@ Checks include:
 - YAML parsing
 - selected profile
 - required profile fields
-- token-secret environment variable presence
+- plaintext token or token-secret environment variable presence
 - timeout and default output settings
 - endpoint shape and TLS mode
 - API connectivity

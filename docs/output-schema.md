@@ -139,6 +139,11 @@ Used by `guest`, `vm`, and `lxc` list/detail commands.
 
 Known `status` values are `ok`, `warn`, `fail`, and `skip`.
 
+When a plaintext `token_secret` is used, doctor adds a `TOKEN_SECRET` row with
+status `ok` and marks `TOKEN_SECRET_ENV` as `skip`. Environment-based profiles
+continue to use `TOKEN_SECRET_ENV`. Credential values are not included in
+diagnostic messages.
+
 ## CheckRow
 
 Used by `check`. `status` uses the same `ok`/`warn`/`fail`/`skip` vocabulary as
