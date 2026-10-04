@@ -31,6 +31,11 @@ are user-defined; documentation uses `PVE_*` examples.
 - `config use-profile NAME` switches the current profile.
 - `config current-profile` prints the active profile name.
 - `config view` prints the current config file, including plaintext tokens.
+  When the file is missing, it reports the missing file and offers interactive
+  initialization with hidden token input in a terminal. Declining or ending input
+  leaves the file uncreated; nonterminal input receives a setup hint without
+  waiting. These cases exit successfully. Setup messages go to stderr and never
+  overwrite an existing file.
 
 Config stores the Proxmox endpoint, token ID, TLS behavior, timeout, and default
 output format. Tokens can be stored directly as plaintext `token_secret` via

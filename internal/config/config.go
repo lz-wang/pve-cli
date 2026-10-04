@@ -98,6 +98,32 @@ func Save(path string, cfg *Config) error {
 	return nil
 }
 
+// SaveNew creates a config file without overwriting an existing file.
+func SaveNew(path string, cfg *Config) error {
+	resolved, err := ExpandPath(path)
+	if err != nil {
+		return err
+	}
+	data, err := ToYAML(cfg)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(resolved), 0o700); err != nil {
+		return fmt.Errorf("create config dir: %w", err)
+	}
+	file, err := os.OpenFile(resolved, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		return fmt.Errorf("create config %s: %w", resolved, err)
+	}
+	_, writeErr := file.Write(data)
+	closeErr := file.Close()
+	if writeErr != nil || closeErr != nil {
+		removeErr := os.Remove(resolved)
+		return fmt.Errorf("write config %s: %w", resolved, errors.Join(writeErr, closeErr, removeErr))
+	}
+	return nil
+}
+
 func ToYAML(cfg *Config) ([]byte, error) {
 	if cfg == nil {
 		cfg = Empty()

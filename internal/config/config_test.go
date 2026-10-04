@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -249,6 +250,39 @@ func TestPlaintextProfileSaveLoadAndReplace(t *testing.T) {
 	}
 	if strings.Contains(string(data), "token_secret:") || !strings.Contains(string(data), "token_secret_env:") {
 		t.Fatal("switching to an environment reference should remove the plaintext token")
+	}
+}
+
+func TestSaveNewDoesNotOverwrite(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "nested", "config.yaml")
+	cfg := Empty()
+	if err := cfg.InitProfile(InitOptions{Name: "home", Profile: testProfile(), Use: true}); err != nil {
+		t.Fatal(err)
+	}
+	if err := SaveNew(path, cfg); err != nil {
+		t.Fatalf("create config: %v", err)
+	}
+	original, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if runtime.GOOS != "windows" && info.Mode().Perm() != 0o600 {
+		t.Fatalf("config permissions = %o, want 600", info.Mode().Perm())
+	}
+	cfg.CurrentProfile = "different"
+	if err := SaveNew(path, cfg); !errors.Is(err, os.ErrExist) {
+		t.Fatalf("second creation error = %v, want file exists", err)
+	}
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != string(original) {
+		t.Fatal("existing config was changed by SaveNew")
 	}
 }
 

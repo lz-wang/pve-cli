@@ -115,7 +115,7 @@ func NewAppWithBuildInfoAndDependencies(info BuildInfo, deps Dependencies) *cli.
 		},
 		Commands: []*cli.Command{
 			newVersionCommand(info),
-			newConfigCommand(),
+			newConfigCommand(deps),
 			newDoctorCommand(deps),
 			newStatusCommand(deps),
 			newCheckCommand(deps),

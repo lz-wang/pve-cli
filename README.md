@@ -31,6 +31,9 @@ sudo make install
 
 ## Configure
 
+Run `pve config view` before a config file exists to start guided setup in a
+terminal. It prompts for the connection and token settings and creates the file.
+
 For a typical HomeLab setup, one default profile is enough. Create an API token
 in Proxmox VE, initialize the profile with its token secret, then run a
 diagnostic check:

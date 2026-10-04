@@ -9,6 +9,9 @@
   takes precedence over `token_secret_env`; at least one token source is required.
 - Add doctor diagnostics for plaintext tokens without printing their values,
   and redact token values from backend error messages.
+- Guide interactive initialization from `pve config view` when its config file
+  is missing, with hidden token input, optional environment references, clean
+  cancellation, nonterminal setup hints, and no overwrite of existing files.
 
 ### Changed
 

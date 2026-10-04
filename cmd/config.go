@@ -1,7 +1,9 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/urfave/cli/v2"
@@ -10,7 +12,7 @@ import (
 	"github.com/lz-wang/pvectl/internal/output"
 )
 
-func newConfigCommand() *cli.Command {
+func newConfigCommand(deps Dependencies) *cli.Command {
 	return &cli.Command{
 		Name:  "config",
 		Usage: "Manage pve config",
@@ -145,12 +147,15 @@ func newConfigCommand() *cli.Command {
 			},
 			{
 				Name:  "view",
-				Usage: "Print the config file",
+				Usage: "Print the config file, or guide initialization when it is missing",
 				Action: func(c *cli.Context) error {
 					if err := requireNoExtraArgs(c, 0); err != nil {
 						return err
 					}
 					cfg, err := config.Load(c.String("config"))
+					if errors.Is(err, os.ErrNotExist) {
+						return guideConfigInit(c, deps)
+					}
 					if err != nil {
 						return fmt.Errorf("config error: %w", err)
 					}

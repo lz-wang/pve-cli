@@ -10,6 +10,22 @@ to select another file. After the rename from `pvectl`, move an existing
 config file to the new path or select it explicitly; the old directory is
 not searched or migrated automatically.
 
+If the file is missing, `pve config view` reports that it does not exist and
+offers guided initialization in a terminal. The prompts collect a profile name
+(default `home`), PVE API endpoint, token ID, a plaintext token or environment
+variable reference, and whether to skip TLS verification (default no).
+Plaintext token input is hidden in the terminal. Initialization uses timeout
+`30s` and default output `table`, with `--profile`, `--timeout`, `--output`, and
+`--insecure` providing defaults when supplied.
+
+Declining setup or ending input leaves the file uncreated and exits successfully.
+With nonterminal stdin, the command displays a `pve config init` hint and exits
+successfully without waiting for input. Missing-file notices, prompts, and setup
+results go to stderr; stdout stays empty during setup. After creation, run
+`pve config view` again to print the stored YAML. Setup never overwrites a file
+that appeared while entering the values. Invalid YAML and file-access failures
+still produce errors.
+
 For a typical HomeLab setup, initialize one default profile and run a
 diagnostic check:
 
