@@ -9,6 +9,30 @@ import (
 	"github.com/lz-wang/pvectl/internal/output"
 )
 
+func TestNodeServiceGet(t *testing.T) {
+	backend := &fakeBackend{
+		nodeDetails: map[string]output.NodeDetail{
+			"pve1": {Name: "pve1", Status: "online", PVEVersion: "8.4.1", CPUCores: 12},
+		},
+	}
+	svc := NewNodeService(backend)
+
+	row, err := svc.Get(context.Background(), "pve1")
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if row.Name != "pve1" || row.PVEVersion != "8.4.1" {
+		t.Fatalf("row = %#v", row)
+	}
+
+	if _, err := svc.Get(context.Background(), " "); err == nil {
+		t.Fatal("expected empty node error")
+	}
+	if _, err := svc.Get(context.Background(), "missing"); err == nil {
+		t.Fatal("expected not found error")
+	}
+}
+
 func TestGuestServiceResolveExplicitNode(t *testing.T) {
 	backend := &fakeBackend{
 		nodes: []output.NodeRow{{Name: "pve1"}, {Name: "pve2"}},
@@ -380,6 +404,7 @@ func TestGuestServiceSnapshotTaskFailure(t *testing.T) {
 
 type fakeBackend struct {
 	nodes          []output.NodeRow
+	nodeDetails    map[string]output.NodeDetail
 	vms            map[string]map[int]*fakeGuest
 	lxcs           map[string]map[int]*fakeGuest
 	vmRows         map[string][]output.GuestRow
@@ -414,6 +439,13 @@ type fakeBackend struct {
 func (b *fakeBackend) Nodes(context.Context) ([]output.NodeRow, error) {
 	b.nodeCalls++
 	return b.nodes, nil
+}
+
+func (b *fakeBackend) Node(_ context.Context, name string) (output.NodeDetail, error) {
+	if detail, ok := b.nodeDetails[name]; ok {
+		return detail, nil
+	}
+	return output.NodeDetail{}, ErrNotFound
 }
 
 func (b *fakeBackend) VMs(_ context.Context, node string) ([]output.GuestRow, error) {

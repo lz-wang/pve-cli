@@ -860,6 +860,7 @@ func TestConfigSetProfileCommandDoesNotRequireSecretEnv(t *testing.T) {
 
 type commandBackend struct {
 	nodes          []output.NodeRow
+	nodeDetails    map[string]output.NodeDetail
 	vms            map[string][]output.GuestRow
 	lxcs           map[string][]output.GuestRow
 	vmGuests       map[string]map[int]*commandGuest
@@ -884,6 +885,13 @@ type commandBackend struct {
 
 func (b *commandBackend) Nodes(context.Context) ([]output.NodeRow, error) {
 	return b.nodes, nil
+}
+
+func (b *commandBackend) Node(_ context.Context, name string) (output.NodeDetail, error) {
+	if detail, ok := b.nodeDetails[name]; ok {
+		return detail, nil
+	}
+	return output.NodeDetail{}, pve.ErrNotFound
 }
 
 func (b *commandBackend) VMs(_ context.Context, node string) ([]output.GuestRow, error) {

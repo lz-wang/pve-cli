@@ -2,16 +2,20 @@ package pve
 
 import (
 	"context"
+	"fmt"
+	"strings"
 
 	proxmox "github.com/luthermonson/go-proxmox"
 
 	"github.com/lz-wang/pvectl/internal/output"
 )
 
-// NodeBackend lists cluster nodes. It is embedded by the other capability
-// interfaces because per-node queries need node discovery.
+// NodeBackend lists cluster nodes and returns node detail. It is embedded by
+// the other capability interfaces because per-node queries need node
+// discovery.
 type NodeBackend interface {
 	Nodes(ctx context.Context) ([]output.NodeRow, error)
+	Node(ctx context.Context, name string) (output.NodeDetail, error)
 }
 
 // GuestBackend covers VM/QEMU and LXC guest queries plus node discovery.
@@ -65,6 +69,21 @@ func (b *ProxmoxBackend) Nodes(ctx context.Context) ([]output.NodeRow, error) {
 		rows = append(rows, nodeRow(node))
 	}
 	return rows, nil
+}
+
+func (b *ProxmoxBackend) Node(ctx context.Context, nodeName string) (output.NodeDetail, error) {
+	nodeName = strings.TrimSpace(nodeName)
+	if nodeName == "" {
+		return output.NodeDetail{}, fmt.Errorf("node is required")
+	}
+	node, err := b.client.Node(ctx, nodeName)
+	if err != nil {
+		return output.NodeDetail{}, err
+	}
+	if err := node.Status(ctx); err != nil {
+		return output.NodeDetail{}, err
+	}
+	return nodeDetail(node), nil
 }
 
 func (b *ProxmoxBackend) VMs(ctx context.Context, nodeName string) ([]output.GuestRow, error) {

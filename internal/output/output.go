@@ -38,6 +38,23 @@ type NodeRow struct {
 	Uptime  uint64  `json:"uptime" yaml:"uptime"`
 }
 
+type NodeDetail struct {
+	Name          string  `json:"name" yaml:"name"`
+	Status        string  `json:"status" yaml:"status"`
+	CPU           float64 `json:"cpu" yaml:"cpu"`
+	Mem           uint64  `json:"mem" yaml:"mem"`
+	MaxMem        uint64  `json:"max_mem" yaml:"max_mem"`
+	Disk          uint64  `json:"disk" yaml:"disk"`
+	MaxDisk       uint64  `json:"max_disk" yaml:"max_disk"`
+	Uptime        uint64  `json:"uptime" yaml:"uptime"`
+	PVEVersion    string  `json:"pve_version" yaml:"pve_version"`
+	KernelVersion string  `json:"kernel_version" yaml:"kernel_version"`
+	LoadAverage   string  `json:"load_average" yaml:"load_average"`
+	CPUModel      string  `json:"cpu_model" yaml:"cpu_model"`
+	CPUCores      int     `json:"cpu_cores" yaml:"cpu_cores"`
+	CPUSockets    int     `json:"cpu_sockets" yaml:"cpu_sockets"`
+}
+
 type GuestRow struct {
 	Kind    string  `json:"kind" yaml:"kind"`
 	VMID    uint64  `json:"vmid" yaml:"vmid"`
@@ -284,6 +301,34 @@ func WriteNodeRows(w io.Writer, format string, rows []NodeRow) error {
 				FormatBytes(row.MaxDisk),
 				FormatUptime(row.Uptime),
 			); err != nil {
+				return err
+			}
+		}
+		return tw.Flush()
+	})
+}
+
+func WriteNodeDetail(w io.Writer, format string, row NodeDetail) error {
+	return Write(w, format, row, func(w io.Writer) error {
+		tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+		lines := [][2]string{
+			{"Name", row.Name},
+			{"Status", empty(row.Status)},
+			{"CPU", fmt.Sprintf("%.2f", row.CPU)},
+			{"Memory", FormatBytes(row.Mem)},
+			{"Max Memory", FormatBytes(row.MaxMem)},
+			{"Disk", FormatBytes(row.Disk)},
+			{"Max Disk", FormatBytes(row.MaxDisk)},
+			{"Uptime", FormatUptime(row.Uptime)},
+			{"PVE Version", empty(row.PVEVersion)},
+			{"Kernel Version", empty(row.KernelVersion)},
+			{"Load Average", empty(row.LoadAverage)},
+			{"CPU Model", empty(row.CPUModel)},
+			{"CPU Cores", fmt.Sprint(row.CPUCores)},
+			{"CPU Sockets", fmt.Sprint(row.CPUSockets)},
+		}
+		for _, line := range lines {
+			if _, err := fmt.Fprintf(tw, "%s:\t%s\n", line[0], line[1]); err != nil {
 				return err
 			}
 		}

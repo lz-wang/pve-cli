@@ -1,10 +1,36 @@
 package pve
 
 import (
+	"strings"
+
 	proxmox "github.com/luthermonson/go-proxmox"
 
 	"github.com/lz-wang/pvectl/internal/output"
 )
+
+// nodeDetail maps /nodes/{node}/status onto the stable NodeDetail contract.
+// A node that answers the status endpoint is online by definition.
+func nodeDetail(node *proxmox.Node) output.NodeDetail {
+	if node == nil {
+		return output.NodeDetail{}
+	}
+	return output.NodeDetail{
+		Name:          node.Name,
+		Status:        "online",
+		CPU:           node.CPU,
+		Mem:           node.Memory.Used,
+		MaxMem:        node.Memory.Total,
+		Disk:          node.RootFS.Used,
+		MaxDisk:       node.RootFS.Total,
+		Uptime:        node.Uptime,
+		PVEVersion:    node.PVEVersion,
+		KernelVersion: node.Kversion,
+		LoadAverage:   strings.Join(node.LoadAvg, " "),
+		CPUModel:      node.CPUInfo.Model,
+		CPUCores:      node.CPUInfo.Cores,
+		CPUSockets:    node.CPUInfo.Sockets,
+	}
+}
 
 func nodeRow(node *proxmox.NodeStatus) output.NodeRow {
 	if node == nil {

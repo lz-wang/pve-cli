@@ -278,6 +278,10 @@ func (b doctorBackend) Nodes(context.Context) ([]output.NodeRow, error) {
 	return b.nodes, b.nodesErr
 }
 
+func (b doctorBackend) Node(context.Context, string) (output.NodeDetail, error) {
+	return output.NodeDetail{}, ErrNotFound
+}
+
 func (b doctorBackend) VMs(context.Context, string) ([]output.GuestRow, error) {
 	return nil, nil
 }

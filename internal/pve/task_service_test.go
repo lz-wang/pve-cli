@@ -237,6 +237,10 @@ func (b *fakeTaskBackend) Nodes(context.Context) ([]output.NodeRow, error) {
 	return b.nodes, nil
 }
 
+func (b *fakeTaskBackend) Node(context.Context, string) (output.NodeDetail, error) {
+	return output.NodeDetail{}, ErrNotFound
+}
+
 func (b *fakeTaskBackend) Tasks(_ context.Context, node string, _ TaskListBackendOptions) ([]output.TaskRow, error) {
 	if err := b.taskErrs[node]; err != nil {
 		return nil, err

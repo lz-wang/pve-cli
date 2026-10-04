@@ -12,6 +12,33 @@ import (
 
 const testUPID = "UPID:pve1:0001:0000:6839F4A1:vzdump:100:root@pam"
 
+func TestNodeGetCommandWritesDetail(t *testing.T) {
+	cfgPath := writeTestConfig(t, "json")
+	backend := &commandBackend{
+		nodeDetails: map[string]output.NodeDetail{
+			"pve1": {
+				Name: "pve1", Status: "online", CPU: 0.12, Mem: 100, MaxMem: 200,
+				PVEVersion: "8.4.1", KernelVersion: "6.8.12-4-pve", CPUModel: "M4", CPUCores: 12, CPUSockets: 1,
+			},
+		},
+	}
+	var stdout bytes.Buffer
+
+	err := RunWithDependencies([]string{
+		"pvectl", "--config", cfgPath,
+		"node", "get", "pve1",
+	}, "test", testDeps(&stdout, backend))
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	out := stdout.String()
+	for _, want := range []string{`"pve_version": "8.4.1"`, `"kernel_version": "6.8.12-4-pve"`, `"cpu_cores": 12`} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("stdout missing %s: %s", want, out)
+		}
+	}
+}
+
 func TestStatusCommandWritesReport(t *testing.T) {
 	cfgPath := writeTestConfig(t, "json")
 	backend := &commandBackend{

@@ -21,6 +21,15 @@ func (s *NodeService) List(ctx context.Context) ([]output.NodeRow, error) {
 	return s.backend.Nodes(ctx)
 }
 
+// Get returns detailed status for a single node.
+func (s *NodeService) Get(ctx context.Context, name string) (output.NodeDetail, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return output.NodeDetail{}, fmt.Errorf("node is required")
+	}
+	return s.backend.Node(ctx, name)
+}
+
 type GuestService struct {
 	kind    string
 	backend GuestBackend

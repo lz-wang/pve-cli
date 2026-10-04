@@ -45,6 +45,31 @@ func TestStructuredOutputContracts(t *testing.T) {
 			},
 		},
 		{
+			name: "NodeDetail",
+			value: NodeDetail{
+				Name: "pve1", Status: "online", CPU: 0.12, Mem: 1024, MaxMem: 2048,
+				Disk: 4096, MaxDisk: 8192, Uptime: 60,
+				PVEVersion: "8.4.1", KernelVersion: "6.8.12-4-pve", LoadAverage: "0.5, 0.4, 0.3",
+				CPUModel: "Apple M4", CPUCores: 12, CPUSockets: 1,
+			},
+			fields: []contractField{
+				{"name", stringType},
+				{"status", stringType},
+				{"cpu", float64Type},
+				{"mem", uint64Type},
+				{"max_mem", uint64Type},
+				{"disk", uint64Type},
+				{"max_disk", uint64Type},
+				{"uptime", uint64Type},
+				{"pve_version", stringType},
+				{"kernel_version", stringType},
+				{"load_average", stringType},
+				{"cpu_model", stringType},
+				{"cpu_cores", intType},
+				{"cpu_sockets", intType},
+			},
+		},
+		{
 			name: "GuestRow",
 			value: GuestRow{
 				Kind: "vm", VMID: 100, Name: "debian", Node: "pve1", Status: "running",
