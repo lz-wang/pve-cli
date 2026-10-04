@@ -8,6 +8,8 @@ import (
 	"strings"
 
 	"github.com/urfave/cli/v2"
+
+	"github.com/lz-wang/pvectl/internal/output"
 )
 
 func parseVMID(value string) (int, error) {
@@ -105,6 +107,31 @@ func confirmSnapshotDelete(in io.Reader, out io.Writer, kind string, vmid uint64
 	}
 	if strings.TrimSpace(scanner.Text()) != snapshot {
 		return fmt.Errorf("snapshot delete aborted")
+	}
+	return nil
+}
+
+func confirmBulkAction(in io.Reader, out io.Writer, action string, rows []output.GuestRow) error {
+	if in == nil {
+		return fmt.Errorf("bulk %s aborted", action)
+	}
+	if out != nil {
+		fmt.Fprintf(out, "About to %s %d guests:\n", action, len(rows))
+		for _, row := range rows {
+			name := row.Name
+			if name == "" {
+				name = "-"
+			}
+			fmt.Fprintf(out, "  %s %d %s\n", row.Kind, row.VMID, name)
+		}
+		fmt.Fprintln(out, `Type "yes" to continue: `)
+	}
+	scanner := bufio.NewScanner(in)
+	if !scanner.Scan() {
+		return fmt.Errorf("bulk %s aborted", action)
+	}
+	if strings.TrimSpace(scanner.Text()) != "yes" {
+		return fmt.Errorf("bulk %s aborted", action)
 	}
 	return nil
 }

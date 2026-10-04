@@ -3,8 +3,11 @@ package pve
 import (
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/lz-wang/pvectl/internal/output"
 )
@@ -92,5 +95,122 @@ func ParseBulkAction(value string) (string, error) {
 		return BulkActionStop, nil
 	default:
 		return "", fmt.Errorf("invalid bulk action %q, expected start, shutdown, reboot, or stop", value)
+	}
+}
+
+// BulkExecuteOptions controls concurrent execution of a lifecycle action
+// over an already-selected guest list.
+type BulkExecuteOptions struct {
+	Action    string
+	Jobs      int
+	Wait      bool
+	WaitTimeout time.Duration
+	ErrWriter io.Writer
+}
+
+// bulkGuestOutcome records what happened to one guest. Failures are kept per
+// guest so one bad guest never aborts the whole run.
+type bulkGuestOutcome struct {
+	row      output.GuestRow
+	taskUpid string
+	err      error
+}
+
+// ExecuteRows runs the action over every selected guest with bounded
+// concurrency. It never stops on the first failure; the aggregated error is
+// returned only after every guest has been attempted.
+func (s *BulkService) ExecuteRows(ctx context.Context, action string, rows []output.GuestRow, options BulkExecuteOptions) error {
+	action, err := ParseBulkAction(action)
+	if err != nil {
+		return err
+	}
+	if len(rows) == 0 {
+		return fmt.Errorf("no guests match the selection")
+	}
+
+	jobs := options.Jobs
+	if jobs <= 0 {
+		jobs = 2
+	}
+
+	outcomes := make([]bulkGuestOutcome, len(rows))
+	sem := make(chan struct{}, jobs)
+	var wg sync.WaitGroup
+	for i, row := range rows {
+		wg.Add(1)
+		go func(i int, row output.GuestRow) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			outcomes[i] = s.executeOne(ctx, action, row, options)
+		}(i, row)
+	}
+	wg.Wait()
+
+	failed := 0
+	for _, outcome := range outcomes {
+		if outcome.err != nil {
+			failed++
+			s.progress(options.ErrWriter, "%s %d %s: error: %v\n", outcome.row.Kind, outcome.row.VMID, outcome.row.Name, outcome.err)
+			continue
+		}
+		s.progress(options.ErrWriter, "%s %d %s: ok\n", outcome.row.Kind, outcome.row.VMID, outcome.row.Name)
+	}
+	if failed > 0 {
+		return fmt.Errorf("bulk %s completed with %d failure(s) out of %d guest(s)", action, failed, len(rows))
+	}
+	return nil
+}
+
+func (s *BulkService) executeOne(ctx context.Context, action string, row output.GuestRow, options BulkExecuteOptions) bulkGuestOutcome {
+	vmid := int(row.VMID)
+	guest, err := s.getOnNode(ctx, row.Kind, row.Node, vmid)
+	if err != nil {
+		return bulkGuestOutcome{row: row, err: err}
+	}
+
+	var task Task
+	switch action {
+	case BulkActionStart:
+		task, err = guest.Start(ctx)
+	case BulkActionShutdown:
+		task, err = guest.Shutdown(ctx)
+	case BulkActionReboot:
+		task, err = guest.Reboot(ctx)
+	case BulkActionStop:
+		task, err = guest.Stop(ctx)
+	}
+	if err != nil {
+		return bulkGuestOutcome{row: row, err: err}
+	}
+
+	runner := TaskRunner{
+		Wait:        options.Wait,
+		WaitTimeout: options.WaitTimeout,
+		ErrWriter:   options.ErrWriter,
+	}
+	if err := runner.Handle(ctx, task); err != nil {
+		return bulkGuestOutcome{row: row, taskUpid: taskUPID(task), err: err}
+	}
+	return bulkGuestOutcome{row: row, taskUpid: taskUPID(task)}
+}
+
+func (s *BulkService) getOnNode(ctx context.Context, kind, node string, vmid int) (Guest, error) {
+	if kind == "vm" {
+		return s.backend.VM(ctx, node, vmid)
+	}
+	return s.backend.LXC(ctx, node, vmid)
+}
+
+func taskUPID(task Task) string {
+	if task == nil {
+		return ""
+	}
+	return task.UPID()
+}
+
+func (s *BulkService) progress(w io.Writer, format string, args ...any) {
+	if w != nil {
+		fmt.Fprintf(w, format, args...)
 	}
 }

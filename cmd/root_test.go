@@ -1002,6 +1002,9 @@ type commandGuest struct {
 	configValues     map[string]string
 	deleted          bool
 	rebooted         bool
+	startedCalled    bool
+	shutdownCalled  bool
+	stopCalled      bool
 	migrateOptions   pve.MigrateOptions
 	resizeDisk       string
 	resizeSize       string
@@ -1016,14 +1019,17 @@ func (g *commandGuest) Row() output.GuestRow {
 }
 
 func (g *commandGuest) Start(context.Context) (pve.Task, error) {
+	g.startedCalled = true
 	return g.task, nil
 }
 
 func (g *commandGuest) Shutdown(context.Context) (pve.Task, error) {
+	g.shutdownCalled = true
 	return g.task, nil
 }
 
 func (g *commandGuest) Stop(context.Context) (pve.Task, error) {
+	g.stopCalled = true
 	return g.task, nil
 }
 

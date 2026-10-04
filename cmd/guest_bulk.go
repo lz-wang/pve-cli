@@ -23,13 +23,20 @@ func guestBulkCommand(action, usage string, deps Dependencies) *cli.Command {
 				&cli.StringFlag{Name: "status", Usage: "guest status filter, for example running or stopped"},
 				&cli.StringSliceFlag{Name: "tag", Usage: "filter guests by tag, repeatable"},
 				&cli.StringFlag{Name: "tag-match", Value: pve.TagMatchAll, Usage: "tag match mode: all,any"},
+				&cli.IntFlag{Name: "jobs", Value: 2, Usage: "number of guests to operate on concurrently"},
 				&cli.BoolFlag{Name: "dry-run", Usage: "show the guests that would be affected and exit"},
+				&cli.BoolFlag{Name: "force", Usage: "skip local bulk confirmation"},
+				&cli.BoolFlag{Name: "wait", Usage: "wait for async task completion"},
+				&cli.DurationFlag{Name: "wait-timeout", Usage: "task wait timeout"},
 			},
 			commonOutputFlags()...,
 		),
 		Action: func(c *cli.Context) error {
 			if err := requireNoExtraArgs(c, 0); err != nil {
 				return err
+			}
+			if jobs := c.Int("jobs"); jobs < 0 {
+				return fmt.Errorf("invalid jobs %d", jobs)
 			}
 			guestType, err := pve.ParseGuestListType(c.String("type"))
 			if err != nil {
@@ -60,7 +67,21 @@ func guestBulkCommand(action, usage string, deps Dependencies) *cli.Command {
 			if c.Bool("dry-run") {
 				return output.WriteBulkPlan(rt.stdout, rt.format, rows)
 			}
-			return fmt.Errorf("bulk %s execution requires --dry-run to preview first; refusing to run", action)
+			if len(rows) == 0 {
+				return fmt.Errorf("no guests match the selection")
+			}
+			if len(rows) > 1 && !c.Bool("force") {
+				if err := confirmBulkAction(deps.withDefaults().Stdin, rt.stderr, action, rows); err != nil {
+					return err
+				}
+			}
+			return svc.ExecuteRows(c.Context, action, rows, pve.BulkExecuteOptions{
+				Action:      action,
+				Jobs:        c.Int("jobs"),
+				Wait:        boolFlag(c, "wait"),
+				WaitTimeout: durationFlag(c, "wait-timeout"),
+				ErrWriter:   rt.stderr,
+			})
 		},
 	}
 }
