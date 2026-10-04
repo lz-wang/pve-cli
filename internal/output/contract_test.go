@@ -322,6 +322,27 @@ func TestStructuredOutputContracts(t *testing.T) {
 			},
 		},
 		{
+			name: "CloudInitConfig",
+			value: CloudInitConfig{
+				VMID: 100, Node: "pve1", User: "debian", PasswordConfigured: true,
+				SSHKeys: "ssh-ed25519 AAAA test", IPConfigs: []CloudInitIPConfig{{Device: "ipconfig0", Config: "ip=dhcp"}},
+				Nameserver: "192.168.2.67", SearchDomain: "lan", Type: "nocloud",
+				Custom: []CloudInitCustom{{Device: "user", Volume: "local:snippets/user.yaml"}},
+			},
+			fields: []contractField{
+				{"vmid", uint64Type},
+				{"node", stringType},
+				{"user", stringType},
+				{"password_configured", boolType},
+				{"ssh_keys", stringType},
+				{"ip_configs", reflect.TypeOf([]CloudInitIPConfig{})},
+				{"nameserver", stringType},
+				{"searchdomain", stringType},
+				{"type", stringType},
+				{"custom", reflect.TypeOf([]CloudInitCustom{})},
+			},
+		},
+		{
 			name: "TaskRow",
 			value: TaskRow{
 				UPID: "UPID:pve1:0001:0000:vzdump:100:root@pam:", Node: "pve1", Type: "vzdump",

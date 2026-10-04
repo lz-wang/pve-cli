@@ -431,6 +431,7 @@ type fakeBackend struct {
 	agentNetwork     []output.AgentNetworkRow
 	agentExecOptions AgentExecOptions
 	agentExecResult  output.AgentExecResult
+	cloudInitConfigs map[int]output.CloudInitConfig
 	vmCalls          int
 	lxcCalls         int
 	nodeCalls        int
@@ -591,6 +592,13 @@ func (b *fakeBackend) AgentExec(_ context.Context, node string, vmid int, option
 		return output.AgentExecResult{}, err
 	}
 	return b.agentExecResult, nil
+}
+
+func (b *fakeBackend) VirtualMachineCloudInit(_ context.Context, node string, vmid int) (output.CloudInitConfig, error) {
+	if detail, ok := b.cloudInitConfigs[vmid]; ok {
+		return detail, nil
+	}
+	return output.CloudInitConfig{}, ErrNotFound
 }
 
 type fakeGuest struct {

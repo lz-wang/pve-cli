@@ -349,3 +349,7 @@ func (b doctorBackend) AgentNetwork(context.Context, string, int) ([]output.Agen
 func (b doctorBackend) AgentExec(context.Context, string, int, AgentExecOptions) (output.AgentExecResult, error) {
 	return output.AgentExecResult{}, ErrNotFound
 }
+
+func (b doctorBackend) VirtualMachineCloudInit(context.Context, string, int) (output.CloudInitConfig, error) {
+	return output.CloudInitConfig{}, ErrNotFound
+}

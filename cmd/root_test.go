@@ -879,6 +879,7 @@ type commandBackend struct {
 	agentNetwork     []output.AgentNetworkRow
 	agentExecOptions pve.AgentExecOptions
 	agentExecResult  output.AgentExecResult
+	cloudInitConfigs map[int]output.CloudInitConfig
 	backupTask       pve.Task
 	backupNode       string
 	backupOptions    pve.BackupOptions
@@ -1023,6 +1024,13 @@ func (b *commandBackend) AgentExec(_ context.Context, node string, vmid int, opt
 		return output.AgentExecResult{}, b.agentErr
 	}
 	return b.agentExecResult, nil
+}
+
+func (b *commandBackend) VirtualMachineCloudInit(_ context.Context, node string, vmid int) (output.CloudInitConfig, error) {
+	if detail, ok := b.cloudInitConfigs[vmid]; ok {
+		return detail, nil
+	}
+	return output.CloudInitConfig{}, pve.ErrNotFound
 }
 
 type commandGuest struct {

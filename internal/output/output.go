@@ -190,6 +190,31 @@ type AgentExecResult struct {
 	Truncated bool   `json:"truncated,omitempty" yaml:"truncated,omitempty"`
 }
 
+type CloudInitIPConfig struct {
+	Device string `json:"device" yaml:"device"`
+	Config string `json:"config" yaml:"config"`
+}
+
+type CloudInitCustom struct {
+	Device string `json:"device" yaml:"device"`
+	Volume string `json:"volume" yaml:"volume"`
+}
+
+// CloudInitConfig is the normalized PVE-native cloud-init view of a VM. The
+// cipassword value is never echoed; only password_configured is reported.
+type CloudInitConfig struct {
+	VMID               uint64              `json:"vmid" yaml:"vmid"`
+	Node               string              `json:"node" yaml:"node"`
+	User               string              `json:"user,omitempty" yaml:"user,omitempty"`
+	PasswordConfigured bool                `json:"password_configured" yaml:"password_configured"`
+	SSHKeys            string              `json:"ssh_keys,omitempty" yaml:"ssh_keys,omitempty"`
+	IPConfigs          []CloudInitIPConfig `json:"ip_configs,omitempty" yaml:"ip_configs,omitempty"`
+	Nameserver         string              `json:"nameserver,omitempty" yaml:"nameserver,omitempty"`
+	SearchDomain       string              `json:"searchdomain,omitempty" yaml:"searchdomain,omitempty"`
+	Type               string              `json:"type,omitempty" yaml:"type,omitempty"`
+	Custom             []CloudInitCustom   `json:"custom,omitempty" yaml:"custom,omitempty"`
+}
+
 type StorageRow struct {
 	Node         string  `json:"node" yaml:"node"`
 	Storage      string  `json:"storage" yaml:"storage"`
@@ -384,6 +409,38 @@ func WriteAgentExecResult(w io.Writer, format string, result AgentExecResult) er
 		}
 		for _, line := range lines {
 			if _, err := fmt.Fprintf(tw, "%s:\t%s\n", line[0], line[1]); err != nil {
+				return err
+			}
+		}
+		return tw.Flush()
+	})
+}
+
+func WriteCloudInitConfig(w io.Writer, format string, row CloudInitConfig) error {
+	return Write(w, format, row, func(w io.Writer) error {
+		tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+		lines := [][2]string{
+			{"VMID", fmt.Sprint(row.VMID)},
+			{"Node", row.Node},
+			{"User", empty(row.User)},
+			{"PasswordConfigured", formatBool(row.PasswordConfigured)},
+			{"SSHKeys", empty(row.SSHKeys)},
+			{"Nameserver", empty(row.Nameserver)},
+			{"SearchDomain", empty(row.SearchDomain)},
+			{"Type", empty(row.Type)},
+		}
+		for _, line := range lines {
+			if _, err := fmt.Fprintf(tw, "%s:\t%s\n", line[0], line[1]); err != nil {
+				return err
+			}
+		}
+		for _, ipConfig := range row.IPConfigs {
+			if _, err := fmt.Fprintf(tw, "%s:\t%s\n", ipConfig.Device, ipConfig.Config); err != nil {
+				return err
+			}
+		}
+		for _, custom := range row.Custom {
+			if _, err := fmt.Fprintf(tw, "cicustom:%s\t%s\n", custom.Device, custom.Volume); err != nil {
 				return err
 			}
 		}
