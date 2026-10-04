@@ -313,3 +313,19 @@ func (b doctorBackend) Storage(context.Context, string, string) (output.StorageR
 func (b doctorBackend) StorageContents(context.Context, string, string) ([]output.StorageContentRow, error) {
 	return nil, nil
 }
+
+func (b doctorBackend) Tasks(context.Context, string, TaskListBackendOptions) ([]output.TaskRow, error) {
+	return nil, nil
+}
+
+func (b doctorBackend) Task(context.Context, string, string) (output.TaskRow, error) {
+	return output.TaskRow{}, ErrNotFound
+}
+
+func (b doctorBackend) TaskLog(context.Context, string, string, TaskLogPage) ([]output.TaskLogRow, error) {
+	return nil, nil
+}
+
+func (b doctorBackend) TaskHandle(string) (Task, error) {
+	return nil, ErrNotFound
+}

@@ -762,6 +762,11 @@ type commandBackend struct {
 	storages       map[string][]output.StorageRow
 	storageByName  map[string]map[string]output.StorageRow
 	storageContent map[string]map[string][]output.StorageContentRow
+	taskRows       map[string][]output.TaskRow
+	taskErrs       map[string]error
+	taskByName     map[string]output.TaskRow
+	taskLog        map[string][]output.TaskLogRow
+	taskHandles    map[string]pve.Task
 	backupTask     pve.Task
 	backupNode     string
 	backupOptions  pve.BackupOptions
@@ -831,6 +836,42 @@ func (b *commandBackend) StorageContents(_ context.Context, node, storage string
 		return nil, nil
 	}
 	return b.storageContent[node][storage], nil
+}
+
+func (b *commandBackend) Tasks(_ context.Context, node string, _ pve.TaskListBackendOptions) ([]output.TaskRow, error) {
+	if err := b.taskErrs[node]; err != nil {
+		return nil, err
+	}
+	return b.taskRows[node], nil
+}
+
+func (b *commandBackend) Task(_ context.Context, node, upid string) (output.TaskRow, error) {
+	if row, ok := b.taskByName[upid]; ok {
+		return row, nil
+	}
+	return output.TaskRow{}, pve.ErrNotFound
+}
+
+func (b *commandBackend) TaskLog(_ context.Context, node, upid string, page pve.TaskLogPage) ([]output.TaskLogRow, error) {
+	if rows, ok := b.taskLog[upid]; ok {
+		start := page.Start
+		if start > len(rows) {
+			start = len(rows)
+		}
+		end := start + page.Limit
+		if page.Limit <= 0 || end > len(rows) {
+			end = len(rows)
+		}
+		return rows[start:end], nil
+	}
+	return nil, nil
+}
+
+func (b *commandBackend) TaskHandle(upid string) (pve.Task, error) {
+	if task, ok := b.taskHandles[upid]; ok {
+		return task, nil
+	}
+	return nil, pve.ErrNotFound
 }
 
 type commandGuest struct {

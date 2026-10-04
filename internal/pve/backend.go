@@ -46,6 +46,7 @@ type Backend interface {
 	GuestBackend
 	BackupBackend
 	StorageBackend
+	TaskBackend
 }
 
 type ProxmoxBackend struct {

@@ -1,0 +1,140 @@
+package cmd
+
+import (
+	"bytes"
+	"errors"
+	"strings"
+	"testing"
+
+	"github.com/lz-wang/pvectl/internal/output"
+	"github.com/lz-wang/pvectl/internal/pve"
+)
+
+const testUPID = "UPID:pve1:0001:0000:6839F4A1:vzdump:100:root@pam"
+
+func TestTaskListCommandWritesRows(t *testing.T) {
+	cfgPath := writeTestConfig(t, "json")
+	backend := &commandBackend{
+		nodes: []output.NodeRow{{Name: "pve1"}},
+		taskRows: map[string][]output.TaskRow{
+			"pve1": {
+				{UPID: testUPID, Node: "pve1", Type: "vzdump", Status: "ok", StartTime: 1710000000, EndTime: 1710000600},
+				{UPID: "UPID:pve1:0002:0000:6839F4A2:qmstart:101:root@pam", Node: "pve1", Type: "qmstart", Status: "running", StartTime: 1710000700},
+			},
+		},
+	}
+	var stdout bytes.Buffer
+
+	err := RunWithDependencies([]string{
+		"pvectl", "--config", cfgPath,
+		"task", "ls",
+		"--type", "vzdump",
+	}, "test", testDeps(&stdout, backend))
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if !strings.Contains(stdout.String(), `"upid": "UPID:pve1:0001`) {
+		t.Fatalf("stdout = %s", stdout.String())
+	}
+	if strings.Contains(stdout.String(), "qmstart") {
+		t.Fatalf("expected type filter to drop qmstart: %s", stdout.String())
+	}
+}
+
+func TestTaskListCommandPartialNodeFailure(t *testing.T) {
+	cfgPath := writeTestConfig(t, "json")
+	backend := &commandBackend{
+		nodes:    []output.NodeRow{{Name: "pve1"}, {Name: "pve2"}},
+		taskErrs: map[string]error{"pve1": errors.New("forbidden")},
+		taskRows: map[string][]output.TaskRow{
+			"pve2": {{UPID: "UPID:pve2:0002:0000:6839F4A2:qmstart:101:root@pam", Node: "pve2", Type: "qmstart", Status: "running"}},
+		},
+	}
+	var stdout bytes.Buffer
+
+	err := RunWithDependencies([]string{
+		"pvectl", "--config", cfgPath,
+		"task", "ls",
+	}, "test", testDeps(&stdout, backend))
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if !strings.Contains(stdout.String(), `"node": "pve2"`) {
+		t.Fatalf("stdout = %s", stdout.String())
+	}
+}
+
+func TestTaskGetCommandWritesDetail(t *testing.T) {
+	cfgPath := writeTestConfig(t, "json")
+	backend := &commandBackend{
+		nodes: []output.NodeRow{{Name: "pve1"}},
+		taskByName: map[string]output.TaskRow{
+			testUPID: {UPID: testUPID, Node: "pve1", Type: "vzdump", Status: "ok", ExitStatus: "OK"},
+		},
+	}
+	var stdout bytes.Buffer
+
+	err := RunWithDependencies([]string{
+		"pvectl", "--config", cfgPath,
+		"task", "get", testUPID,
+	}, "test", testDeps(&stdout, backend))
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if !strings.Contains(stdout.String(), `"exit_status": "OK"`) {
+		t.Fatalf("stdout = %s", stdout.String())
+	}
+}
+
+func TestTaskLogCommandWritesRowsWithTail(t *testing.T) {
+	cfgPath := writeTestConfig(t, "json")
+	backend := &commandBackend{
+		nodes: []output.NodeRow{{Name: "pve1"}},
+		taskLog: map[string][]output.TaskLogRow{
+			testUPID: {
+				{Line: 1, Text: "INFO: starting new backup job"},
+				{Line: 2, Text: "INFO: backup finished"},
+			},
+		},
+	}
+	var stdout bytes.Buffer
+
+	err := RunWithDependencies([]string{
+		"pvectl", "--config", cfgPath,
+		"task", "log", testUPID,
+		"--tail", "1",
+	}, "test", testDeps(&stdout, backend))
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	out := stdout.String()
+	if !strings.Contains(out, "backup finished") || strings.Contains(out, "starting new backup job") {
+		t.Fatalf("stdout = %s", out)
+	}
+}
+
+func TestTaskWaitCommandWritesFinalRow(t *testing.T) {
+	cfgPath := writeTestConfig(t, "json")
+	backend := &commandBackend{
+		nodes: []output.NodeRow{{Name: "pve1"}},
+		taskHandles: map[string]pve.Task{
+			testUPID: &commandTask{upid: testUPID},
+		},
+		taskByName: map[string]output.TaskRow{
+			testUPID: {UPID: testUPID, Node: "pve1", Type: "vzdump", Status: "ok", ExitStatus: "OK"},
+		},
+	}
+	var stdout bytes.Buffer
+
+	err := RunWithDependencies([]string{
+		"pvectl", "--config", cfgPath,
+		"task", "wait", testUPID,
+		"--wait-timeout", "1s",
+	}, "test", testDeps(&stdout, backend))
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if !strings.Contains(stdout.String(), `"status": "ok"`) {
+		t.Fatalf("stdout = %s", stdout.String())
+	}
+}
