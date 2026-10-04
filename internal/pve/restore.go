@@ -165,9 +165,10 @@ func (s *RestoreService) checkVMIDFreeOnNode(ctx context.Context, nodeName strin
 	return nil
 }
 
-// Restore triggers the restore task on the PVE side. VM restore reuses the
-// qemu create endpoint with an archive parameter; LXC restore posts to the
-// lxc create endpoint, which has no typed wrapper upstream yet.
+// Restore triggers the restore task on the PVE side. Both kinds reuse the
+// guest create endpoints through typed wrappers: VM restore passes archive
+// to the qemu create endpoint; LXC restore passes ostemplate plus
+// restore=true to the lxc create endpoint, matching `pct restore`.
 func (b *ProxmoxBackend) Restore(ctx context.Context, options RestoreOptions) (Task, error) {
 	nodeName := strings.TrimSpace(options.Node)
 	if nodeName == "" {
@@ -188,18 +189,17 @@ func (b *ProxmoxBackend) Restore(ctx context.Context, options RestoreOptions) (T
 	storage := strings.TrimSpace(options.Storage)
 
 	if options.Kind == BackupKindLXC {
-		data := map[string]interface{}{
-			"vmid":    options.VMID,
-			"archive": archive,
+		// The lxc create endpoint rejects archive; a backup archive is
+		// restored via ostemplate plus restore=true, like `pct restore`.
+		opts := []proxmox.ContainerOption{
+			{Name: "ostemplate", Value: archive},
+			{Name: "restore", Value: true},
 		}
 		if storage != "" {
-			data["storage"] = storage
+			opts = append(opts, proxmox.ContainerOption{Name: "storage", Value: storage})
 		}
-		var upid proxmox.UPID
-		if err := b.client.Post(ctx, fmt.Sprintf("/nodes/%s/lxc", nodeName), data, &upid); err != nil {
-			return nil, err
-		}
-		return wrapTask(proxmox.NewTask(upid, b.client)), nil
+		task, err := node.NewContainer(ctx, options.VMID, opts...)
+		return wrapTask(task), err
 	}
 
 	opts := []proxmox.VirtualMachineOption{
