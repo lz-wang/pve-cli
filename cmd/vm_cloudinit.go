@@ -17,6 +17,39 @@ func newVMCloudInitCommand(deps Dependencies) *cli.Command {
 		Subcommands: []*cli.Command{
 			vmCloudInitGetCommand(deps),
 			vmCloudInitSetCommand(deps),
+			vmCloudInitUpdateCommand(deps),
+		},
+	}
+}
+
+func vmCloudInitUpdateCommand(deps Dependencies) *cli.Command {
+	return &cli.Command{
+		Name:      "update",
+		Usage:     "Regenerate the cloud-init image so the next boot picks up pending changes",
+		ArgsUsage: "VMID",
+		Flags: append(
+			[]cli.Flag{
+				&cli.StringFlag{Name: "node", Usage: "PVE node name"},
+			},
+			commonOutputFlags()...,
+		),
+		Action: func(c *cli.Context) error {
+			if err := requireNoExtraArgs(c, 1); err != nil {
+				return err
+			}
+			vmid, err := parseVMID(c.Args().First())
+			if err != nil {
+				return err
+			}
+			rt, err := buildRuntime(c, deps)
+			if err != nil {
+				return err
+			}
+			if err := pve.NewCloudInitService(rt.backend, rt.tasks, rt.logger, rt.verbose).Regenerate(c.Context, vmid, c.String("node")); err != nil {
+				return err
+			}
+			fmt.Fprintln(rt.stdout, "cloud-init regenerated")
+			return nil
 		},
 	}
 }

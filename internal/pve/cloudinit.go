@@ -22,6 +22,7 @@ const maxCloudInitDevices = 32
 type CloudInitBackend interface {
 	GuestBackend
 	VirtualMachineCloudInit(ctx context.Context, node string, vmid int) (output.CloudInitConfig, error)
+	RegenerateVirtualMachineCloudInit(ctx context.Context, node string, vmid int) error
 }
 
 // VirtualMachineCloudInit returns the normalized cloud-init view of a VM
@@ -47,6 +48,27 @@ func (b *ProxmoxBackend) VirtualMachineCloudInit(ctx context.Context, nodeName s
 		return output.CloudInitConfig{}, err
 	}
 	return cloudInitConfig(vm), nil
+}
+
+// RegenerateVirtualMachineCloudInit rewrites the cloud-init image so the next
+// guest boot picks up pending changes. The PVE endpoint is synchronous.
+func (b *ProxmoxBackend) RegenerateVirtualMachineCloudInit(ctx context.Context, nodeName string, vmid int) error {
+	nodeName = strings.TrimSpace(nodeName)
+	if nodeName == "" {
+		return fmt.Errorf("node is required")
+	}
+	if vmid <= 0 {
+		return fmt.Errorf("invalid vmid %d", vmid)
+	}
+	node, err := b.client.Node(ctx, nodeName)
+	if err != nil {
+		return err
+	}
+	vm, err := node.VirtualMachine(ctx, vmid)
+	if err != nil {
+		return err
+	}
+	return vm.CloudInitRegenerate(ctx)
 }
 
 // cloudInitConfig maps the upstream config onto the stable output contract.
@@ -125,6 +147,15 @@ func (s *CloudInitService) Set(ctx context.Context, vmid int, node string, optio
 		return err
 	}
 	return NewVMService(s.backend, s.tasks, s.logger, s.verbose).Config(ctx, vmid, node, values)
+}
+
+// Regenerate rewrites the cloud-init image. The PVE endpoint runs
+// synchronously, so there is no task to wait on.
+func (s *CloudInitService) Regenerate(ctx context.Context, vmid int, node string) error {
+	if vmid <= 0 {
+		return fmt.Errorf("invalid vmid %d", vmid)
+	}
+	return s.backend.RegenerateVirtualMachineCloudInit(ctx, node, vmid)
 }
 
 func cloudInitValues(options CloudInitSetOptions) (map[string]string, error) {

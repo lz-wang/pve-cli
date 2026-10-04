@@ -353,3 +353,7 @@ func (b doctorBackend) AgentExec(context.Context, string, int, AgentExecOptions)
 func (b doctorBackend) VirtualMachineCloudInit(context.Context, string, int) (output.CloudInitConfig, error) {
 	return output.CloudInitConfig{}, ErrNotFound
 }
+
+func (b doctorBackend) RegenerateVirtualMachineCloudInit(context.Context, string, int) error {
+	return ErrNotFound
+}

@@ -601,6 +601,10 @@ func (b *fakeBackend) VirtualMachineCloudInit(_ context.Context, node string, vm
 	return output.CloudInitConfig{}, ErrNotFound
 }
 
+func (b *fakeBackend) RegenerateVirtualMachineCloudInit(context.Context, string, int) error {
+	return nil
+}
+
 type fakeGuest struct {
 	row              output.GuestRow
 	task             Task

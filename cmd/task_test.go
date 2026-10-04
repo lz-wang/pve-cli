@@ -412,3 +412,25 @@ func TestVMCloudInitSetCommandUpdatesConfig(t *testing.T) {
 		t.Fatal("expected set to wait")
 	}
 }
+
+func TestVMCloudInitUpdateCommandRegenerates(t *testing.T) {
+	cfgPath := writeTestConfig(t, "table")
+	backend := &commandBackend{
+		nodes: []output.NodeRow{{Name: "pve1"}},
+	}
+	var stdout bytes.Buffer
+
+	err := RunWithDependencies([]string{
+		"pvectl", "--config", cfgPath,
+		"vm", "cloud-init", "update", "100",
+	}, "test", testDeps(&stdout, backend))
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if backend.cloudInitRegenerated != 100 {
+		t.Fatalf("regenerated vmid = %d", backend.cloudInitRegenerated)
+	}
+	if !strings.Contains(stdout.String(), "cloud-init regenerated") {
+		t.Fatalf("stdout = %s", stdout.String())
+	}
+}

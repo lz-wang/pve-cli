@@ -880,6 +880,7 @@ type commandBackend struct {
 	agentExecOptions pve.AgentExecOptions
 	agentExecResult  output.AgentExecResult
 	cloudInitConfigs map[int]output.CloudInitConfig
+	cloudInitRegenerated int
 	backupTask       pve.Task
 	backupNode       string
 	backupOptions    pve.BackupOptions
@@ -1031,6 +1032,11 @@ func (b *commandBackend) VirtualMachineCloudInit(_ context.Context, node string,
 		return detail, nil
 	}
 	return output.CloudInitConfig{}, pve.ErrNotFound
+}
+
+func (b *commandBackend) RegenerateVirtualMachineCloudInit(_ context.Context, node string, vmid int) error {
+	b.cloudInitRegenerated = vmid
+	return nil
 }
 
 type commandGuest struct {
