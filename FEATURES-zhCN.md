@@ -58,7 +58,8 @@ Doctor 输出结构化诊断行，并且不会打印 token secret。
 - 节点摘要（total/online/offline，含每个节点的行）
 - guest 摘要（total、running、stopped、VM 与 LXC 数量）
 - 存储摘要（total、active，含每个存储的行）
-- 备份摘要（数量、跨备份存储的最新备份时间）
+- 备份摘要（数量、跨备份存储的最新备份时间；shared 存储只在一个节点查询
+  并只统计一次）
 - 查询失败的部分以 `issues` 呈现，而不是让整个命令失败
 
 ## HomeLab 健康检查
@@ -70,7 +71,9 @@ Doctor 输出结构化诊断行，并且不会打印 token secret。
 - 存储使用率超过 `--storage-warn`（默认 85%）报告 `warn`，超过
   `--storage-fail`（默认 95%）报告 `fail`
 - 通过 `--backup-tag` 和 `--backup-max-age` 可选开启备份覆盖率检查，只针对
-  带该 tag 的 guest
+  带该 tag 的 guest；备份存储不可查询时报告 `backup status unavailable`，
+  而不是误导性的 `no backup found`
+- `--node` 指向不存在的节点时报告 `fail`，而不是输出虚假的正常结果
 - `fail` 使退出码非零；`--strict` 让 `warn` 也非零
 
 ## 版本
@@ -115,7 +118,7 @@ task status 取值：`running`、`ok`、`error`、`unknown`。
 - `guest ls --type lxc` 只显示容器。
 - `guest ls --status running` 按 guest 状态过滤。
 - `guest ls --tag TAG` 按 tag 过滤；可重复，配合 `--tag-match all|any`（默认
-  `all`）。
+  `all`）。Proxmox VE 用 `;` 连接 guest tags，`pvectl` 先按该格式解码再匹配。
 - `guest get VMID` 解析并显示指定 ID 的 guest。
 - `guest get VMID --type vm` 或 `--type lxc` 用于消除重复 ID 歧义。
 
@@ -128,6 +131,8 @@ uptime 和 tags 等 Proxmox VE 可提供的字段。
 选择条件的 guest：
 
 - 选择条件至少需要 `--node`、`--status`、`--tag` 之一
+- 选择结果是变更操作的输入，必须 fail closed：任一节点无法查询时整体拒绝
+  执行，而不是带着部分集群视图继续
 - `--type all|vm|lxc` 收窄 guest 类型
 - `--dry-run` 打印将受影响的 guest 后退出
 - 命中超过一个 guest 时需要本地输入 `yes` 确认；`--force` 跳过
@@ -298,6 +303,10 @@ VMID/CTID：
 - `--node` 和 `--vmid` 必填
 - `--storage` 可选指定目标存储
 - 目标 VMID 已存在时拒绝执行；没有覆盖开关
+- VMID 预检必须能看到所有节点；任一节点的 guest 清单无法查询时，restore
+  会在发起之前中止
+- `--wait` 期间已提交的 task 失败时，结果行（含 task ID）仍会写入 stdout，
+  之后命令再以非零码退出
 - 归档名带 vzdump 类型前缀（`vzdump-qemu-`/`vzdump-lxc-`）时必须与命令类型
   匹配
 
@@ -305,6 +314,8 @@ VMID/CTID：
 
 `vm agent` 查询 QEMU guest agent。LXC 容器没有该 API。
 
+- 所有 agent 命令的 `--node` 可选；省略时跨集群定位 VM，与其他面向
+  VMID 的命令一致
 - `vm agent ping VMID` 验证 agent 是否可用
 - `vm agent network VMID` 列出 guest 内部看到的网卡和地址（回答"克隆出来的
   VM 拿到了什么 IP"）
@@ -318,6 +329,7 @@ VMID/CTID：
 
 Cloud-init 命令使用 PVE 原生 cloud-init 配置。
 
+- 所有 cloud-init 命令的 `--node` 可选；省略时跨集群定位 VM
 - `vm cloud-init get VMID` 显示归一化的 cloud-init 配置；密码永不回显，只报
   告 `password_configured`
 - `vm cloud-init set VMID` 更新 `--user`、`--ssh-key-file`、`--ipconfig0..3`、

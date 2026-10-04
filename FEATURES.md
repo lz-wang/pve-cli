@@ -59,7 +59,8 @@ whether the HomeLab is healthy.
 - node summary (total/online/offline with per-node rows)
 - guest summary (total, running, stopped, VM and LXC counts)
 - storage summary (total, active, per-storage rows)
-- backup summary (count, latest backup age across backup-capable storages)
+- backup summary (count, latest backup age across backup-capable storages;
+  shared storages are queried on one node and counted once)
 - per-component `issues` for queries that failed, instead of failing the whole
   command
 
@@ -72,7 +73,9 @@ whether the HomeLab is healthy.
 - storage usage over `--storage-warn` (default 85%) reports `warn`, over
   `--storage-fail` (default 95%) reports `fail`
 - optional backup coverage check with `--backup-tag` and `--backup-max-age`
-  for guests carrying that tag
+  for guests carrying that tag; unqueryable backup storages report
+  `backup status unavailable` instead of `no backup found`
+- an unknown `--node` reports `fail` instead of an empty green run
 - `fail` exits non-zero; `--strict` makes warnings exit non-zero too
 
 ## Version
@@ -118,7 +121,8 @@ Known task status values: `running`, `ok`, `error`, `unknown`.
 - `guest ls --type lxc` filters to containers.
 - `guest ls --status running` filters by guest status.
 - `guest ls --tag TAG` filters by tag; repeatable, with `--tag-match all|any`
-  (default `all`).
+  (default `all`). Proxmox VE stores guest tags as one `;`-separated string;
+  `pvectl` decodes that format before matching.
 - `guest get VMID` resolves and shows a guest by ID.
 - `guest get VMID --type vm` or `--type lxc` disambiguates duplicate IDs.
 
@@ -131,6 +135,9 @@ uptime, and tags fields where available from Proxmox VE.
 every guest matching a selection:
 
 - selection requires at least one of `--node`, `--status`, or `--tag`
+- selection is the input to mutations and fails closed: when any node cannot
+  be queried, the operation is refused instead of running on a partial
+  cluster view
 - `--type all|vm|lxc` narrows the guest kind
 - `--dry-run` prints the affected guests and exits
 - operations hitting more than one guest require a local `yes` confirmation;
@@ -306,6 +313,10 @@ non-existing VMID/CTID:
 - `--node` and `--vmid` are required
 - `--storage` optionally selects target storage
 - restores refuse existing VMIDs; there is no overwrite flag
+- the VMID preflight must see every node; if any node's guest inventory
+  cannot be queried, the restore aborts before starting
+- when a submitted task fails during `--wait`, the result row (including the
+  task ID) is still written to stdout before the command exits non-zero
 - archive kind (`vzdump-qemu-`/`vzdump-lxc-`) must match the command when the
   archive name encodes it
 
@@ -313,6 +324,8 @@ non-existing VMID/CTID:
 
 `vm agent` queries the QEMU guest agent. LXC containers do not expose it.
 
+- `--node` is optional for all agent commands; when omitted, the VM is
+  located across the cluster, matching other VMID-oriented commands
 - `vm agent ping VMID` verifies the agent answers
 - `vm agent network VMID` lists interfaces and addresses as seen inside the
   guest (answers "which IP did this cloned VM get?")
@@ -327,6 +340,8 @@ File write/read, fs freeze, and password reset are intentionally out of scope.
 
 Cloud-init commands use PVE-native cloud-init configuration.
 
+- `--node` is optional for all cloud-init commands; when omitted, the VM is
+  located across the cluster
 - `vm cloud-init get VMID` shows the normalized cloud-init config; the password
   is never echoed, only `password_configured`
 - `vm cloud-init set VMID` updates `--user`, `--ssh-key-file`,
