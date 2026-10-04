@@ -1,5 +1,73 @@
 # Changelog
 
+## v1.1.0 - 2026-10-04
+
+### Added
+
+- Add `pvectl status` for a HomeLab-wide snapshot of nodes, guests, storages,
+  and backups, with partial-failure issues instead of aborted reports.
+- Add `pvectl check` for current-health checks with storage usage thresholds,
+  optional backup coverage via `--backup-tag` and `--backup-max-age`, and
+  `--strict` warning handling for cron and agent consumers.
+- Add task inspection commands: `pvectl task ls`, `pvectl task get`,
+  `pvectl task log`, and `pvectl task wait`.
+- Add one-off backup restore with `pvectl vm restore` and `pvectl lxc restore`
+  into a new, non-existing VMID, with a fail-closed cluster-wide VMID preflight
+  check.
+- Add safe snapshot deletion with `pvectl vm snapshot delete` and
+  `pvectl lxc snapshot delete`, confirmed locally like other dangerous
+  operations.
+- Add QEMU guest agent commands: `pvectl vm agent ping`,
+  `pvectl vm agent network`, and `pvectl vm agent exec`.
+- Add VM cloud-init management: `pvectl vm cloud-init get`, `set`, and
+  `update` with normalized config output.
+- Add read-only network inventory with `pvectl network ls` and
+  `pvectl network get`.
+- Add read-only firewall inventory with `pvectl firewall status` and
+  `pvectl firewall ls` for node, VM, and LXC scopes.
+- Add bulk guest lifecycle operations (`pvectl guest start`, `stop`,
+  `shutdown`, `reboot`) with tag/status selection, `--dry-run`, and structured
+  per-guest results.
+- Add guest tag filtering with `--tag` and `--tag-match any|all`.
+- Add `pvectl node get` for detailed node inspection and `pvectl storage
+  usage` as a compact storage usage view.
+
+### Changed
+
+- Upgrade go-proxmox to v0.8.1 and route LXC restore through the typed
+  container create wrapper.
+- Parse Proxmox guest tags with the canonical `;` separator.
+- Resolve guest nodes consistently for VMID-scoped commands: agent and
+  cloud-init commands accept an omitted `--node` and resolve across nodes.
+- Preserve whole SSH public key lines in cloud-init updates.
+- Fail bulk mutations closed when the guest selection cannot be fully listed,
+  while read commands keep partial-success behavior.
+- Report `backup status unavailable` when backup storages cannot be queried,
+  and keep coverage indeterminate when only some backup sources fail.
+- Deduplicate shared backup storages across nodes and query them on a
+  readable (enabled and active) node with fallback on failure.
+- Publish per-version archives to WebDAV and update the Homebrew tap formula
+  on tag pushes.
+
+### Fixed
+
+- Fix LXC restore to send the Proxmox restore parameters (`ostemplate` plus
+  `restore=true`) instead of the rejected `archive` parameter.
+- Fix restore preflight to abort when any node's guest inventory cannot be
+  verified, and preserve the structured restore result when the task wait
+  fails.
+- Keep CLI argument parsing in sync with flags that take values.
+- Fix cloud-init SSH key handling that previously split keys into words.
+
+### Notes
+
+- Restore never overwrites an existing guest; the target VMID must not exist.
+- Bulk mutations abort entirely unless every selected guest could be listed.
+- `status` and `check` are read-only and machine-consumable; command results
+  go to stdout, task IDs and wait progress go to stderr.
+- No server mode, Web UI, RBAC, audit, billing, network or firewall mutation,
+  or generic Proxmox REST API passthrough is included.
+
 ## v1.0.0 - 2026-06-06
 
 ### Added
