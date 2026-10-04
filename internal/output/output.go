@@ -148,6 +148,17 @@ type StatusIssue struct {
 	Message   string `json:"message" yaml:"message"`
 }
 
+type BulkGuestResult struct {
+	Kind   string `json:"kind" yaml:"kind"`
+	VMID   uint64 `json:"vmid" yaml:"vmid"`
+	Node   string `json:"node" yaml:"node"`
+	Name   string `json:"name" yaml:"name"`
+	Action string `json:"action" yaml:"action"`
+	Status string `json:"status" yaml:"status"`
+	Task   string `json:"task,omitempty" yaml:"task,omitempty"`
+	Error  string `json:"error,omitempty" yaml:"error,omitempty"`
+}
+
 type StorageRow struct {
 	Node         string  `json:"node" yaml:"node"`
 	Storage      string  `json:"storage" yaml:"storage"`
@@ -685,6 +696,32 @@ func WriteBulkPlan(w io.Writer, format string, rows []GuestRow) error {
 				row.Node,
 				empty(row.Name),
 				empty(row.Status),
+			); err != nil {
+				return err
+			}
+		}
+		return tw.Flush()
+	})
+}
+
+func WriteBulkResults(w io.Writer, format string, results []BulkGuestResult) error {
+	return Write(w, format, results, func(w io.Writer) error {
+		tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+		if _, err := fmt.Fprintln(tw, "KIND\tVMID\tNODE\tNAME\tACTION\tSTATUS\tTASK\tERROR"); err != nil {
+			return err
+		}
+		for _, result := range results {
+			if _, err := fmt.Fprintf(
+				tw,
+				"%s\t%d\t%s\t%s\t%s\t%s\t%s\t%s\n",
+				result.Kind,
+				result.VMID,
+				result.Node,
+				empty(result.Name),
+				result.Action,
+				result.Status,
+				empty(result.Task),
+				empty(result.Error),
 			); err != nil {
 				return err
 			}

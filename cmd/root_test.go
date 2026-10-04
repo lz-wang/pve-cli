@@ -997,14 +997,15 @@ func (b *commandBackend) Restore(_ context.Context, options pve.RestoreOptions) 
 type commandGuest struct {
 	row              output.GuestRow
 	task             pve.Task
+	actionErr        error
 	cloneID          int
 	cloneOptions     pve.CloneOptions
 	configValues     map[string]string
 	deleted          bool
 	rebooted         bool
 	startedCalled    bool
-	shutdownCalled  bool
-	stopCalled      bool
+	shutdownCalled   bool
+	stopCalled       bool
 	migrateOptions   pve.MigrateOptions
 	resizeDisk       string
 	resizeSize       string
@@ -1020,21 +1021,33 @@ func (g *commandGuest) Row() output.GuestRow {
 
 func (g *commandGuest) Start(context.Context) (pve.Task, error) {
 	g.startedCalled = true
+	if g.actionErr != nil {
+		return nil, g.actionErr
+	}
 	return g.task, nil
 }
 
 func (g *commandGuest) Shutdown(context.Context) (pve.Task, error) {
 	g.shutdownCalled = true
+	if g.actionErr != nil {
+		return nil, g.actionErr
+	}
 	return g.task, nil
 }
 
 func (g *commandGuest) Stop(context.Context) (pve.Task, error) {
 	g.stopCalled = true
+	if g.actionErr != nil {
+		return nil, g.actionErr
+	}
 	return g.task, nil
 }
 
 func (g *commandGuest) Reboot(context.Context) (pve.Task, error) {
 	g.rebooted = true
+	if g.actionErr != nil {
+		return nil, g.actionErr
+	}
 	return g.task, nil
 }
 

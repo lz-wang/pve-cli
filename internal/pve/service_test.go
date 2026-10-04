@@ -538,6 +538,7 @@ func (b *fakeBackend) Restore(_ context.Context, options RestoreOptions) (Task, 
 type fakeGuest struct {
 	row              output.GuestRow
 	task             Task
+	actionErr        error
 	cloneID          int
 	cloneName        string
 	cloneOptions     CloneOptions
@@ -558,19 +559,31 @@ func (g *fakeGuest) Row() output.GuestRow {
 }
 
 func (g *fakeGuest) Start(context.Context) (Task, error) {
+	if g.actionErr != nil {
+		return nil, g.actionErr
+	}
 	return g.task, nil
 }
 
 func (g *fakeGuest) Shutdown(context.Context) (Task, error) {
+	if g.actionErr != nil {
+		return nil, g.actionErr
+	}
 	return g.task, nil
 }
 
 func (g *fakeGuest) Stop(context.Context) (Task, error) {
+	if g.actionErr != nil {
+		return nil, g.actionErr
+	}
 	return g.task, nil
 }
 
 func (g *fakeGuest) Reboot(context.Context) (Task, error) {
 	g.rebooted = true
+	if g.actionErr != nil {
+		return nil, g.actionErr
+	}
 	return g.task, nil
 }
 

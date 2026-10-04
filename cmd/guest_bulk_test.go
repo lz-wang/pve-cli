@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"errors"
 	"strings"
 	"testing"
 
@@ -135,6 +136,31 @@ func TestGuestBulkSingleGuestSkipsConfirmation(t *testing.T) {
 	}
 	if !backend.vmGuests["pve1"][101].stopCalled {
 		t.Fatal("expected single matching guest to be stopped without confirmation")
+	}
+}
+
+func TestGuestBulkPartialFailureWritesAllResultsAndFails(t *testing.T) {
+	cfgPath := writeTestConfig(t, "json")
+	backend := bulkTestBackend()
+	backend.vmGuests["pve1"][100].actionErr = errors.New("boom")
+	var stdout bytes.Buffer
+
+	err := RunWithDependencies([]string{
+		"pvectl", "--config", cfgPath,
+		"guest", "shutdown",
+		"--tag", "infra",
+		"--force",
+	}, "test", testDeps(&stdout, backend))
+	if err == nil {
+		t.Fatal("expected aggregated failure")
+	}
+
+	out := stdout.String()
+	if !strings.Contains(out, `"vmid": 100`) || !strings.Contains(out, `"status": "error"`) {
+		t.Fatalf("missing failed result: %s", out)
+	}
+	if !strings.Contains(out, `"vmid": 200`) || !strings.Contains(out, `"status": "ok"`) {
+		t.Fatalf("missing successful result: %s", out)
 	}
 }
 

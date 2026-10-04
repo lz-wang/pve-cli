@@ -70,3 +70,34 @@ func TestParseBulkAction(t *testing.T) {
 		t.Fatal("expected invalid bulk action error")
 	}
 }
+
+func TestBulkServiceExecuteRowsReturnsPerGuestResults(t *testing.T) {
+	failing := &fakeGuest{row: output.GuestRow{Kind: "vm", VMID: 100, Node: "pve1"}, actionErr: errBulkBoom{}}
+	ok := &fakeGuest{row: output.GuestRow{Kind: "vm", VMID: 101, Node: "pve1"}, task: &fakeTask{upid: "UPID:pve1:bulk101"}}
+	backend := &fakeBackend{
+		nodes: []output.NodeRow{{Name: "pve1"}},
+		vms:   map[string]map[int]*fakeGuest{"pve1": {100: failing, 101: ok}},
+	}
+	svc := NewBulkService(backend, TaskRunner{}, nil, false)
+
+	results, err := svc.ExecuteRows(context.Background(), BulkActionShutdown, []output.GuestRow{
+		{Kind: "vm", VMID: 100, Node: "pve1", Name: "a"},
+		{Kind: "vm", VMID: 101, Node: "pve1", Name: "b"},
+	}, BulkExecuteOptions{})
+	if err == nil {
+		t.Fatal("expected aggregated failure")
+	}
+	if len(results) != 2 {
+		t.Fatalf("results = %#v", results)
+	}
+	if results[0].Status != BulkResultStatusError || results[0].Error == "" {
+		t.Fatalf("result[0] = %#v", results[0])
+	}
+	if results[1].Status != BulkResultStatusOK || results[1].Task != "UPID:pve1:bulk101" {
+		t.Fatalf("result[1] = %#v", results[1])
+	}
+}
+
+type errBulkBoom struct{}
+
+func (errBulkBoom) Error() string { return "boom" }

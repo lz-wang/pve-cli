@@ -243,6 +243,23 @@ func TestStructuredOutputContracts(t *testing.T) {
 			},
 		},
 		{
+			name: "BulkGuestResult",
+			value: BulkGuestResult{
+				Kind: "vm", VMID: 100, Node: "pve1", Name: "debian",
+				Action: "shutdown", Status: "error", Task: "UPID:pve1:bulk", Error: "boom",
+			},
+			fields: []contractField{
+				{"kind", stringType},
+				{"vmid", uint64Type},
+				{"node", stringType},
+				{"name", stringType},
+				{"action", stringType},
+				{"status", stringType},
+				{"task", stringType},
+				{"error", stringType},
+			},
+		},
+		{
 			name: "TaskRow",
 			value: TaskRow{
 				UPID: "UPID:pve1:0001:0000:vzdump:100:root@pam:", Node: "pve1", Type: "vzdump",

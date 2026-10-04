@@ -20,6 +20,12 @@ const (
 	BulkActionStop     = "stop"
 )
 
+// Bulk result statuses.
+const (
+	BulkResultStatusOK    = "ok"
+	BulkResultStatusError = "error"
+)
+
 // GuestSelector describes which guests a bulk operation targets. At least one
 // constraining field (Node, Status, or Tags) must be set so a bare command
 // never sweeps the whole cluster.
@@ -117,15 +123,16 @@ type bulkGuestOutcome struct {
 }
 
 // ExecuteRows runs the action over every selected guest with bounded
-// concurrency. It never stops on the first failure; the aggregated error is
-// returned only after every guest has been attempted.
-func (s *BulkService) ExecuteRows(ctx context.Context, action string, rows []output.GuestRow, options BulkExecuteOptions) error {
+// concurrency. It never stops on the first failure; structured per-guest
+// results are returned alongside an aggregated error so callers can print
+// every outcome before failing the command.
+func (s *BulkService) ExecuteRows(ctx context.Context, action string, rows []output.GuestRow, options BulkExecuteOptions) ([]output.BulkGuestResult, error) {
 	action, err := ParseBulkAction(action)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if len(rows) == 0 {
-		return fmt.Errorf("no guests match the selection")
+		return nil, fmt.Errorf("no guests match the selection")
 	}
 
 	jobs := options.Jobs
@@ -147,19 +154,32 @@ func (s *BulkService) ExecuteRows(ctx context.Context, action string, rows []out
 	}
 	wg.Wait()
 
+	results := make([]output.BulkGuestResult, len(outcomes))
 	failed := 0
-	for _, outcome := range outcomes {
+	for i, outcome := range outcomes {
+		result := output.BulkGuestResult{
+			Kind:   outcome.row.Kind,
+			VMID:   outcome.row.VMID,
+			Node:   outcome.row.Node,
+			Name:   outcome.row.Name,
+			Action: action,
+			Status: BulkResultStatusOK,
+			Task:   outcome.taskUpid,
+		}
 		if outcome.err != nil {
 			failed++
+			result.Status = BulkResultStatusError
+			result.Error = outcome.err.Error()
 			s.progress(options.ErrWriter, "%s %d %s: error: %v\n", outcome.row.Kind, outcome.row.VMID, outcome.row.Name, outcome.err)
-			continue
+		} else {
+			s.progress(options.ErrWriter, "%s %d %s: ok\n", outcome.row.Kind, outcome.row.VMID, outcome.row.Name)
 		}
-		s.progress(options.ErrWriter, "%s %d %s: ok\n", outcome.row.Kind, outcome.row.VMID, outcome.row.Name)
+		results[i] = result
 	}
 	if failed > 0 {
-		return fmt.Errorf("bulk %s completed with %d failure(s) out of %d guest(s)", action, failed, len(rows))
+		return results, fmt.Errorf("bulk %s completed with %d failure(s) out of %d guest(s)", action, failed, len(rows))
 	}
-	return nil
+	return results, nil
 }
 
 func (s *BulkService) executeOne(ctx context.Context, action string, row output.GuestRow, options BulkExecuteOptions) bulkGuestOutcome {

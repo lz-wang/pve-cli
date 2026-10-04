@@ -75,13 +75,17 @@ func guestBulkCommand(action, usage string, deps Dependencies) *cli.Command {
 					return err
 				}
 			}
-			return svc.ExecuteRows(c.Context, action, rows, pve.BulkExecuteOptions{
+			results, execErr := svc.ExecuteRows(c.Context, action, rows, pve.BulkExecuteOptions{
 				Action:      action,
 				Jobs:        c.Int("jobs"),
 				Wait:        boolFlag(c, "wait"),
 				WaitTimeout: durationFlag(c, "wait-timeout"),
 				ErrWriter:   rt.stderr,
 			})
+			if writeErr := output.WriteBulkResults(rt.stdout, rt.format, results); writeErr != nil {
+				return writeErr
+			}
+			return execErr
 		},
 	}
 }
