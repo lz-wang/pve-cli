@@ -196,7 +196,11 @@ When `--node` is omitted, `pvectl` resolves the VMID/CTID automatically before
 triggering the backup. Backup results are written to stdout and include the
 task ID; task IDs and wait progress are also written to stderr.
 
-`pvectl` does not manage scheduled backup jobs, restore, prune, backup
+One-off VM/LXC backup restore is in scope as a disaster-recovery workflow:
+restoring a vzdump archive into a new, non-existing VMID. Overwriting an
+existing VMID is not supported; delete the guest first, then restore.
+
+`pvectl` does not manage scheduled backup jobs, prune policies, backup
 deletion, PBS datastores, or PBS verification.
 
 ## Storage Commands

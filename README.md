@@ -124,4 +124,16 @@ scripts/update-homebrew-formula.sh v1.0.0 /Users/lzwang/projects/homebrew-tap
 - a multi-user control plane
 - an RBAC, audit, billing, or policy platform
 - a replacement for the Proxmox VE Web UI
-- a full wrapper for every Proxmox REST API endpoint
+
+Feature-scope non-goals:
+
+- scheduled backup job management
+- backup prune policy management
+- PBS datastore administration
+- PBS verification/prune administration
+- HA/Ceph/SDN full management
+- arbitrary Proxmox REST API passthrough
+
+One-off VM/LXC backup restore (vzdump archive into a new, non-existing VMID) is
+in scope as a disaster-recovery workflow. See
+[docs/compatibility.md](docs/compatibility.md).

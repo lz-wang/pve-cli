@@ -41,8 +41,20 @@ These require a new major version:
 Table output is for humans and may be adjusted for readability in v1.x. Scripts
 should use `-o json` or `-o yaml`.
 
+## In Scope
+
+One-off VM/LXC backup restore is supported. Restoring a vzdump archive into a
+new, non-existing VMID is a supported disaster-recovery workflow. Overwriting an
+existing VMID during restore is a non-goal; delete the guest first, then
+restore.
+
 ## Non-goals
 
-See the README for project non-goals. In particular, v1.x compatibility does
-not imply a future server mode, Web UI, RBAC layer, storage mutation surface,
-restore/prune workflow, PBS management, or full Proxmox REST API passthrough.
+- Scheduled backup job management.
+- Backup prune policy management.
+- PBS datastore administration.
+- PBS verification/prune administration.
+- HA/Ceph/SDN full management.
+- Arbitrary Proxmox REST API passthrough.
+
+See the README for the full project non-goals list.
