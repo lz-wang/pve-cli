@@ -2,6 +2,7 @@ package pve
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -86,16 +87,17 @@ func (s *StatusService) collectStorages(ctx context.Context, nodes []string) ([]
 }
 
 // collectBackups counts backup content across every backup-capable storage.
-// Storages that fail to query produce an issue instead of failing the report.
+// Sources that cannot be queried on any node produce an issue instead of
+// failing the report.
 func (s *StatusService) collectBackups(ctx context.Context, storages []output.StorageRow) ([]output.BackupRow, []output.StatusIssue) {
 	var rows []output.BackupRow
 	var issues []output.StatusIssue
-	for _, storage := range backupSources(storages) {
-		backupRows, err := s.backend.Backups(ctx, storage.Node, storage.Storage)
+	for _, group := range backupSources(storages) {
+		backupRows, err := listSourceBackups(ctx, s.backend, group)
 		if err != nil {
 			issues = append(issues, output.StatusIssue{
 				Component: "backup",
-				Message:   fmt.Sprintf("list backups on %s/%s: %v", storage.Node, storage.Storage, err),
+				Message:   fmt.Sprintf("list backups on %s/%s: %v", group[0].Node, group[0].Storage, err),
 			})
 			continue
 		}
@@ -104,12 +106,15 @@ func (s *StatusService) collectBackups(ctx context.Context, storages []output.St
 	return rows, issues
 }
 
-// backupSources returns the storages whose backups should be listed. Shared
-// storages expose identical content from every node, so each shared storage
-// name is queried on exactly one node; local storages are kept per node.
-func backupSources(storages []output.StorageRow) []output.StorageRow {
-	seen := make(map[string]bool)
-	sources := make([]output.StorageRow, 0, len(storages))
+// backupSources returns the storages whose backups should be listed, one
+// group per independent source. Shared storages expose identical content
+// from every node, so each shared storage name forms a single source whose
+// candidates cover every reporting node; local storages stay per node.
+// Candidates able to answer (enabled and active) come first so reads skip
+// degraded nodes.
+func backupSources(storages []output.StorageRow) [][]output.StorageRow {
+	order := make([]string, 0, len(storages))
+	groups := make(map[string][]output.StorageRow, len(storages))
 	for _, storage := range storages {
 		if !storageHasContent(storage.Content, "backup") {
 			continue
@@ -118,13 +123,54 @@ func backupSources(storages []output.StorageRow) []output.StorageRow {
 		if storage.Shared {
 			key = storage.Storage
 		}
-		if seen[key] {
-			continue
+		if _, seen := groups[key]; !seen {
+			order = append(order, key)
 		}
-		seen[key] = true
-		sources = append(sources, storage)
+		groups[key] = append(groups[key], storage)
+	}
+
+	sources := make([][]output.StorageRow, 0, len(order))
+	for _, key := range order {
+		sources = append(sources, sortBackupCandidates(groups[key]))
 	}
 	return sources
+}
+
+// sortBackupCandidates partitions a source's node rows so readable nodes
+// (enabled and active) are queried first, keeping the original order inside
+// each partition.
+func sortBackupCandidates(rows []output.StorageRow) []output.StorageRow {
+	readable := make([]output.StorageRow, 0, len(rows))
+	degraded := make([]output.StorageRow, 0, len(rows))
+	for _, row := range rows {
+		if row.Enabled && row.Active {
+			readable = append(readable, row)
+		} else {
+			degraded = append(degraded, row)
+		}
+	}
+	return append(readable, degraded...)
+}
+
+// listSourceBackups lists backups for one source group, trying candidates in
+// preference order until a node answers. Shared storages expose identical
+// content on every node, so the first successful read is authoritative; when
+// every candidate fails, the joined per-node errors preserve the details.
+func listSourceBackups(ctx context.Context, reader BackupReader, group []output.StorageRow) ([]output.BackupRow, error) {
+	var lastErr error
+	var errs []string
+	for _, storage := range group {
+		rows, err := reader.Backups(ctx, storage.Node, storage.Storage)
+		if err == nil {
+			return rows, nil
+		}
+		lastErr = err
+		errs = append(errs, fmt.Sprintf("%s: %v", storage.Node, err))
+	}
+	if len(errs) <= 1 {
+		return nil, lastErr
+	}
+	return nil, errors.New(strings.Join(errs, "; "))
 }
 
 func summarizeNodes(rows []output.NodeRow) output.NodeSummary {

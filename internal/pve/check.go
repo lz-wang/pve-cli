@@ -288,16 +288,17 @@ func (s *CheckService) collectTaggedGuests(ctx context.Context, nodes []string, 
 	return tagged, errs
 }
 
-// collectLatestBackups returns the newest backup per guest plus one error per
-// backup-capable storage that could not be queried. Shared storages are only
-// queried on one node, matching the status backup summary.
+// collectLatestBackups returns the newest backup per guest plus one error
+// per backup source that could not be queried on any of its candidate nodes.
+// Shared storages are queried once, on the first node that can answer,
+// matching the status backup summary.
 func (s *CheckService) collectLatestBackups(ctx context.Context, storages []output.StorageRow) (map[string]uint64, map[string]error) {
 	latest := make(map[string]uint64)
 	errs := make(map[string]error)
-	for _, storage := range backupSources(storages) {
-		rows, err := s.backend.Backups(ctx, storage.Node, storage.Storage)
+	for _, group := range backupSources(storages) {
+		rows, err := listSourceBackups(ctx, s.backend, group)
 		if err != nil {
-			errs[storage.Node+"/"+storage.Storage] = err
+			errs[group[0].Node+"/"+group[0].Storage] = err
 			continue
 		}
 		for _, row := range rows {

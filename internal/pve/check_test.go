@@ -478,3 +478,95 @@ func TestCheckServiceBackupCoverageStaleWhenAllSourcesSucceed(t *testing.T) {
 	}
 	t.Fatalf("no vm 100 coverage row: %#v", result.Rows)
 }
+
+func TestCheckServiceBackupCoverageSharedStoragePrefersReadableNode(t *testing.T) {
+	now := uint64(time.Now().Unix())
+	backend := &fakeBackend{
+		nodes: []output.NodeRow{
+			{Name: "pve1", Status: "online"},
+			{Name: "pve2", Status: "online"},
+		},
+		vmRows: map[string][]output.GuestRow{
+			"pve1": {{Kind: "vm", VMID: 100, Node: "pve1", Tags: "backup"}},
+		},
+		lxcs:    map[string]map[int]*fakeGuest{},
+		lxcRows: map[string][]output.GuestRow{},
+		storageRows: map[string][]output.StorageRow{
+			"pve1": {{Node: "pve1", Storage: "backup", Type: "nfs", Active: false, Enabled: true, Shared: true, Content: "backup"}},
+			"pve2": {{Node: "pve2", Storage: "backup", Type: "nfs", Active: true, Enabled: true, Shared: true, Content: "backup"}},
+		},
+		backupRows: map[string]map[string][]output.BackupRow{
+			"pve2": {
+				"backup": {{Node: "pve2", Storage: "backup", Kind: "vm", VMID: 100, CTime: now - 3600}},
+			},
+		},
+	}
+	svc := NewCheckService(backend)
+
+	result, err := svc.Run(context.Background(), CheckOptions{
+		BackupTag:    "backup",
+		BackupMaxAge: 36 * time.Hour,
+	})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	// The shared storage is readable on pve2 only, so the inactive pve1 row
+	// must not win the candidate order.
+	if backend.backupListCalls["pve1/backup"] != 0 || backend.backupListCalls["pve2/backup"] != 1 {
+		t.Fatalf("calls = %#v, want a single query on pve2", backend.backupListCalls)
+	}
+	for _, row := range result.Rows {
+		if row.Check == "backup-coverage" && row.Resource == "vm 100" && row.Status != output.DoctorStatusOK {
+			t.Fatalf("vm 100 row = %#v", row)
+		}
+	}
+}
+
+func TestCheckServiceBackupCoverageSharedStorageFallsBackOnQueryFailure(t *testing.T) {
+	now := uint64(time.Now().Unix())
+	backend := &fakeBackend{
+		nodes: []output.NodeRow{
+			{Name: "pve1", Status: "online"},
+			{Name: "pve2", Status: "online"},
+		},
+		vmRows: map[string][]output.GuestRow{
+			"pve1": {{Kind: "vm", VMID: 100, Node: "pve1", Tags: "backup"}},
+		},
+		lxcs:    map[string]map[int]*fakeGuest{},
+		lxcRows: map[string][]output.GuestRow{},
+		storageRows: map[string][]output.StorageRow{
+			"pve1": {{Node: "pve1", Storage: "backup", Type: "nfs", Active: true, Enabled: true, Shared: true, Content: "backup"}},
+			"pve2": {{Node: "pve2", Storage: "backup", Type: "nfs", Active: true, Enabled: true, Shared: true, Content: "backup"}},
+		},
+		backupRows: map[string]map[string][]output.BackupRow{
+			"pve2": {
+				"backup": {{Node: "pve2", Storage: "backup", Kind: "vm", VMID: 100, CTime: now - 3600}},
+			},
+		},
+		backupErrs: map[string]error{"pve1/backup": errors.New("timeout")},
+	}
+	svc := NewCheckService(backend)
+
+	result, err := svc.Run(context.Background(), CheckOptions{
+		BackupTag:    "backup",
+		BackupMaxAge: 36 * time.Hour,
+	})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	// The preferred node failed, so the next candidate must serve the read;
+	// a successful fallback is not an unavailable verdict.
+	if backend.backupListCalls["pve1/backup"] != 1 || backend.backupListCalls["pve2/backup"] != 1 {
+		t.Fatalf("calls = %#v, want pve1 then pve2", backend.backupListCalls)
+	}
+	for _, row := range result.Rows {
+		if row.Check != "backup-coverage" || row.Resource != "vm 100" {
+			continue
+		}
+		if row.Status != output.DoctorStatusOK {
+			t.Fatalf("vm 100 row = %#v, want OK via fallback", row)
+		}
+		return
+	}
+	t.Fatalf("no vm 100 coverage row: %#v", result.Rows)
+}

@@ -169,6 +169,75 @@ func TestStatusServiceFailsWhenNodesUnreachable(t *testing.T) {
 	}
 }
 
+func TestStatusServiceSharedBackupStoragePrefersReadableNode(t *testing.T) {
+	backend := &fakeBackend{
+		nodes: []output.NodeRow{
+			{Name: "pve1", Status: "online"},
+			{Name: "pve2", Status: "online"},
+		},
+		storageRows: map[string][]output.StorageRow{
+			"pve1": {{Node: "pve1", Storage: "backup", Type: "nfs", Active: false, Enabled: true, Shared: true, Content: "backup"}},
+			"pve2": {{Node: "pve2", Storage: "backup", Type: "nfs", Active: true, Enabled: true, Shared: true, Content: "backup"}},
+		},
+		backupRows: map[string]map[string][]output.BackupRow{
+			"pve2": {
+				"backup": {{Node: "pve2", Storage: "backup", Kind: "vm", VMID: 100, CTime: 900}},
+			},
+		},
+	}
+	svc := NewStatusService(backend)
+
+	report, err := svc.Report(context.Background())
+	if err != nil {
+		t.Fatalf("report: %v", err)
+	}
+	if report.Backups.Count != 1 || report.Backups.LatestCtime != 900 {
+		t.Fatalf("backups = %#v, want the pve2 read", report.Backups)
+	}
+	if backend.backupListCalls["pve1/backup"] != 0 {
+		t.Fatalf("inactive node must not be queried first, calls = %#v", backend.backupListCalls)
+	}
+	if len(report.Issues) != 0 {
+		t.Fatalf("issues = %#v", report.Issues)
+	}
+}
+
+func TestStatusServiceSharedBackupStorageFallsBackOnQueryFailure(t *testing.T) {
+	backend := &fakeBackend{
+		nodes: []output.NodeRow{
+			{Name: "pve1", Status: "online"},
+			{Name: "pve2", Status: "online"},
+		},
+		storageRows: map[string][]output.StorageRow{
+			"pve1": {{Node: "pve1", Storage: "backup", Type: "nfs", Active: true, Enabled: true, Shared: true, Content: "backup"}},
+			"pve2": {{Node: "pve2", Storage: "backup", Type: "nfs", Active: true, Enabled: true, Shared: true, Content: "backup"}},
+		},
+		backupRows: map[string]map[string][]output.BackupRow{
+			"pve2": {
+				"backup": {{Node: "pve2", Storage: "backup", Kind: "vm", VMID: 100, CTime: 900}},
+			},
+		},
+		backupErrs: map[string]error{"pve1/backup": errors.New("timeout")},
+	}
+	svc := NewStatusService(backend)
+
+	report, err := svc.Report(context.Background())
+	if err != nil {
+		t.Fatalf("report: %v", err)
+	}
+	// The preferred node failed, so the shared read must fall back to the
+	// next candidate instead of dropping the storage's backups.
+	if report.Backups.Count != 1 || report.Backups.LatestCtime != 900 {
+		t.Fatalf("backups = %#v, want the pve2 fallback read", report.Backups)
+	}
+	if backend.backupListCalls["pve1/backup"] != 1 || backend.backupListCalls["pve2/backup"] != 1 {
+		t.Fatalf("calls = %#v, want pve1 then pve2", backend.backupListCalls)
+	}
+	if len(report.Issues) != 0 {
+		t.Fatalf("issues = %#v", report.Issues)
+	}
+}
+
 type failingNodesBackend struct {
 	fakeBackend
 }

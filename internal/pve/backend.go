@@ -43,6 +43,12 @@ type StorageBackend interface {
 	StorageContents(ctx context.Context, node, storage string) ([]output.StorageContentRow, error)
 }
 
+// BackupReader lists backup content on a node storage. It is the minimal
+// capability behind the status and check backup summaries.
+type BackupReader interface {
+	Backups(ctx context.Context, node, storage string) ([]output.BackupRow, error)
+}
+
 // Backend composes every capability. Services should depend on the smallest
 // capability interface they need instead of the full Backend.
 type Backend interface {
