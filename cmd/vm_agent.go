@@ -2,10 +2,12 @@ package cmd
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/urfave/cli/v2"
 
 	"github.com/lz-wang/pvectl/internal/output"
+	"github.com/lz-wang/pvectl/internal/pve"
 )
 
 // newVMAgentCommand exposes read-mostly QEMU guest agent operations. Only VMs
@@ -17,6 +19,7 @@ func newVMAgentCommand(deps Dependencies) *cli.Command {
 		Subcommands: []*cli.Command{
 			vmAgentPingCommand(deps),
 			vmAgentNetworkCommand(deps),
+			vmAgentExecCommand(deps),
 		},
 	}
 }
@@ -76,6 +79,58 @@ func vmAgentNetworkCommand(deps Dependencies) *cli.Command {
 				return err
 			}
 			return output.WriteAgentNetworkRows(rt.stdout, rt.format, rows)
+		},
+	}
+}
+
+func vmAgentExecCommand(deps Dependencies) *cli.Command {
+	return &cli.Command{
+		Name:      "exec",
+		Usage:     "Run executable+argv inside the guest via the agent",
+		ArgsUsage: "VMID -- COMMAND [ARG...]",
+		Flags: append(
+			[]cli.Flag{
+				&cli.StringFlag{Name: "node", Usage: "PVE node name"},
+				&cli.StringFlag{Name: "input", Usage: "stdin data passed to the command"},
+				&cli.DurationFlag{Name: "timeout", Usage: "how long to wait for the command to exit"},
+			},
+			commonOutputFlags()...,
+		),
+		Action: func(c *cli.Context) error {
+			if c.NArg() < 2 {
+				return fmt.Errorf("expected VMID and COMMAND, for example: pvectl vm agent exec 100 -- /usr/bin/uname -a")
+			}
+			vmid, err := parseVMID(c.Args().First())
+			if err != nil {
+				return err
+			}
+			command := c.Args().Slice()[1:]
+			if command[0] == "--" {
+				command = command[1:]
+			}
+			if len(command) == 0 || strings.TrimSpace(command[0]) == "" {
+				return fmt.Errorf("agent exec requires an executable path, for example -- /usr/bin/uname -a")
+			}
+
+			rt, err := buildRuntime(c, deps)
+			if err != nil {
+				return err
+			}
+			result, err := rt.backend.AgentExec(c.Context, c.String("node"), vmid, pve.AgentExecOptions{
+				Command: command,
+				Input:   c.String("input"),
+				Timeout: durationFlag(c, "timeout"),
+			})
+			if err != nil {
+				return err
+			}
+			if err := output.WriteAgentExecResult(rt.stdout, rt.format, result); err != nil {
+				return err
+			}
+			if result.ExitCode != 0 {
+				return fmt.Errorf("agent exec exited with code %d", result.ExitCode)
+			}
+			return nil
 		},
 	}
 }

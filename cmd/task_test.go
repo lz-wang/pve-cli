@@ -107,6 +107,63 @@ func TestVMAgentNetworkCommandWritesRows(t *testing.T) {
 	}
 }
 
+func TestVMAgentExecCommandWritesResult(t *testing.T) {
+	cfgPath := writeTestConfig(t, "json")
+	backend := &commandBackend{
+		nodes:           []output.NodeRow{{Name: "pve1"}},
+		agentExecResult: output.AgentExecResult{ExitCode: 0, Stdout: "Linux pve 6.8\n"},
+	}
+	var stdout bytes.Buffer
+
+	err := RunWithDependencies([]string{
+		"pvectl", "--config", cfgPath,
+		"vm", "agent", "exec", "100",
+		"--node", "pve1",
+		"--",
+		"/usr/bin/uname", "-a",
+	}, "test", testDeps(&stdout, backend))
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	out := stdout.String()
+	if !strings.Contains(out, `"exit_code": 0`) || !strings.Contains(out, "Linux pve 6.8") {
+		t.Fatalf("stdout = %s", out)
+	}
+	if got := backend.agentExecOptions.Command; len(got) != 2 || got[0] != "/usr/bin/uname" || got[1] != "-a" {
+		t.Fatalf("command = %#v", got)
+	}
+}
+
+func TestVMAgentExecCommandFailsOnNonZeroExit(t *testing.T) {
+	cfgPath := writeTestConfig(t, "table")
+	backend := &commandBackend{
+		nodes:           []output.NodeRow{{Name: "pve1"}},
+		agentExecResult: output.AgentExecResult{ExitCode: 2, Stderr: "no such file"},
+	}
+
+	err := RunWithDependencies([]string{
+		"pvectl", "--config", cfgPath,
+		"vm", "agent", "exec", "100",
+		"--",
+		"/bin/false",
+	}, "test", testDeps(&bytes.Buffer{}, backend))
+	if err == nil {
+		t.Fatal("expected non-zero exit code error")
+	}
+}
+
+func TestVMAgentExecCommandRequiresCommand(t *testing.T) {
+	cfgPath := writeTestConfig(t, "table")
+
+	err := RunWithDependencies([]string{
+		"pvectl", "--config", cfgPath,
+		"vm", "agent", "exec", "100",
+	}, "test", testDeps(&bytes.Buffer{}, &commandBackend{}))
+	if err == nil {
+		t.Fatal("expected missing command error")
+	}
+}
+
 func TestStatusCommandWritesReport(t *testing.T) {
 	cfgPath := writeTestConfig(t, "json")
 	backend := &commandBackend{

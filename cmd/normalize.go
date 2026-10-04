@@ -81,6 +81,12 @@ func normalizeArgs(args []string) []string {
 	positionals := make([]string, 0, len(rest))
 	for i := 0; i < len(rest); i++ {
 		token := rest[i]
+		// Everything after "--" belongs to the command verbatim (for example
+		// `vm agent exec 100 -- /usr/bin/uname -a`); stop reordering there.
+		if token == "--" {
+			positionals = append(positionals, rest[i:]...)
+			break
+		}
 		if !strings.HasPrefix(token, "-") || token == "-" {
 			positionals = append(positionals, token)
 			continue
