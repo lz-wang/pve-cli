@@ -11,6 +11,8 @@ var commandRoots = map[string]bool{
 	"task":    true,
 	"backup":  true,
 	"storage": true,
+	"network": true,
+	"firewall": true,
 	"vm":      true,
 	"lxc":     true,
 }

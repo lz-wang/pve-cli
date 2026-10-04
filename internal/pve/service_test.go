@@ -432,6 +432,8 @@ type fakeBackend struct {
 	agentExecOptions AgentExecOptions
 	agentExecResult  output.AgentExecResult
 	cloudInitConfigs map[int]output.CloudInitConfig
+	networkRows      map[string][]output.NetworkRow
+	networkErrs      map[string]error
 	vmCalls          int
 	lxcCalls         int
 	nodeCalls        int
@@ -599,6 +601,23 @@ func (b *fakeBackend) VirtualMachineCloudInit(_ context.Context, node string, vm
 		return detail, nil
 	}
 	return output.CloudInitConfig{}, ErrNotFound
+}
+
+func (b *fakeBackend) Networks(_ context.Context, node string, options NetworkListOptions) ([]output.NetworkRow, error) {
+	if err := b.networkErrs[node]; err != nil {
+		return nil, err
+	}
+	rows := b.networkRows[node]
+	return filterNetworkRows(rows, options), nil
+}
+
+func (b *fakeBackend) Network(_ context.Context, node, iface string) (output.NetworkRow, error) {
+	for _, row := range b.networkRows[node] {
+		if row.Name == iface {
+			return row, nil
+		}
+	}
+	return output.NetworkRow{}, ErrNotFound
 }
 
 func (b *fakeBackend) RegenerateVirtualMachineCloudInit(context.Context, string, int) error {

@@ -343,6 +343,28 @@ func TestStructuredOutputContracts(t *testing.T) {
 			},
 		},
 		{
+			name: "NetworkRow",
+			value: NetworkRow{
+				Node: "pve1", Name: "vmbr0", Type: "bridge", Active: true, Autostart: true,
+				Address: "192.168.2.2", CIDR: "192.168.2.2/24", Gateway: "192.168.2.1",
+				BridgePorts: "enp1s0", BondSlaves: "enp2s0", VLANAware: true, Comments: "lan",
+			},
+			fields: []contractField{
+				{"node", stringType},
+				{"name", stringType},
+				{"type", stringType},
+				{"active", boolType},
+				{"autostart", boolType},
+				{"address", stringType},
+				{"cidr", stringType},
+				{"gateway", stringType},
+				{"bridge_ports", stringType},
+				{"bond_slaves", stringType},
+				{"vlan_aware", boolType},
+				{"comments", stringType},
+			},
+		},
+		{
 			name: "TaskRow",
 			value: TaskRow{
 				UPID: "UPID:pve1:0001:0000:vzdump:100:root@pam:", Node: "pve1", Type: "vzdump",

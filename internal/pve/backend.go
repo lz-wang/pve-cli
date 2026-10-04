@@ -54,6 +54,7 @@ type Backend interface {
 	RestoreBackend
 	AgentBackend
 	CloudInitBackend
+	NetworkBackend
 }
 
 type ProxmoxBackend struct {

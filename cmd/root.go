@@ -124,6 +124,7 @@ func NewAppWithBuildInfoAndDependencies(info BuildInfo, deps Dependencies) *cli.
 			newTaskCommand(deps),
 			newBackupCommand(deps),
 			newStorageCommand(deps),
+			newNetworkCommand(deps),
 			newVMCommand(deps),
 			newLXCCommand(deps),
 		},

@@ -881,6 +881,8 @@ type commandBackend struct {
 	agentExecResult  output.AgentExecResult
 	cloudInitConfigs map[int]output.CloudInitConfig
 	cloudInitRegenerated int
+	networkRows      map[string][]output.NetworkRow
+	networkErrs      map[string]error
 	backupTask       pve.Task
 	backupNode       string
 	backupOptions    pve.BackupOptions
@@ -1037,6 +1039,33 @@ func (b *commandBackend) VirtualMachineCloudInit(_ context.Context, node string,
 func (b *commandBackend) RegenerateVirtualMachineCloudInit(_ context.Context, node string, vmid int) error {
 	b.cloudInitRegenerated = vmid
 	return nil
+}
+
+func (b *commandBackend) Networks(_ context.Context, node string, options pve.NetworkListOptions) ([]output.NetworkRow, error) {
+	if err := b.networkErrs[node]; err != nil {
+		return nil, err
+	}
+	rows := b.networkRows[node]
+	out := make([]output.NetworkRow, 0, len(rows))
+	for _, row := range rows {
+		if options.Type != "" && row.Type != options.Type {
+			continue
+		}
+		if options.Active && !row.Active {
+			continue
+		}
+		out = append(out, row)
+	}
+	return out, nil
+}
+
+func (b *commandBackend) Network(_ context.Context, node, iface string) (output.NetworkRow, error) {
+	for _, row := range b.networkRows[node] {
+		if row.Name == iface {
+			return row, nil
+		}
+	}
+	return output.NetworkRow{}, pve.ErrNotFound
 }
 
 type commandGuest struct {

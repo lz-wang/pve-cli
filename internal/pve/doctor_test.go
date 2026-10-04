@@ -357,3 +357,11 @@ func (b doctorBackend) VirtualMachineCloudInit(context.Context, string, int) (ou
 func (b doctorBackend) RegenerateVirtualMachineCloudInit(context.Context, string, int) error {
 	return ErrNotFound
 }
+
+func (b doctorBackend) Networks(context.Context, string, NetworkListOptions) ([]output.NetworkRow, error) {
+	return nil, nil
+}
+
+func (b doctorBackend) Network(context.Context, string, string) (output.NetworkRow, error) {
+	return output.NetworkRow{}, ErrNotFound
+}

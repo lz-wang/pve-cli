@@ -215,6 +215,21 @@ type CloudInitConfig struct {
 	Custom             []CloudInitCustom   `json:"custom,omitempty" yaml:"custom,omitempty"`
 }
 
+type NetworkRow struct {
+	Node        string `json:"node" yaml:"node"`
+	Name        string `json:"name" yaml:"name"`
+	Type        string `json:"type,omitempty" yaml:"type,omitempty"`
+	Active      bool   `json:"active" yaml:"active"`
+	Autostart   bool   `json:"autostart" yaml:"autostart"`
+	Address     string `json:"address,omitempty" yaml:"address,omitempty"`
+	CIDR        string `json:"cidr,omitempty" yaml:"cidr,omitempty"`
+	Gateway     string `json:"gateway,omitempty" yaml:"gateway,omitempty"`
+	BridgePorts string `json:"bridge_ports,omitempty" yaml:"bridge_ports,omitempty"`
+	BondSlaves  string `json:"bond_slaves,omitempty" yaml:"bond_slaves,omitempty"`
+	VLANAware   bool   `json:"vlan_aware" yaml:"vlan_aware"`
+	Comments    string `json:"comments,omitempty" yaml:"comments,omitempty"`
+}
+
 type StorageRow struct {
 	Node         string  `json:"node" yaml:"node"`
 	Storage      string  `json:"storage" yaml:"storage"`
@@ -441,6 +456,64 @@ func WriteCloudInitConfig(w io.Writer, format string, row CloudInitConfig) error
 		}
 		for _, custom := range row.Custom {
 			if _, err := fmt.Fprintf(tw, "cicustom:%s\t%s\n", custom.Device, custom.Volume); err != nil {
+				return err
+			}
+		}
+		return tw.Flush()
+	})
+}
+
+func WriteNetworkRows(w io.Writer, format string, rows []NetworkRow) error {
+	return Write(w, format, rows, func(w io.Writer) error {
+		tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+		if _, err := fmt.Fprintln(tw, "NODE\tNAME\tTYPE\tACTIVE\tAUTOSTART\tADDRESS\tGATEWAY\tPORTS/SLAVES\tVLAN\tCOMMENTS"); err != nil {
+			return err
+		}
+		for _, row := range rows {
+			ports := row.BridgePorts
+			if ports == "" {
+				ports = row.BondSlaves
+			}
+			if _, err := fmt.Fprintf(
+				tw,
+				"%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+				row.Node,
+				row.Name,
+				empty(row.Type),
+				formatBool(row.Active),
+				formatBool(row.Autostart),
+				empty(row.Address),
+				empty(row.Gateway),
+				empty(ports),
+				formatBool(row.VLANAware),
+				empty(row.Comments),
+			); err != nil {
+				return err
+			}
+		}
+		return tw.Flush()
+	})
+}
+
+func WriteNetworkDetail(w io.Writer, format string, row NetworkRow) error {
+	return Write(w, format, row, func(w io.Writer) error {
+		tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+		lines := [][2]string{
+			{"Node", row.Node},
+			{"Name", row.Name},
+			{"Type", empty(row.Type)},
+			{"Active", formatBool(row.Active)},
+			{"Autostart", formatBool(row.Autostart)},
+			{"Address", empty(row.Address)},
+			{"CIDR", empty(row.CIDR)},
+			{"Gateway", empty(row.Gateway)},
+			{"Bridge Ports", empty(row.BridgePorts)},
+			{"Bond Slaves", empty(row.BondSlaves)},
+			{"VLAN Aware", formatBool(row.VLANAware)},
+			{"Comments", empty(row.Comments)},
+		}
+		for _, line := range lines {
+			if _, err := fmt.Fprintf(tw, "%s:\t%s\n", line[0], line[1]); err != nil {
 				return err
 			}
 		}

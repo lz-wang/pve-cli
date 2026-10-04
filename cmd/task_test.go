@@ -434,3 +434,55 @@ func TestVMCloudInitUpdateCommandRegenerates(t *testing.T) {
 		t.Fatalf("stdout = %s", stdout.String())
 	}
 }
+
+func TestNetworkListCommandWritesRows(t *testing.T) {
+	cfgPath := writeTestConfig(t, "json")
+	backend := &commandBackend{
+		nodes: []output.NodeRow{{Name: "pve1"}},
+		networkRows: map[string][]output.NetworkRow{
+			"pve1": {
+				{Node: "pve1", Name: "vmbr0", Type: "bridge", Active: true, Autostart: true, CIDR: "192.168.2.2/24"},
+				{Node: "pve1", Name: "bond0", Type: "bond", Active: false},
+			},
+		},
+	}
+	var stdout bytes.Buffer
+
+	err := RunWithDependencies([]string{
+		"pvectl", "--config", cfgPath,
+		"network", "ls",
+		"--node", "pve1",
+		"--type", "bridge",
+		"--active",
+	}, "test", testDeps(&stdout, backend))
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	out := stdout.String()
+	if !strings.Contains(out, `"name": "vmbr0"`) || strings.Contains(out, `"name": "bond0"`) {
+		t.Fatalf("stdout = %s", out)
+	}
+}
+
+func TestNetworkGetCommandWritesDetail(t *testing.T) {
+	cfgPath := writeTestConfig(t, "json")
+	backend := &commandBackend{
+		nodes: []output.NodeRow{{Name: "pve1"}},
+		networkRows: map[string][]output.NetworkRow{
+			"pve1": {{Node: "pve1", Name: "vmbr0", Type: "bridge", Active: true, BridgePorts: "enp1s0"}},
+		},
+	}
+	var stdout bytes.Buffer
+
+	err := RunWithDependencies([]string{
+		"pvectl", "--config", cfgPath,
+		"network", "get", "vmbr0",
+		"--node", "pve1",
+	}, "test", testDeps(&stdout, backend))
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if !strings.Contains(stdout.String(), `"bridge_ports": "enp1s0"`) {
+		t.Fatalf("stdout = %s", stdout.String())
+	}
+}
