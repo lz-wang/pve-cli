@@ -21,9 +21,11 @@ const (
 )
 
 type GuestListOptions struct {
-	Node   string
-	Type   GuestType
-	Status string
+	Node     string
+	Type     GuestType
+	Status   string
+	Tags     []string
+	TagMatch string
 }
 
 type GuestGetOptions struct {
@@ -84,7 +86,7 @@ func (s *GuestAggregateService) List(ctx context.Context, options GuestListOptio
 		if err != nil {
 			return nil, err
 		}
-		return sortGuestRows(filterGuestRows(rows, options.Status)), nil
+		return sortGuestRows(filterGuestRows(rows, options.Status, options.Tags, options.TagMatch)), nil
 	}
 
 	nodes, err := s.backend.Nodes(ctx)
@@ -116,7 +118,7 @@ func (s *GuestAggregateService) List(ctx context.Context, options GuestListOptio
 		return nil, fmt.Errorf("list guests: no nodes could be queried: %w", firstErr)
 	}
 
-	return sortGuestRows(filterGuestRows(rows, options.Status)), nil
+	return sortGuestRows(filterGuestRows(rows, options.Status, options.Tags, options.TagMatch)), nil
 }
 
 func (s *GuestAggregateService) Get(ctx context.Context, vmid int, options GuestGetOptions) (output.GuestRow, error) {
@@ -202,17 +204,21 @@ func guestTypeIncludes(guestType GuestType) (bool, bool, error) {
 	}
 }
 
-func filterGuestRows(rows []output.GuestRow, status string) []output.GuestRow {
+func filterGuestRows(rows []output.GuestRow, status string, tags []string, tagMatch string) []output.GuestRow {
 	status = strings.ToLower(strings.TrimSpace(status))
-	if status == "" {
+	if status == "" && len(tags) == 0 {
 		return rows
 	}
 
 	out := rows[:0]
 	for _, row := range rows {
-		if strings.ToLower(strings.TrimSpace(row.Status)) == status {
-			out = append(out, row)
+		if status != "" && strings.ToLower(strings.TrimSpace(row.Status)) != status {
+			continue
 		}
+		if len(tags) > 0 && !MatchGuestTags(ParseGuestTags(row.Tags), tags, tagMatch) {
+			continue
+		}
+		out = append(out, row)
 	}
 	return out
 }

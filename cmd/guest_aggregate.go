@@ -27,6 +27,8 @@ func guestAggregateListCommand(deps Dependencies) *cli.Command {
 				&cli.StringFlag{Name: "node", Usage: "PVE node name"},
 				&cli.StringFlag{Name: "type", Value: "all", Usage: "guest type: all,vm,lxc"},
 				&cli.StringFlag{Name: "status", Usage: "guest status filter, for example running or stopped"},
+				&cli.StringSliceFlag{Name: "tag", Usage: "filter guests by tag, repeatable"},
+				&cli.StringFlag{Name: "tag-match", Value: pve.TagMatchAll, Usage: "tag match mode: all,any"},
 			},
 			commonOutputFlags()...,
 		),
@@ -39,6 +41,10 @@ func guestAggregateListCommand(deps Dependencies) *cli.Command {
 			if err != nil {
 				return err
 			}
+			tagMatch, err := pve.ParseTagMatch(c.String("tag-match"))
+			if err != nil {
+				return err
+			}
 
 			rt, err := buildRuntime(c, deps)
 			if err != nil {
@@ -47,9 +53,11 @@ func guestAggregateListCommand(deps Dependencies) *cli.Command {
 
 			svc := pve.NewGuestAggregateService(rt.backend, rt.logger, rt.verbose)
 			rows, err := svc.List(c.Context, pve.GuestListOptions{
-				Node:   c.String("node"),
-				Type:   guestType,
-				Status: c.String("status"),
+				Node:     c.String("node"),
+				Type:     guestType,
+				Status:   c.String("status"),
+				Tags:     c.StringSlice("tag"),
+				TagMatch: tagMatch,
 			})
 			if err != nil {
 				return err

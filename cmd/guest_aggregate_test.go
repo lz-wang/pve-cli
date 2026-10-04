@@ -10,6 +10,53 @@ import (
 	"github.com/lz-wang/pvectl/internal/pve"
 )
 
+func TestGuestListCommandTagFiltering(t *testing.T) {
+	cfgPath := writeTestConfig(t, "json")
+	backend := &commandBackend{
+		nodes: []output.NodeRow{{Name: "pve1"}},
+		vms: map[string][]output.GuestRow{
+			"pve1": {
+				{Kind: "vm", VMID: 100, Name: "debian", Node: "pve1", Status: "running", Tags: "infra,docker"},
+				{Kind: "vm", VMID: 101, Name: "play", Node: "pve1", Status: "running", Tags: "sandbox"},
+			},
+		},
+		lxcs: map[string][]output.GuestRow{
+			"pve1": {{Kind: "lxc", VMID: 200, Name: "agh", Node: "pve1", Status: "running", Tags: "infra,production"}},
+		},
+	}
+
+	var stdout bytes.Buffer
+	err := RunWithDependencies([]string{
+		"pvectl", "--config", cfgPath,
+		"guest", "ls",
+		"--tag", "infra",
+		"--tag", "docker",
+	}, "test", testDeps(&stdout, backend))
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	out := stdout.String()
+	if !strings.Contains(out, `"vmid": 100`) || strings.Contains(out, `"vmid": 101`) || strings.Contains(out, `"vmid": 200`) {
+		t.Fatalf("all-match filter failed: %s", out)
+	}
+
+	stdout.Reset()
+	err = RunWithDependencies([]string{
+		"pvectl", "--config", cfgPath,
+		"guest", "ls",
+		"--tag", "infra",
+		"--tag", "production",
+		"--tag-match", "any",
+	}, "test", testDeps(&stdout, backend))
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	out = stdout.String()
+	if !strings.Contains(out, `"vmid": 100`) || !strings.Contains(out, `"vmid": 200`) || strings.Contains(out, `"vmid": 101`) {
+		t.Fatalf("any-match filter failed: %s", out)
+	}
+}
+
 func TestGuestListCommandWritesTableWithKind(t *testing.T) {
 	cfgPath := writeTestConfig(t, "table")
 	var stdout bytes.Buffer
