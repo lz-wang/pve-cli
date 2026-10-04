@@ -12,6 +12,63 @@ import (
 
 const testUPID = "UPID:pve1:0001:0000:6839F4A1:vzdump:100:root@pam"
 
+func TestStatusCommandWritesReport(t *testing.T) {
+	cfgPath := writeTestConfig(t, "json")
+	backend := &commandBackend{
+		nodes: []output.NodeRow{{Name: "pve1", Status: "online", CPU: 0.12, Mem: 100, MaxMem: 200, Uptime: 3600}},
+		vms: map[string][]output.GuestRow{
+			"pve1": {{Kind: "vm", VMID: 100, Node: "pve1", Status: "running"}},
+		},
+		lxcs: map[string][]output.GuestRow{
+			"pve1": {{Kind: "lxc", VMID: 200, Node: "pve1", Status: "stopped"}},
+		},
+		storages: map[string][]output.StorageRow{
+			"pve1": {
+				{Node: "pve1", Storage: "local", Active: true, Content: "iso"},
+				{Node: "pve1", Storage: "backup", Active: true, Content: "backup"},
+			},
+		},
+		backups: map[string]map[string][]output.BackupRow{
+			"pve1": {"backup": {{Node: "pve1", Storage: "backup", Kind: "vm", VMID: 100, CTime: 1710000000}}},
+		},
+	}
+	var stdout bytes.Buffer
+
+	err := RunWithDependencies([]string{
+		"pvectl", "--config", cfgPath,
+		"status",
+	}, "test", testDeps(&stdout, backend))
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	out := stdout.String()
+	for _, want := range []string{`"total": 2`, `"running": 1`, `"stopped": 1`, `"count": 1`, `"latest_ctime": 1710000000`} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("stdout missing %s: %s", want, out)
+		}
+	}
+}
+
+func TestStatusCommandReportsPartialIssues(t *testing.T) {
+	cfgPath := writeTestConfig(t, "json")
+	backend := &commandBackend{
+		nodes:     []output.NodeRow{{Name: "pve1", Status: "online"}},
+		storageErrs: map[string]error{"pve1": errors.New("timeout")},
+	}
+	var stdout bytes.Buffer
+
+	err := RunWithDependencies([]string{
+		"pvectl", "--config", cfgPath,
+		"status",
+	}, "test", testDeps(&stdout, backend))
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if !strings.Contains(stdout.String(), `"component": "storage"`) {
+		t.Fatalf("stdout = %s", stdout.String())
+	}
+}
+
 func TestTaskListCommandWritesRows(t *testing.T) {
 	cfgPath := writeTestConfig(t, "json")
 	backend := &commandBackend{

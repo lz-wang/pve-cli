@@ -878,6 +878,8 @@ type commandBackend struct {
 	backupNode     string
 	backupOptions  pve.BackupOptions
 	backupCalls    int
+	storageErrs    map[string]error
+	backupErrs     map[string]error
 }
 
 func (b *commandBackend) Nodes(context.Context) ([]output.NodeRow, error) {
@@ -907,6 +909,9 @@ func (b *commandBackend) LXC(_ context.Context, node string, vmid int) (pve.Gues
 }
 
 func (b *commandBackend) Backups(_ context.Context, node, storage string) ([]output.BackupRow, error) {
+	if err := b.backupErrs[node+"/"+storage]; err != nil {
+		return nil, err
+	}
 	if b.backups == nil {
 		return nil, nil
 	}
@@ -921,6 +926,9 @@ func (b *commandBackend) BackupGuest(_ context.Context, node string, options pve
 }
 
 func (b *commandBackend) Storages(_ context.Context, node string) ([]output.StorageRow, error) {
+	if err := b.storageErrs[node]; err != nil {
+		return nil, err
+	}
 	if b.storages == nil {
 		return nil, nil
 	}

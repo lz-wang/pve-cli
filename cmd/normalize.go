@@ -4,6 +4,7 @@ import "strings"
 
 var commandRoots = map[string]bool{
 	"config":  true,
+	"status":  true,
 	"node":    true,
 	"guest":   true,
 	"task":    true,

@@ -668,6 +668,110 @@ func WriteStorageContentRows(w io.Writer, format string, rows []StorageContentRo
 	})
 }
 
+func WriteStatusReport(w io.Writer, format string, report StatusReport) error {
+	return Write(w, format, report, func(w io.Writer) error {
+		tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+
+		if _, err := fmt.Fprintln(tw, "NODE"); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintln(tw, "NAME\tSTATUS\tCPU\tMEMORY\tUPTIME"); err != nil {
+			return err
+		}
+		for _, row := range report.Nodes.Rows {
+			if _, err := fmt.Fprintf(
+				tw,
+				"%s\t%s\t%.0f%%\t%s/%s\t%s\n",
+				row.Name,
+				empty(row.Status),
+				row.CPU*100,
+				FormatBytes(row.Mem),
+				FormatBytes(row.MaxMem),
+				FormatUptime(row.Uptime),
+			); err != nil {
+				return err
+			}
+		}
+
+		if _, err := fmt.Fprintln(tw, "\nGUESTS"); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintln(tw, "TOTAL\tRUNNING\tSTOPPED\tVM\tLXC"); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(
+			tw,
+			"%d\t%d\t%d\t%d\t%d\n",
+			report.Guests.Total,
+			report.Guests.Running,
+			report.Guests.Stopped,
+			report.Guests.VM,
+			report.Guests.LXC,
+		); err != nil {
+			return err
+		}
+
+		if _, err := fmt.Fprintln(tw, "\nSTORAGE"); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintln(tw, "NAME\tNODE\tUSED\tSTATUS"); err != nil {
+			return err
+		}
+		for _, row := range report.Storages.Rows {
+			if _, err := fmt.Fprintf(
+				tw,
+				"%s\t%s\t%.0f%%\t%s\n",
+				row.Storage,
+				row.Node,
+				row.UsedFraction*100,
+				storageStatusText(row),
+			); err != nil {
+				return err
+			}
+		}
+
+		if _, err := fmt.Fprintln(tw, "\nBACKUP"); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintln(tw, "COUNT\tLATEST"); err != nil {
+			return err
+		}
+		latest := "-"
+		if report.Backups.LatestCtime > 0 {
+			age := uint64(time.Now().Unix()) - report.Backups.LatestCtime
+			latest = FormatUptime(age) + " ago"
+		}
+		if _, err := fmt.Fprintf(tw, "%d\t%s\n", report.Backups.Count, latest); err != nil {
+			return err
+		}
+
+		if len(report.Issues) > 0 {
+			if _, err := fmt.Fprintln(tw, "\nISSUES"); err != nil {
+				return err
+			}
+			if _, err := fmt.Fprintln(tw, "COMPONENT\tMESSAGE"); err != nil {
+				return err
+			}
+			for _, issue := range report.Issues {
+				if _, err := fmt.Fprintf(tw, "%s\t%s\n", issue.Component, issue.Message); err != nil {
+					return err
+				}
+			}
+		}
+		return tw.Flush()
+	})
+}
+
+func storageStatusText(row StorageRow) string {
+	if !row.Enabled {
+		return "disabled"
+	}
+	if !row.Active {
+		return "inactive"
+	}
+	return "active"
+}
+
 func FormatBytes(n uint64) string {
 	if n == 0 {
 		return "0B"
