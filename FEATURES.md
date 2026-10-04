@@ -33,7 +33,11 @@ are user-defined; documentation uses `PVE_*` examples.
 - `config set-profile NAME` creates or updates a named profile.
 - `config use-profile NAME` switches the current profile.
 - `config current-profile` prints the active profile name.
-- `config view` prints the current config file, including plaintext tokens.
+- `config view` prints YAML with plaintext token summaries and the absolute
+  config-file path in a final YAML comment. Tokens longer than six Unicode
+  characters retain the first and last three characters around `*****`; tokens
+  of six characters or fewer display only `*****`. Environment variable names
+  remain visible without reading their values, and stored tokens are unchanged.
   When the file is missing, it reports the missing file and offers interactive
   initialization with hidden token input in a terminal. Declining or ending input
   leaves the file uncreated; nonterminal input receives a setup hint without

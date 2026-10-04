@@ -45,9 +45,9 @@ Declining setup or ending input leaves the file uncreated and exits successfully
 With nonterminal stdin, the command displays a `pve config init` hint and exits
 successfully without waiting for input. Missing-file notices, prompts, and setup
 results go to stderr; stdout stays empty during setup. After creation, run
-`pve config view` again to print the stored YAML. Setup never overwrites a file
-that appeared while entering the values. Invalid YAML and file-access failures
-still produce errors.
+`pve config view` again to display the YAML with token summaries. Setup never
+overwrites a file that appeared while entering the values. Invalid YAML and
+file-access failures still produce errors.
 
 For a typical HomeLab setup, initialize one default profile and run a
 diagnostic check:
@@ -94,8 +94,29 @@ A non-empty `token_secret` takes precedence over `token_secret_env`; the
 environment variable is read only when the plaintext value is empty or absent.
 Environment variable names are user-defined. Config files are saved with
 permissions `0600` on Unix, including when replacing an existing file.
-`config view` prints the complete stored YAML, including plaintext
-`token_secret`. Doctor reports the credential source without printing its value.
+`config view` prints YAML with each non-empty `token_secret` masked. Values longer
+than six Unicode characters show the first three and last three characters with
+`*****` between them, such as `dd1*****ef4`; values of six characters or fewer show
+only `*****`. This display does not change the stored token or authentication.
+`token_secret_env` names are displayed as configured, without reading their values.
+The last line is a YAML comment containing the absolute config-file path after
+expanding `~` and environment variables. Line breaks in file names are escaped
+to keep the comment on one line. For example:
+
+```yaml
+current_profile: home
+profiles:
+  home:
+    endpoint: https://pve.lan:8006/api2/json
+    token_id: automation@pve!pve
+    token_secret: dd1*****ef4
+    insecure_skip_verify: true
+    timeout: 30s
+    default_output: table
+# Config file: /home/user/.config/pve/config.yaml
+```
+
+Doctor reports the credential source without printing its value.
 
 Use `config set-profile` and `config use-profile` when you need to manage more
 than one profile:

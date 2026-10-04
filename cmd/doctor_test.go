@@ -50,8 +50,8 @@ func TestConfigCommandsWithPlaintextToken(t *testing.T) {
 			if err := RunWithDependencies([]string{"pve", "--config", cfgPath, "config", "view"}, "test", deps); err != nil {
 				t.Fatalf("config view: %v", err)
 			}
-			if !strings.Contains(stdout.String(), "token_secret: fake-plaintext-token") {
-				t.Fatal("config view did not include the stored plaintext field")
+			if !strings.Contains(stdout.String(), "token_secret: fak*****ken") || strings.Contains(stdout.String()+stderr.String(), "fake-plaintext-token") {
+				t.Fatal("config view should summarize the stored plaintext field")
 			}
 			stdout.Reset()
 			if err := RunWithDependencies([]string{"pve", "--config", cfgPath, "node", "ls"}, "test", deps); err != nil {

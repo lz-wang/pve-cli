@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/urfave/cli/v2"
@@ -19,7 +21,7 @@ func newConfigCommand(deps Dependencies) *cli.Command {
 		Subcommands: []*cli.Command{
 			{
 				Name:  "view",
-				Usage: "Print the config file, or guide initialization when it is missing",
+				Usage: "Print config with token summaries and its path, or guide initialization when missing",
 				Action: func(c *cli.Context) error {
 					if err := requireNoExtraArgs(c, 0); err != nil {
 						return err
@@ -31,11 +33,31 @@ func newConfigCommand(deps Dependencies) *cli.Command {
 					if err != nil {
 						return fmt.Errorf("config error: %w", err)
 					}
-					data, err := config.ToYAML(cfg)
+					path, err := config.ExpandPath(c.String("config"))
 					if err != nil {
 						return err
 					}
-					_, err = c.App.Writer.Write(data)
+					path, err = filepath.Abs(path)
+					if err != nil {
+						return fmt.Errorf("resolve config path: %w", err)
+					}
+					view := &config.Config{CurrentProfile: cfg.CurrentProfile, Profiles: make(map[string]config.Profile, len(cfg.Profiles))}
+					for name, profile := range cfg.Profiles {
+						profile.TokenSecret = summarizeTokenSecret(profile.TokenSecret)
+						view.Profiles[name] = profile
+					}
+					data, err := config.ToYAML(view)
+					if err != nil {
+						return err
+					}
+					if _, err := c.App.Writer.Write(data); err != nil {
+						return err
+					}
+					displayPath := strings.NewReplacer(
+						"\r", "\\r", "\n", "\\n", "\u0085", "\\u0085",
+						"\u2028", "\\u2028", "\u2029", "\\u2029",
+					).Replace(path)
+					_, err = fmt.Fprintf(c.App.Writer, "# Config file: %s\n", displayPath)
 					return err
 				},
 			},
@@ -172,6 +194,17 @@ func newConfigCommand(deps Dependencies) *cli.Command {
 			removedContextCommand("current-context", "current-profile"),
 		},
 	}
+}
+
+func summarizeTokenSecret(secret string) string {
+	if secret == "" {
+		return ""
+	}
+	chars := []rune(secret)
+	if len(chars) <= 6 {
+		return "*****"
+	}
+	return string(chars[:3]) + "*****" + string(chars[len(chars)-3:])
 }
 
 func removedContextCommand(name, replacement string) *cli.Command {

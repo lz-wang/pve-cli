@@ -31,7 +31,10 @@
 - `config set-profile NAME` 创建或更新指定 profile。
 - `config use-profile NAME` 切换当前 profile。
 - `config current-profile` 打印当前 profile 名称。
-- `config view` 打印当前配置文件，包括明文 token。
+- `config view` 打印 YAML，将明文 token 显示为摘要，并在最后一行的 YAML 注释中
+  给出配置文件的绝对路径。超过六个 Unicode 字符的 token 保留前三个和后三个
+  字符，中间显示 `*****`；六个字符及以内仅显示 `*****`。环境变量名称正常
+  展示，不读取其值，配置文件中存储的 token 不变。
   文件不存在时提示缺少配置，并在终端中交互式引导初始化，输入 token 时隐藏
   回显。拒绝或结束输入不会创建文件；非终端输入显示初始化命令提示，不等待
   输入。这些情况均正常退出。初始化提示输出到 stderr，且不会覆盖已有文件。

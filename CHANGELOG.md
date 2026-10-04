@@ -27,7 +27,10 @@
 - Update CLI documentation and examples to use `pve` and `PVE_*` environment
   variable names. Token-secret environment variable names remain user-defined.
 - Save config files with permissions `0600` on Unix, including existing files.
-- Include stored plaintext `token_secret` in `pve config view` output.
+- Mask stored plaintext `token_secret` in `pve config view` output, retaining
+  the first and last three Unicode characters for values longer than six
+  characters and using only `*****` for values of six characters or fewer.
+  Append the resolved absolute config-file path as a final YAML comment.
 
 ## v1.1.0 - 2026-10-04
 
