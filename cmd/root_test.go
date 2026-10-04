@@ -859,36 +859,38 @@ func TestConfigSetProfileCommandDoesNotRequireSecretEnv(t *testing.T) {
 }
 
 type commandBackend struct {
-	nodes            []output.NodeRow
-	nodeDetails      map[string]output.NodeDetail
-	vms              map[string][]output.GuestRow
-	lxcs             map[string][]output.GuestRow
-	vmGuests         map[string]map[int]*commandGuest
-	lxcGuests        map[string]map[int]*commandGuest
-	backups          map[string]map[string][]output.BackupRow
-	storages         map[string][]output.StorageRow
-	storageByName    map[string]map[string]output.StorageRow
-	storageContent   map[string]map[string][]output.StorageContentRow
-	taskRows         map[string][]output.TaskRow
-	taskErrs         map[string]error
-	taskByName       map[string]output.TaskRow
-	taskLog          map[string][]output.TaskLogRow
-	taskHandles      map[string]pve.Task
-	restoreOptions   pve.RestoreOptions
-	agentErr         error
-	agentNetwork     []output.AgentNetworkRow
-	agentExecOptions pve.AgentExecOptions
-	agentExecResult  output.AgentExecResult
-	cloudInitConfigs map[int]output.CloudInitConfig
+	nodes                []output.NodeRow
+	nodeDetails          map[string]output.NodeDetail
+	vms                  map[string][]output.GuestRow
+	lxcs                 map[string][]output.GuestRow
+	vmGuests             map[string]map[int]*commandGuest
+	lxcGuests            map[string]map[int]*commandGuest
+	backups              map[string]map[string][]output.BackupRow
+	storages             map[string][]output.StorageRow
+	storageByName        map[string]map[string]output.StorageRow
+	storageContent       map[string]map[string][]output.StorageContentRow
+	taskRows             map[string][]output.TaskRow
+	taskErrs             map[string]error
+	taskByName           map[string]output.TaskRow
+	taskLog              map[string][]output.TaskLogRow
+	taskHandles          map[string]pve.Task
+	restoreOptions       pve.RestoreOptions
+	agentErr             error
+	agentNetwork         []output.AgentNetworkRow
+	agentExecOptions     pve.AgentExecOptions
+	agentExecResult      output.AgentExecResult
+	cloudInitConfigs     map[int]output.CloudInitConfig
 	cloudInitRegenerated int
-	networkRows      map[string][]output.NetworkRow
-	networkErrs      map[string]error
-	backupTask       pve.Task
-	backupNode       string
-	backupOptions    pve.BackupOptions
-	backupCalls      int
-	storageErrs      map[string]error
-	backupErrs       map[string]error
+	networkRows          map[string][]output.NetworkRow
+	networkErrs          map[string]error
+	firewallStatus       map[string]output.FirewallStatusRow
+	firewallRules        map[string][]output.FirewallRuleRow
+	backupTask           pve.Task
+	backupNode           string
+	backupOptions        pve.BackupOptions
+	backupCalls          int
+	storageErrs          map[string]error
+	backupErrs           map[string]error
 }
 
 func (b *commandBackend) Nodes(context.Context) ([]output.NodeRow, error) {
@@ -1066,6 +1068,18 @@ func (b *commandBackend) Network(_ context.Context, node, iface string) (output.
 		}
 	}
 	return output.NetworkRow{}, pve.ErrNotFound
+}
+
+func (b *commandBackend) FirewallStatus(_ context.Context, scope pve.FirewallScope) (output.FirewallStatusRow, error) {
+	row, ok := b.firewallStatus[scope.Type]
+	if !ok {
+		return output.FirewallStatusRow{}, pve.ErrNotFound
+	}
+	return row, nil
+}
+
+func (b *commandBackend) FirewallRules(_ context.Context, scope pve.FirewallScope) ([]output.FirewallRuleRow, error) {
+	return b.firewallRules[scope.Type], nil
 }
 
 type commandGuest struct {

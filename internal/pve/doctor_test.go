@@ -365,3 +365,11 @@ func (b doctorBackend) Networks(context.Context, string, NetworkListOptions) ([]
 func (b doctorBackend) Network(context.Context, string, string) (output.NetworkRow, error) {
 	return output.NetworkRow{}, ErrNotFound
 }
+
+func (b doctorBackend) FirewallStatus(context.Context, FirewallScope) (output.FirewallStatusRow, error) {
+	return output.FirewallStatusRow{}, ErrNotFound
+}
+
+func (b doctorBackend) FirewallRules(context.Context, FirewallScope) ([]output.FirewallRuleRow, error) {
+	return nil, nil
+}

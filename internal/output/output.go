@@ -230,6 +230,31 @@ type NetworkRow struct {
 	Comments    string `json:"comments,omitempty" yaml:"comments,omitempty"`
 }
 
+type FirewallStatusRow struct {
+	Scope   string `json:"scope" yaml:"scope"`
+	Node    string `json:"node" yaml:"node"`
+	VMID    uint64 `json:"vmid,omitempty" yaml:"vmid,omitempty"`
+	Enabled bool   `json:"enabled" yaml:"enabled"`
+}
+
+type FirewallRuleRow struct {
+	Scope       string `json:"scope" yaml:"scope"`
+	Node        string `json:"node" yaml:"node"`
+	VMID        uint64 `json:"vmid,omitempty" yaml:"vmid,omitempty"`
+	Position    int    `json:"position" yaml:"position"`
+	Enabled     bool   `json:"enabled" yaml:"enabled"`
+	Direction   string `json:"direction,omitempty" yaml:"direction,omitempty"`
+	Action      string `json:"action,omitempty" yaml:"action,omitempty"`
+	Interface   string `json:"interface,omitempty" yaml:"interface,omitempty"`
+	Source      string `json:"source,omitempty" yaml:"source,omitempty"`
+	Destination string `json:"destination,omitempty" yaml:"destination,omitempty"`
+	Protocol    string `json:"protocol,omitempty" yaml:"protocol,omitempty"`
+	SourcePort  string `json:"source_port,omitempty" yaml:"source_port,omitempty"`
+	DestPort    string `json:"dest_port,omitempty" yaml:"dest_port,omitempty"`
+	Log         string `json:"log,omitempty" yaml:"log,omitempty"`
+	Comment     string `json:"comment,omitempty" yaml:"comment,omitempty"`
+}
+
 type StorageRow struct {
 	Node         string  `json:"node" yaml:"node"`
 	Storage      string  `json:"storage" yaml:"storage"`
@@ -514,6 +539,57 @@ func WriteNetworkDetail(w io.Writer, format string, row NetworkRow) error {
 		}
 		for _, line := range lines {
 			if _, err := fmt.Fprintf(tw, "%s:\t%s\n", line[0], line[1]); err != nil {
+				return err
+			}
+		}
+		return tw.Flush()
+	})
+}
+
+func WriteFirewallStatus(w io.Writer, format string, row FirewallStatusRow) error {
+	return Write(w, format, row, func(w io.Writer) error {
+		tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+		lines := [][2]string{
+			{"Scope", row.Scope},
+			{"Node", row.Node},
+			{"VMID", formatOptionalUint(row.VMID)},
+			{"Enabled", formatBool(row.Enabled)},
+		}
+		for _, line := range lines {
+			if _, err := fmt.Fprintf(tw, "%s:\t%s\n", line[0], line[1]); err != nil {
+				return err
+			}
+		}
+		return tw.Flush()
+	})
+}
+
+func WriteFirewallRuleRows(w io.Writer, format string, rows []FirewallRuleRow) error {
+	return Write(w, format, rows, func(w io.Writer) error {
+		tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+		if _, err := fmt.Fprintln(tw, "SCOPE\tNODE\tVMID\tPOS\tENABLED\tDIRECTION\tACTION\tIFACE\tSOURCE\tDEST\tPROTO\tSPORT\tDPORT\tLOG\tCOMMENT"); err != nil {
+			return err
+		}
+		for _, row := range rows {
+			if _, err := fmt.Fprintf(
+				tw,
+				"%s\t%s\t%s\t%d\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+				row.Scope,
+				row.Node,
+				formatOptionalUint(row.VMID),
+				row.Position,
+				formatBool(row.Enabled),
+				empty(row.Direction),
+				empty(row.Action),
+				empty(row.Interface),
+				empty(row.Source),
+				empty(row.Destination),
+				empty(row.Protocol),
+				empty(row.SourcePort),
+				empty(row.DestPort),
+				empty(row.Log),
+				empty(row.Comment),
+			); err != nil {
 				return err
 			}
 		}

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/lz-wang/pvectl/internal/output"
@@ -434,6 +435,8 @@ type fakeBackend struct {
 	cloudInitConfigs map[int]output.CloudInitConfig
 	networkRows      map[string][]output.NetworkRow
 	networkErrs      map[string]error
+	firewallStatus   map[string]output.FirewallStatusRow
+	firewallRules    map[string][]output.FirewallRuleRow
 	vmCalls          int
 	lxcCalls         int
 	nodeCalls        int
@@ -618,6 +621,22 @@ func (b *fakeBackend) Network(_ context.Context, node, iface string) (output.Net
 		}
 	}
 	return output.NetworkRow{}, ErrNotFound
+}
+
+func (b *fakeBackend) FirewallStatus(_ context.Context, scope FirewallScope) (output.FirewallStatusRow, error) {
+	row, ok := b.firewallStatus[firewallScopeKey(scope)]
+	if !ok {
+		return output.FirewallStatusRow{}, ErrNotFound
+	}
+	return row, nil
+}
+
+func (b *fakeBackend) FirewallRules(_ context.Context, scope FirewallScope) ([]output.FirewallRuleRow, error) {
+	return b.firewallRules[firewallScopeKey(scope)], nil
+}
+
+func firewallScopeKey(scope FirewallScope) string {
+	return scope.Type + "/" + scope.Node + "/" + fmt.Sprint(scope.VMID)
 }
 
 func (b *fakeBackend) RegenerateVirtualMachineCloudInit(context.Context, string, int) error {

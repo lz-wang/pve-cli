@@ -55,6 +55,7 @@ type Backend interface {
 	AgentBackend
 	CloudInitBackend
 	NetworkBackend
+	FirewallBackend
 }
 
 type ProxmoxBackend struct {
