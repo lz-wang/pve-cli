@@ -11,7 +11,8 @@ daily VM/QEMU and LXC workflows.
   and lifecycle commands first, with guest deletion and snapshot rollback last.
 - Uses the `pve` executable for local builds, installs, and release packages;
   Homebrew installs it with `brew install lz-wang/tap/pve`.
-- Supports `table`, `json`, and `yaml` output via `--output` or `-o`.
+- Supports `table`, `json`, and `yaml` resource output via `--output` or `-o`;
+  local config inspection uses tables.
 - Supports profile selection with `--profile`.
 - Supports custom config paths with `--config`.
 - Supports API timeout override with `--timeout`.
@@ -29,26 +30,42 @@ can be moved there or selected with `--config`; no old-path fallback or
 automatic migration is performed. Token-secret environment variable names
 are user-defined; documentation uses `PVE_*` examples.
 
-- `config init` initializes a default HomeLab profile.
-- `config set-profile NAME` creates or updates a named profile.
-- `config use-profile NAME` switches the current profile.
-- `config current-profile` prints the active profile name.
-- `config view` prints YAML with plaintext token summaries and the absolute
-  config-file path in a final YAML comment. Tokens longer than six Unicode
-  characters retain the first and last three characters around `*****`; tokens
-  of six characters or fewer display only `*****`. Environment variable names
-  remain visible without reading their values, and stored tokens are unchanged.
-  When the file is missing, it reports the missing file and offers interactive
-  initialization with hidden token input in a terminal. Declining or ending input
-  leaves the file uncreated; nonterminal input receives a setup hint without
-  waiting. These cases exit successfully. Setup messages go to stderr and never
-  overwrite an existing file.
+- `config ls` prints only profile names and endpoints, sorted by profile name.
+- `config show` displays the current profile, `config show NAME` or global
+  `--profile NAME` selects one profile, and `config show --all` displays all
+  profiles. Combining selectors is rejected. Each profile has a `FIELD` /
+  `VALUE` table containing Profile, Current, Endpoint, Token ID, Token secret,
+  Token secret env, Skip TLS verify, Timeout, and Default output. The final line
+  gives `Config file: /absolute/path/config.yaml`.
+- `config add` interactively adds a profile, with hidden plaintext token input,
+  optional environment references, and defaults from global `--timeout`,
+  `--output`, and `--insecure`. It asks whether to make the profile current,
+  defaulting to yes when no current profile is configured and no otherwise.
+  Existing names are never overwritten; cancellation writes no changes.
+- `config update NAME` noninteractively creates or updates a profile. Connection
+  writes require an endpoint, token ID, and at least one token source. Defaults
+  are timeout `30s` and output `table`. `--use` makes the written profile current;
+  `config update NAME --use` alone switches to an existing profile without
+  changing its connection settings or requiring token flags.
+- `config help` documents the available commands in the order `ls`, `show`,
+  `add`, `update`, `help`. Earlier config commands have been removed.
+
+`config show` masks tokens longer than six Unicode characters by retaining the
+first and last three characters around `*****`; tokens of six characters or
+fewer display only `*****`. Environment variable names remain visible without
+reading their values, and stored tokens are unchanged. The final config-file
+path is absolute after expanding `~` and environment variables, with line breaks
+escaped to keep it on one line.
+
+When the file is missing, `config ls` and `config show` offer guided initialization
+in a terminal. Declining or ending input leaves the file uncreated; nonterminal
+input receives an add/update setup hint without waiting. These cases exit
+successfully. Setup messages go to stderr and never overwrite an existing file.
 
 Config stores the Proxmox endpoint, token ID, TLS behavior, timeout, and default
 output format. Tokens can be stored directly as plaintext `token_secret` via
 `--token-secret`, or referenced by `token_secret_env` via `--token-secret-env`.
-`config init` and `config set-profile` require at least one token source; a
-non-empty plaintext value takes precedence over the environment reference.
+A non-empty plaintext value takes precedence over the environment reference.
 Config files are saved with permissions `0600` on Unix, including existing files.
 
 ## Diagnostics

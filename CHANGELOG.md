@@ -4,14 +4,16 @@
 
 ### Added
 
-- Support plaintext `token_secret` in YAML profiles and `--token-secret` for
-  `pve config init` and `pve config set-profile`. A non-empty plaintext value
-  takes precedence over `token_secret_env`; at least one token source is required.
+- Support plaintext `token_secret` in YAML profiles, hidden token input in
+  `pve config add`, and `--token-secret` for `pve config update`. A non-empty
+  plaintext value takes precedence over `token_secret_env`; connection writes
+  require at least one token source.
 - Add doctor diagnostics for plaintext tokens without printing their values,
   and redact token values from backend error messages.
-- Guide interactive initialization from `pve config view` when its config file
-  is missing, with hidden token input, optional environment references, clean
-  cancellation, nonterminal setup hints, and no overwrite of existing files.
+- Guide interactive initialization from `pve config ls` and `pve config show`
+  when the config file is missing, with hidden token input, optional environment
+  references, clean cancellation, nonterminal add/update setup hints, and no
+  overwrite of existing files.
 
 ### Changed
 
@@ -27,10 +29,17 @@
 - Update CLI documentation and examples to use `pve` and `PVE_*` environment
   variable names. Token-secret environment variable names remain user-defined.
 - Save config files with permissions `0600` on Unix, including existing files.
-- Mask stored plaintext `token_secret` in `pve config view` output, retaining
+- Replace the config subcommands with `ls`, `show`, `add`, `update`, and `help`.
+  List names and endpoints in name order; show one selected profile or all
+  profiles in detail tables. Add profiles interactively without overwriting
+  existing names, and create or update profiles noninteractively with `update`.
+  Use `update NAME --use` to switch the current profile or select a profile
+  after writing it. Remove `view`, `init`, `set-profile`, `current-profile`, and
+  `use-profile`.
+- Mask stored plaintext `token_secret` in `pve config show` output, retaining
   the first and last three Unicode characters for values longer than six
   characters and using only `*****` for values of six characters or fewer.
-  Append the resolved absolute config-file path as a final YAML comment.
+  Append the resolved absolute config-file path as a final `Config file:` line.
 
 ## v1.1.0 - 2026-10-04
 

@@ -13,7 +13,7 @@ import (
 	"github.com/lz-wang/pvectl/internal/pve"
 )
 
-func TestConfigViewGuidedInitialization(t *testing.T) {
+func TestConfigShowGuidedInitialization(t *testing.T) {
 	cases := []struct {
 		name     string
 		input    string
@@ -43,7 +43,7 @@ func TestConfigViewGuidedInitialization(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "nested", "config.yaml")
 			args := append([]string{"pve", "--config", path}, tc.flags...)
-			args = append(args, "config", "view")
+			args = append(args, "config", "show")
 			var stdout, stderr bytes.Buffer
 			err := RunWithDependencies(args, "test", Dependencies{
 				Stdin: strings.NewReader(tc.input), Stdout: &stdout, Stderr: &stderr,
@@ -53,7 +53,7 @@ func TestConfigViewGuidedInitialization(t *testing.T) {
 				},
 			})
 			if err != nil {
-				t.Fatalf("view: %v", err)
+				t.Fatalf("show: %v", err)
 			}
 			cfg, err := config.Load(path)
 			if err != nil {
@@ -74,22 +74,25 @@ func TestConfigViewGuidedInitialization(t *testing.T) {
 			}
 			stdout.Reset()
 			stderr.Reset()
-			if err := RunWithDependencies([]string{"pve", "--config", path, "config", "view"}, "test", Dependencies{Stdin: strings.NewReader(""), Stdout: &stdout, Stderr: &stderr}); err != nil {
-				t.Fatalf("view saved config: %v", err)
+			if err := RunWithDependencies([]string{"pve", "--config", path, "config", "show"}, "test", Dependencies{Stdin: strings.NewReader(""), Stdout: &stdout, Stderr: &stderr}); err != nil {
+				t.Fatalf("show saved config: %v", err)
 			}
-			if !strings.Contains(stdout.String(), "current_profile: "+tc.profile) || stderr.Len() != 0 {
-				t.Fatal("existing config should still print YAML to stdout without prompts")
+			if !strings.Contains(stdout.String(), tc.profile) || !strings.Contains(stdout.String(), profile.Endpoint) || !strings.HasSuffix(stdout.String(), "Config file: "+path+"\n") || stderr.Len() != 0 {
+				t.Fatal("existing config should print the profile table and config path without prompts")
+			}
+			if tc.secret != "" && strings.Contains(stdout.String(), tc.secret) {
+				t.Fatal("existing config output must summarize plaintext tokens")
 			}
 		})
 	}
 }
 
-func TestConfigViewInitializationCanBeCancelled(t *testing.T) {
+func TestConfigShowInitializationCanBeCancelled(t *testing.T) {
 	for _, input := range []string{"no\n", "", "yes\nhome\n", "yes\nhome\nhttps://pve.example:8006/api2/json\nautomation@pve!test\ntoken\nfake-unsaved-token\n"} {
 		t.Run(strings.ReplaceAll(input, "\n", "_"), func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "config.yaml")
 			var stdout, stderr bytes.Buffer
-			err := RunWithDependencies([]string{"pve", "--config", path, "config", "view"}, "test", Dependencies{Stdin: strings.NewReader(input), Stdout: &stdout, Stderr: &stderr})
+			err := RunWithDependencies([]string{"pve", "--config", path, "config", "show"}, "test", Dependencies{Stdin: strings.NewReader(input), Stdout: &stdout, Stderr: &stderr})
 			if err != nil {
 				t.Fatalf("cancelled setup should succeed: %v", err)
 			}
@@ -103,7 +106,7 @@ func TestConfigViewInitializationCanBeCancelled(t *testing.T) {
 	}
 }
 
-func TestConfigViewMissingConfigWithNonterminalInput(t *testing.T) {
+func TestConfigShowMissingConfigWithNonterminalInput(t *testing.T) {
 	input, writer, err := os.Pipe()
 	if err != nil {
 		t.Fatal(err)
@@ -118,24 +121,24 @@ func TestConfigViewMissingConfigWithNonterminalInput(t *testing.T) {
 	}()
 	path := filepath.Join(t.TempDir(), "config.yaml")
 	var stdout, stderr bytes.Buffer
-	err = RunWithDependencies([]string{"pve", "--config", path, "config", "view"}, "test", Dependencies{Stdin: input, Stdout: &stdout, Stderr: &stderr})
+	err = RunWithDependencies([]string{"pve", "--config", path, "config", "show"}, "test", Dependencies{Stdin: input, Stdout: &stdout, Stderr: &stderr})
 	if err != nil {
-		t.Fatalf("noninteractive view should succeed: %v", err)
+		t.Fatalf("noninteractive show should succeed: %v", err)
 	}
-	if stdout.Len() != 0 || !strings.Contains(stderr.String(), "No config file found") || !strings.Contains(stderr.String(), "pve config init --endpoint") || strings.Contains(stderr.String(), "Initialize a config file now?") {
+	if stdout.Len() != 0 || !strings.Contains(stderr.String(), "No config file found") || !strings.Contains(stderr.String(), "pve config update NAME --endpoint") || strings.Contains(stderr.String(), "Initialize a config file now?") {
 		t.Fatal("nonterminal input should receive a setup hint without waiting for input")
 	}
 	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
-		t.Fatal("noninteractive view must not create a file")
+		t.Fatal("noninteractive show must not create a file")
 	}
 }
 
-func TestConfigViewKeepsExistingFileCreatedDuringSetup(t *testing.T) {
+func TestConfigShowKeepsExistingFileCreatedDuringSetup(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.yaml")
 	original := "current_profile: other\nprofiles: {}\n"
 	var stdout, stderr bytes.Buffer
 	created := false
-	writer := configViewTestWriter(func(data []byte) (int, error) {
+	writer := configShowTestWriter(func(data []byte) (int, error) {
 		if !created && strings.Contains(string(data), "Token secret (stored in plaintext)") {
 			if err := os.WriteFile(path, []byte(original), 0o600); err != nil {
 				return 0, err
@@ -144,12 +147,12 @@ func TestConfigViewKeepsExistingFileCreatedDuringSetup(t *testing.T) {
 		}
 		return stderr.Write(data)
 	})
-	err := RunWithDependencies([]string{"pve", "--config", path, "config", "view"}, "test", Dependencies{
+	err := RunWithDependencies([]string{"pve", "--config", path, "config", "show"}, "test", Dependencies{
 		Stdin:  strings.NewReader("yes\nhome\nhttps://pve.example:8006/api2/json\nautomation@pve!test\ntoken\nfake-race-token\nno\n"),
 		Stdout: &stdout, Stderr: writer,
 	})
 	if err != nil {
-		t.Fatalf("view: %v", err)
+		t.Fatalf("show: %v", err)
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -160,18 +163,18 @@ func TestConfigViewKeepsExistingFileCreatedDuringSetup(t *testing.T) {
 	}
 }
 
-func TestConfigViewStillReportsInvalidConfig(t *testing.T) {
+func TestConfigShowStillReportsInvalidConfig(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.yaml")
 	if err := os.WriteFile(path, []byte("profiles: ["), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	var stderr bytes.Buffer
-	err := RunWithDependencies([]string{"pve", "--config", path, "config", "view"}, "test", Dependencies{Stdin: strings.NewReader("yes\n"), Stdout: io.Discard, Stderr: &stderr})
+	err := RunWithDependencies([]string{"pve", "--config", path, "config", "show"}, "test", Dependencies{Stdin: strings.NewReader("yes\n"), Stdout: io.Discard, Stderr: &stderr})
 	if err == nil || !strings.Contains(err.Error(), "parse config") || stderr.Len() != 0 {
 		t.Fatal("only a missing config file should trigger setup")
 	}
 }
 
-type configViewTestWriter func([]byte) (int, error)
+type configShowTestWriter func([]byte) (int, error)
 
-func (w configViewTestWriter) Write(data []byte) (int, error) { return w(data) }
+func (w configShowTestWriter) Write(data []byte) (int, error) { return w(data) }

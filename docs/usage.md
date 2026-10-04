@@ -22,9 +22,9 @@ in that order. VM guest-agent tools follow lifecycle commands, and cloud-init
 is next to `config`. `delete` is the last VM/LXC operation; snapshot help lists
 `ls`, `create`, `delete`, `rollback`, placing rollback last.
 
-Config help lists `view`, `current-profile`, `use-profile`, `init`, `set-profile`
-to prioritize viewing and switching existing configurations. The built-in
-`help` command remains last at each level.
+Config help lists `ls`, `show`, `add`, `update`, `help` to prioritize inspection
+before configuration changes. The built-in `help` command remains last at each
+level.
 
 ## Configuration
 
@@ -33,36 +33,108 @@ to select another file. After the rename from `pvectl`, move an existing
 config file to the new path or select it explicitly; the old directory is
 not searched or migrated automatically.
 
-If the file is missing, `pve config view` reports that it does not exist and
-offers guided initialization in a terminal. The prompts collect a profile name
-(default `home`), PVE API endpoint, token ID, a plaintext token or environment
-variable reference, and whether to skip TLS verification (default no).
-Plaintext token input is hidden in the terminal. Initialization uses timeout
-`30s` and default output `table`, with `--profile`, `--timeout`, `--output`, and
-`--insecure` providing defaults when supplied.
-
-Declining setup or ending input leaves the file uncreated and exits successfully.
-With nonterminal stdin, the command displays a `pve config init` hint and exits
-successfully without waiting for input. Missing-file notices, prompts, and setup
-results go to stderr; stdout stays empty during setup. After creation, run
-`pve config view` again to display the YAML with token summaries. Setup never
-overwrites a file that appeared while entering the values. Invalid YAML and
-file-access failures still produce errors.
-
-For a typical HomeLab setup, initialize one default profile and run a
-diagnostic check:
+For a typical HomeLab setup, add a profile interactively and run a diagnostic
+check:
 
 ```bash
-pve config init \
-  --endpoint https://pve.lan:8006/api2/json \
-  --token-id 'automation@pve!pve' \
-  --token-secret 'your-token-secret' \
-  --insecure
-
+pve config add
+pve config ls
+pve config show
 pve doctor
-pve config current-profile
-pve config view
 ```
+
+### List and Show Profiles
+
+`config ls` prints a table with only the profile name and endpoint, sorted by
+profile name. `config show` displays the current profile by default. Pass a name
+or use the global `--profile` flag to select a profile, or use `--all` to display
+every profile:
+
+```bash
+pve config ls
+pve config show
+pve config show lab
+pve --profile lab config show
+pve config show --all
+```
+
+Profile selectors cannot be combined: a positional name together with
+`--profile`, or `--all` together with either selector, produces an error.
+`config ls` and `config show` always display tables. Show renders a two-column
+`FIELD` / `VALUE` table for each profile, separated by a blank line when showing
+multiple profiles. Its fields are `Profile`, `Current`, `Endpoint`, `Token ID`,
+`Token secret`, `Token secret env`, `Skip TLS verify`, `Timeout`, and
+`Default output`.
+
+Each non-empty `Token secret` is a summary. Values longer than six Unicode
+characters show the first three and last three characters with `*****` between
+them, such as `dd1*****ef4`; values of six characters or fewer show only `*****`.
+This display does not change the stored token or authentication. `Token secret
+env` displays the configured environment variable name without reading its value.
+
+The final line of `config show` gives the absolute config-file path after
+expanding `~` and environment variables. Line breaks in file names are escaped
+to keep the path on one line:
+
+```text
+Config file: /home/user/.config/pve/config.yaml
+```
+
+### Add Profiles Interactively
+
+`config add` prompts for the profile name, PVE API endpoint, token ID, a plaintext
+token or environment variable reference, and whether to skip TLS verification.
+Plaintext token input is hidden in the terminal. The default timeout is `30s`,
+the default output is `table`, and TLS verification is enabled. Global
+`--timeout`, `--output`, and `--insecure` supply defaults when provided.
+
+The profile name defaults to global `--profile` or `home`. The wizard asks whether to
+make the added profile current. The default answer is yes when no current
+profile is configured and no otherwise. An existing profile of the same name
+is never overwritten. Ending input cancels without writing changes. Prompts
+and setup results go to stderr.
+
+If the file is missing, `config ls` and `config show` report that it does not
+exist and offer the same guided initialization in a terminal. With nonterminal
+stdin, they display a `config add` / `config update` setup hint and exit
+successfully without waiting for input. Declining or ending input also exits
+successfully. Stdout stays empty during setup; run `config ls` or `config show`
+again after creation. Initialization never overwrites a file that appeared while
+entering the values. Invalid YAML and file-access failures still produce errors.
+
+### Update Profiles Noninteractively
+
+`config update NAME` creates or updates a named profile using flags. Connection
+writes require `--endpoint`, `--token-id`, and at least one of `--token-secret`
+or `--token-secret-env`:
+
+```bash
+pve config update lab \
+  --endpoint https://pve-lab.lan:8006/api2/json \
+  --token-id 'automation@pve!pve' \
+  --token-secret-env PVE_LAB_TOKEN_SECRET \
+  --timeout 30s \
+  --default-output table \
+  --use
+```
+
+Normal updates default to timeout `30s` and output `table`. Add `--use` to make
+the created or updated profile current. To switch to an existing profile without
+rewriting its connection settings, use `--use` alone:
+
+```bash
+pve config update home --use
+```
+
+This switch requires the named profile to exist but does not require endpoint
+or token flags. When `--use` is combined with connection-writing flags, the
+endpoint, token ID, and token-source requirements still apply.
+
+`config` exposes only `ls`, `show`, `add`, `update`, and `help`; the earlier
+`view`, `init`, `set-profile`, `current-profile`, and `use-profile` commands are
+removed.
+
+### Stored Configuration
 
 Config schema:
 
@@ -79,8 +151,8 @@ profiles:
 ```
 
 `token_secret` stores the token value directly in plaintext. It can be set by
-editing the YAML file or by passing `--token-secret` to `config init` or
-`config set-profile`. Both commands require at least one token source.
+editing the YAML file, entering it in `config add`, or passing `--token-secret`
+to `config update NAME`.
 
 For environment-based configuration, replace `token_secret` with
 `token_secret_env: PVE_HOME_TOKEN_SECRET` in YAML, or pass
@@ -94,47 +166,7 @@ A non-empty `token_secret` takes precedence over `token_secret_env`; the
 environment variable is read only when the plaintext value is empty or absent.
 Environment variable names are user-defined. Config files are saved with
 permissions `0600` on Unix, including when replacing an existing file.
-`config view` prints YAML with each non-empty `token_secret` masked. Values longer
-than six Unicode characters show the first three and last three characters with
-`*****` between them, such as `dd1*****ef4`; values of six characters or fewer show
-only `*****`. This display does not change the stored token or authentication.
-`token_secret_env` names are displayed as configured, without reading their values.
-The last line is a YAML comment containing the absolute config-file path after
-expanding `~` and environment variables. Line breaks in file names are escaped
-to keep the comment on one line. For example:
-
-```yaml
-current_profile: home
-profiles:
-  home:
-    endpoint: https://pve.lan:8006/api2/json
-    token_id: automation@pve!pve
-    token_secret: dd1*****ef4
-    insecure_skip_verify: true
-    timeout: 30s
-    default_output: table
-# Config file: /home/user/.config/pve/config.yaml
-```
-
 Doctor reports the credential source without printing its value.
-
-Use `config set-profile` and `config use-profile` when you need to manage more
-than one profile:
-
-```bash
-pve config set-profile lab \
-  --endpoint https://pve-lab.lan:8006/api2/json \
-  --token-id automation@pve!pve \
-  --token-secret-env PVE_LAB_TOKEN_SECRET \
-  --timeout 30s \
-  --default-output table
-
-pve config use-profile lab
-```
-
-`config init` defaults to profile name `home`, timeout `30s`, default output
-`table`, and sets the initialized profile as current. Use `--name`,
-`--overwrite`, or `--no-use` when you need different initialization behavior.
 
 ## Diagnostics
 

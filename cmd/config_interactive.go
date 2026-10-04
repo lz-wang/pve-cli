@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/urfave/cli/v2"
@@ -16,23 +17,51 @@ import (
 	"github.com/lz-wang/pvectl/internal/output"
 )
 
+func newConfigAddCommand(deps Dependencies) *cli.Command {
+	return &cli.Command{
+		Name:  "add",
+		Usage: "Interactively add a profile",
+		Action: func(c *cli.Context) error {
+			if err := requireNoExtraArgs(c, 0); err != nil {
+				return err
+			}
+			path, err := configInteractivePath(c)
+			if err != nil {
+				return err
+			}
+			cfg, err := config.Load(path)
+			missing := errors.Is(err, os.ErrNotExist)
+			if missing {
+				cfg = config.Empty()
+			} else if err != nil {
+				return fmt.Errorf("config error: %w", err)
+			}
+			prompt, interactive := newConfigPrompter(c, deps)
+			if !interactive {
+				return errors.New("config add requires a terminal; use pve config update NAME --endpoint URL --token-id USER@REALM!TOKEN --token-secret SECRET for noninteractive setup (with the same --config path)")
+			}
+			if err := prompt.addProfile(c, path, cfg, missing, true); errors.Is(err, io.EOF) {
+				_, err = fmt.Fprintln(c.App.ErrWriter, "\nProfile addition cancelled; no config file was changed.")
+				return err
+			} else {
+				return err
+			}
+		},
+	}
+}
+
 func guideConfigInit(c *cli.Context, deps Dependencies) error {
-	path, err := config.ExpandPath(c.String("config"))
+	path, err := configInteractivePath(c)
 	if err != nil {
 		return err
 	}
 	if _, err := fmt.Fprintf(c.App.ErrWriter, "No config file found at %s.\n", path); err != nil {
 		return err
 	}
-	input := deps.withDefaults().Stdin
-	file, isFile := input.(*os.File)
-	if isFile && !term.IsTerminal(int(file.Fd())) {
-		_, err := fmt.Fprintln(c.App.ErrWriter, "Run pve config view in a terminal for guided setup, or use pve config init --endpoint URL --token-id USER@REALM!TOKEN --token-secret SECRET (with the same --config path).")
+	prompt, interactive := newConfigPrompter(c, deps)
+	if !interactive {
+		_, err := fmt.Fprintln(c.App.ErrWriter, "Run pve config add in a terminal for guided setup, or use pve config update NAME --endpoint URL --token-id USER@REALM!TOKEN --token-secret SECRET (with the same --config path).")
 		return err
-	}
-	prompt := configPrompter{reader: bufio.NewReader(input), out: c.App.ErrWriter}
-	if isFile {
-		prompt.terminal = file
 	}
 	if err := prompt.initialize(c, path); errors.Is(err, io.EOF) {
 		_, err = fmt.Fprintln(c.App.ErrWriter, "\nInitialization cancelled; no config file was created.")
@@ -40,6 +69,30 @@ func guideConfigInit(c *cli.Context, deps Dependencies) error {
 	} else {
 		return err
 	}
+}
+
+func configInteractivePath(c *cli.Context) (string, error) {
+	path, err := config.ExpandPath(c.String("config"))
+	if err != nil {
+		return "", err
+	}
+	path, err = filepath.Abs(path)
+	if err != nil {
+		return "", fmt.Errorf("resolve config path: %w", err)
+	}
+	return path, nil
+}
+
+func newConfigPrompter(c *cli.Context, deps Dependencies) (configPrompter, bool) {
+	input := deps.withDefaults().Stdin
+	prompt := configPrompter{reader: bufio.NewReader(input), out: c.App.ErrWriter}
+	if file, isFile := input.(*os.File); isFile {
+		if !term.IsTerminal(int(file.Fd())) {
+			return prompt, false
+		}
+		prompt.terminal = file
+	}
+	return prompt, true
 }
 
 type configPrompter struct {
@@ -57,11 +110,20 @@ func (p *configPrompter) initialize(c *cli.Context, path string) error {
 		_, err := fmt.Fprintln(p.out, "Initialization skipped; no config file was created.")
 		return err
 	}
+	return p.addProfile(c, path, config.Empty(), true, false)
+}
+
+func (p *configPrompter) addProfile(c *cli.Context, path string, cfg *config.Config, missing, askCurrent bool) error {
 	nameDefault := c.String("profile")
 	if nameDefault == "" {
 		nameDefault = "home"
 	}
-	name, err := p.ask("Profile name", nameDefault, false, nil)
+	name, err := p.ask("Profile name", nameDefault, false, func(value string) error {
+		if _, exists := cfg.Profiles[value]; exists {
+			return fmt.Errorf("profile %q already exists; choose another name", value)
+		}
+		return nil
+	})
 	if err != nil {
 		return err
 	}
@@ -95,7 +157,7 @@ func (p *configPrompter) initialize(c *cli.Context, path string) error {
 	if boolFlag(c, "insecure") {
 		insecureDefault = "yes"
 	}
-	answer, err = p.ask("Skip TLS certificate verification? (yes/no)", insecureDefault, false, validateConfigYesNo)
+	answer, err := p.ask("Skip TLS certificate verification? (yes/no)", insecureDefault, false, validateConfigYesNo)
 	if err != nil {
 		return err
 	}
@@ -107,17 +169,44 @@ func (p *configPrompter) initialize(c *cli.Context, path string) error {
 	if err := output.ValidateFormat(profile.DefaultOutput); err != nil {
 		return err
 	}
-	cfg := config.Empty()
-	if err := cfg.InitProfile(config.InitOptions{Name: name, Profile: profile, Use: true}); err != nil {
+	use := true
+	if askCurrent {
+		useDefault := "no"
+		if cfg.CurrentProfile == "" {
+			useDefault = "yes"
+		}
+		answer, err = p.ask("Set as current profile? (yes/no)", useDefault, false, validateConfigYesNo)
+		if err != nil {
+			return err
+		}
+		use = configAnswerYes(answer)
+	}
+	if !missing {
+		cfg, err = config.Load(path)
+		if err != nil {
+			return fmt.Errorf("reload config before adding profile: %w", err)
+		}
+		if _, exists := cfg.Profiles[name]; exists {
+			return fmt.Errorf("profile %q was created during setup; the existing profile was kept", name)
+		}
+	}
+	if err := cfg.InitProfile(config.InitOptions{Name: name, Profile: profile, Use: use}); err != nil {
 		return err
 	}
-	if err := config.SaveNew(path, cfg); errors.Is(err, os.ErrExist) {
-		_, err := fmt.Fprintln(p.out, "A config file was created during setup; the existing file was kept. Run pve config view again to inspect it.")
-		return err
-	} else if err != nil {
+	if missing {
+		if err := config.SaveNew(path, cfg); errors.Is(err, os.ErrExist) {
+			_, err := fmt.Fprintln(p.out, "A config file was created during setup; the existing file was kept. Run pve config show --all again to inspect it.")
+			return err
+		} else if err != nil {
+			return err
+		}
+		_, err = fmt.Fprintf(p.out, "Config file created at %s.\n", path)
 		return err
 	}
-	_, err = fmt.Fprintf(p.out, "Config file created at %s.\n", path)
+	if err := config.Save(path, cfg); err != nil {
+		return err
+	}
+	_, err = fmt.Fprintf(p.out, "Profile %q added to %s.\n", name, path)
 	return err
 }
 

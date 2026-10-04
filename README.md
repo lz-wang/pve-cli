@@ -31,28 +31,26 @@ sudo make install
 
 ## Configure
 
-Run `pve config view` before a config file exists to start guided setup in a
-terminal. It prompts for the connection and token settings and creates the file.
-
 For a typical HomeLab setup, one default profile is enough. Create an API token
-in Proxmox VE, initialize the profile with its token secret, then run a
-diagnostic check:
+in Proxmox VE, then run guided setup in a terminal. It prompts for the profile,
+connection settings, and token source, with hidden input for a plaintext token:
 
 ```bash
-pve config init \
-  --endpoint https://pve.lan:8006/api2/json \
-  --token-id 'automation@pve!pve' \
-  --token-secret 'your-token-secret' \
-  --insecure
-
+pve config add
+pve config ls
+pve config show
 pve doctor
 ```
 
-`--token-secret` stores the value directly as plaintext `token_secret` in
-`~/.config/pve/config.yaml`, with file permissions `0600` on Unix. Alternatively,
-use `--token-secret-env PVE_HOME_TOKEN_SECRET` to reference an environment
-variable. A non-empty `token_secret` takes precedence when both are configured.
-Use `pve config set-profile` when you need more than one profile.
+The wizard can store the token directly as plaintext `token_secret` in
+`~/.config/pve/config.yaml`, with file permissions `0600` on Unix, or save a
+`token_secret_env` reference such as `PVE_HOME_TOKEN_SECRET`. A non-empty
+`token_secret` takes precedence when both are configured. `config ls` lists
+profile names and endpoints; `config show` displays details with token summaries
+and the config-file path. Both offer guided setup when the file is missing.
+Use `config add` for another profile or `config update NAME` for noninteractive
+configuration. Switch the current profile with `config update NAME --use`.
+See [docs/usage.md](docs/usage.md) for flags and examples.
 
 ## Daily Usage
 

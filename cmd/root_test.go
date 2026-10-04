@@ -833,12 +833,12 @@ func TestRestoreCommandRejectsExistingVMID(t *testing.T) {
 	}
 }
 
-func TestConfigSetProfileCommandDoesNotRequireSecretEnv(t *testing.T) {
+func TestConfigUpdateCommandDoesNotRequireSecretEnv(t *testing.T) {
 	cfgPath := filepath.Join(t.TempDir(), "config.yaml")
 	err := RunWithDependencies([]string{
 		"pve",
 		"--config", cfgPath,
-		"config", "set-profile", "home",
+		"config", "update", "home",
 		"--endpoint", "https://pve.example:8006/api2/json",
 		"--token-id", "root@pam!test",
 		"--token-secret-env", "PVE_TOKEN",

@@ -10,7 +10,8 @@
   回滚放在相应列表末尾。
 - 本地构建、安装和发布包统一使用 `pve` 二进制名称；Homebrew 通过
   `brew install lz-wang/tap/pve` 安装。
-- 通过 `--output` 或 `-o` 支持 `table`、`json`、`yaml` 输出。
+- 通过 `--output` 或 `-o` 支持资源的 `table`、`json`、`yaml` 输出；本地配置查询
+  使用表格。
 - 通过 `--profile` 支持选择 profile。
 - 通过 `--config` 支持指定配置文件路径。
 - 通过 `--timeout` 支持覆盖 API 请求超时。
@@ -27,22 +28,37 @@
 或通过 `--config` 显式指定；不回退查找旧路径，也不自动迁移。token-secret
 环境变量名由用户指定，文档使用 `PVE_*` 作为示例。
 
-- `config init` 初始化默认 HomeLab profile。
-- `config set-profile NAME` 创建或更新指定 profile。
-- `config use-profile NAME` 切换当前 profile。
-- `config current-profile` 打印当前 profile 名称。
-- `config view` 打印 YAML，将明文 token 显示为摘要，并在最后一行的 YAML 注释中
-  给出配置文件的绝对路径。超过六个 Unicode 字符的 token 保留前三个和后三个
-  字符，中间显示 `*****`；六个字符及以内仅显示 `*****`。环境变量名称正常
-  展示，不读取其值，配置文件中存储的 token 不变。
-  文件不存在时提示缺少配置，并在终端中交互式引导初始化，输入 token 时隐藏
-  回显。拒绝或结束输入不会创建文件；非终端输入显示初始化命令提示，不等待
-  输入。这些情况均正常退出。初始化提示输出到 stderr，且不会覆盖已有文件。
+- `config ls` 仅显示 profile 名称和 endpoint 两列，按名称排序。
+- `config show` 默认显示当前 profile，`config show NAME` 或全局 `--profile NAME`
+  选择一个 profile，`config show --all` 显示所有 profile。多个选择方式不能
+  组合使用。每个 profile 使用 `FIELD` / `VALUE` 两列表格，包含 Profile、Current、
+  Endpoint、Token ID、Token secret、Token secret env、Skip TLS verify、Timeout 和
+  Default output。最后一行显示 `Config file: /absolute/path/config.yaml`。
+- `config add` 交互式添加 profile，明文 token 输入隐藏回显，也可选择环境变量
+  引用。全局 `--timeout`、`--output` 和 `--insecure` 提供默认设置；向导会询问
+  是否设为当前 profile，未配置当前 profile 时默认是，否则默认否。同名 profile 不会被
+  覆盖，取消时不写入任何变更。
+- `config update NAME` 非交互式创建或更新 profile。写入连接设置时必须提供
+  endpoint、token ID 和至少一种 token 来源，默认 timeout 为 `30s`、输出为
+  `table`。可用 `--use` 将写入的 profile 设为当前；单独执行
+  `config update NAME --use` 仅切换至已有 profile，不修改连接设置，也不要求
+  提供 token 参数。
+- `config help` 说明可用命令，顺序为 `ls`、`show`、`add`、`update`、`help`。
+  原有 config 子命令已移除。
+
+`config show` 将超过六个 Unicode 字符的 token 显示为摘要：保留前三个和后三个
+字符，中间显示 `*****`；六个字符及以内仅显示 `*****`。环境变量名称正常
+展示，不读取其值，配置文件中存储的 token 不变。末行配置路径为展开 `~` 和
+环境变量后的绝对路径，文件名中的换行会转义，确保路径显示在一行中。
+
+文件不存在时，`config ls` 和 `config show` 在终端中交互式引导初始化。拒绝或
+结束输入不会创建文件；非终端输入显示 add/update 初始化命令提示，不等待
+输入。这些情况均正常退出。初始化提示输出到 stderr，且不会覆盖已有文件。
 
 配置文件保存 Proxmox endpoint、token ID、TLS 行为、timeout 和默认输出格式。
 可通过 `--token-secret` 将 token 值直接明文保存到 `token_secret`，也可通过
-`--token-secret-env` 保存 `token_secret_env` 环境变量引用。`config init` 和
-`config set-profile` 至少需要一种 token 来源；非空明文值优先于环境变量引用。
+`--token-secret-env` 保存 `token_secret_env` 环境变量引用。非空明文值优先于
+环境变量引用。
 Unix 上保存配置时使用 `0600` 文件权限，已有文件也会收紧到该权限。
 
 ## 诊断
