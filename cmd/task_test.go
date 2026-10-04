@@ -88,6 +88,9 @@ func TestVMAgentNetworkCommandWritesRows(t *testing.T) {
 	cfgPath := writeTestConfig(t, "json")
 	backend := &commandBackend{
 		nodes: []output.NodeRow{{Name: "pve1"}},
+		vmGuests: map[string]map[int]*commandGuest{
+			"pve1": {100: {row: output.GuestRow{Kind: "vm", VMID: 100, Node: "pve1"}}},
+		},
 		agentNetwork: []output.AgentNetworkRow{
 			{Name: "eth0", HardwareAddress: "bc:24:11:2f:ab:12", Addresses: []string{"192.168.2.10/24"}},
 		},
@@ -352,6 +355,9 @@ func TestVMCloudInitGetCommandWritesConfig(t *testing.T) {
 	cfgPath := writeTestConfig(t, "json")
 	backend := &commandBackend{
 		nodes: []output.NodeRow{{Name: "pve1"}},
+		vmGuests: map[string]map[int]*commandGuest{
+			"pve1": {100: {row: output.GuestRow{Kind: "vm", VMID: 100, Node: "pve1"}}},
+		},
 		cloudInitConfigs: map[int]output.CloudInitConfig{
 			100: {
 				VMID: 100, Node: "pve1", User: "debian", PasswordConfigured: true,
@@ -417,6 +423,9 @@ func TestVMCloudInitUpdateCommandRegenerates(t *testing.T) {
 	cfgPath := writeTestConfig(t, "table")
 	backend := &commandBackend{
 		nodes: []output.NodeRow{{Name: "pve1"}},
+		vmGuests: map[string]map[int]*commandGuest{
+			"pve1": {100: {row: output.GuestRow{Kind: "vm", VMID: 100, Node: "pve1"}}},
+		},
 	}
 	var stdout bytes.Buffer
 

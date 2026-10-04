@@ -136,6 +136,13 @@ func NewCloudInitService(backend CloudInitBackend, tasks TaskRunner, logger *slo
 
 // Get returns the normalized cloud-init config for a VM.
 func (s *CloudInitService) Get(ctx context.Context, vmid int, node string) (output.CloudInitConfig, error) {
+	if vmid <= 0 {
+		return output.CloudInitConfig{}, fmt.Errorf("invalid vmid %d", vmid)
+	}
+	node, err := s.resolveNode(ctx, vmid, node)
+	if err != nil {
+		return output.CloudInitConfig{}, err
+	}
 	return s.backend.VirtualMachineCloudInit(ctx, node, vmid)
 }
 
@@ -155,7 +162,25 @@ func (s *CloudInitService) Regenerate(ctx context.Context, vmid int, node string
 	if vmid <= 0 {
 		return fmt.Errorf("invalid vmid %d", vmid)
 	}
+	node, err := s.resolveNode(ctx, vmid, node)
+	if err != nil {
+		return err
+	}
 	return s.backend.RegenerateVirtualMachineCloudInit(ctx, node, vmid)
+}
+
+// resolveNode keeps --node optional for the direct backend calls, matching
+// `vm cloud-init set`, which already resolves through the VM config path.
+func (s *CloudInitService) resolveNode(ctx context.Context, vmid int, node string) (string, error) {
+	node = strings.TrimSpace(node)
+	if node != "" {
+		return node, nil
+	}
+	row, err := NewVMService(s.backend, TaskRunner{}, s.logger, s.verbose).Get(ctx, vmid, "")
+	if err != nil {
+		return "", err
+	}
+	return row.Node, nil
 }
 
 func cloudInitValues(options CloudInitSetOptions) (map[string]string, error) {

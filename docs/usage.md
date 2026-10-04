@@ -452,6 +452,9 @@ pvectl vm agent network 100 -o json
 pvectl vm agent exec 100 --node pve1 -- /usr/bin/uname -a
 ```
 
+Like other VMID-oriented commands, `--node` is optional here: when omitted,
+`pvectl` locates the VM across the cluster first.
+
 `vm agent network` answers "which IP did this cloned VM get?". `vm agent exec`
 takes `executable + argv` after `--` and never wraps the command in a shell
 implicitly; choose `/bin/sh -c ...` yourself if you want shell semantics. The
@@ -461,7 +464,8 @@ command exits non-zero when the guest command failed.
 ## VM Cloud-init Commands
 
 Cloud-init commands use PVE's native cloud-init configuration; `pvectl` never
-builds ISOs itself.
+builds ISOs itself. As with the agent commands, `--node` is optional and an
+omitted node is resolved by locating the VM across the cluster.
 
 ```bash
 pvectl vm cloud-init get 100 -o json

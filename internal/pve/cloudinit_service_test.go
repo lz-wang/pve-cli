@@ -104,3 +104,38 @@ func TestCloudInitServiceSetDelegatesToVMConfig(t *testing.T) {
 		t.Fatal("expected cloud-init set to be waited")
 	}
 }
+
+func TestCloudInitServiceResolvesNodeWhenOmitted(t *testing.T) {
+	guest := &fakeGuest{row: output.GuestRow{Kind: "vm", VMID: 100, Node: "pve1"}}
+	backend := &fakeBackend{
+		nodes: []output.NodeRow{{Name: "pve1"}},
+		vms:   map[string]map[int]*fakeGuest{"pve1": {100: guest}},
+		cloudInitConfigs: map[int]output.CloudInitConfig{
+			100: {VMID: 100, Node: "pve1", User: "debian"},
+		},
+	}
+	svc := NewCloudInitService(backend, TaskRunner{}, nil, false)
+
+	config, err := svc.Get(context.Background(), 100, "")
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if config.Node != "pve1" {
+		t.Fatalf("config = %#v", config)
+	}
+
+	if err := svc.Regenerate(context.Background(), 100, ""); err != nil {
+		t.Fatalf("regenerate: %v", err)
+	}
+}
+
+func TestCloudInitServiceReportsMissingVM(t *testing.T) {
+	backend := &fakeBackend{
+		nodes: []output.NodeRow{{Name: "pve1"}},
+	}
+	svc := NewCloudInitService(backend, TaskRunner{}, nil, false)
+
+	if _, err := svc.Get(context.Background(), 999, ""); err == nil {
+		t.Fatal("expected not-found error for missing vm")
+	}
+}

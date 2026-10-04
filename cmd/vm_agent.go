@@ -42,7 +42,7 @@ func vmAgentPingCommand(deps Dependencies) *cli.Command {
 			if err != nil {
 				return err
 			}
-			if err := rt.backend.AgentPing(c.Context, c.String("node"), vmid); err != nil {
+			if err := pve.NewAgentService(rt.backend, rt.logger, rt.verbose).Ping(c.Context, vmid, c.String("node")); err != nil {
 				return err
 			}
 			fmt.Fprintln(rt.stdout, "agent ok")
@@ -74,7 +74,7 @@ func vmAgentNetworkCommand(deps Dependencies) *cli.Command {
 			if err != nil {
 				return err
 			}
-			rows, err := rt.backend.AgentNetwork(c.Context, c.String("node"), vmid)
+			rows, err := pve.NewAgentService(rt.backend, rt.logger, rt.verbose).Network(c.Context, vmid, c.String("node"))
 			if err != nil {
 				return err
 			}
@@ -116,7 +116,7 @@ func vmAgentExecCommand(deps Dependencies) *cli.Command {
 			if err != nil {
 				return err
 			}
-			result, err := rt.backend.AgentExec(c.Context, c.String("node"), vmid, pve.AgentExecOptions{
+			result, err := pve.NewAgentService(rt.backend, rt.logger, rt.verbose).Exec(c.Context, vmid, c.String("node"), pve.AgentExecOptions{
 				Command: command,
 				Input:   c.String("input"),
 				Timeout: durationFlag(c, "timeout"),

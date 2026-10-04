@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"math"
 	"strings"
 	"time"
@@ -132,4 +133,58 @@ func (b *ProxmoxBackend) agentVM(ctx context.Context, nodeName string, vmid int)
 		return nil, err
 	}
 	return node.VirtualMachine(ctx, vmid)
+}
+
+// AgentService exposes QEMU guest agent operations with the same node
+// semantics as every other VMID-oriented command: --node is optional, and an
+// omitted node is located by traversing the cluster.
+type AgentService struct {
+	backend AgentBackend
+	logger  *slog.Logger
+	verbose bool
+}
+
+func NewAgentService(backend AgentBackend, logger *slog.Logger, verbose bool) *AgentService {
+	return &AgentService{backend: backend, logger: logger, verbose: verbose}
+}
+
+// Ping verifies the QEMU guest agent answers on a VM.
+func (s *AgentService) Ping(ctx context.Context, vmid int, node string) error {
+	node, err := s.resolveNode(ctx, vmid, node)
+	if err != nil {
+		return err
+	}
+	return s.backend.AgentPing(ctx, node, vmid)
+}
+
+// Network returns normalized network interface rows from the agent.
+func (s *AgentService) Network(ctx context.Context, vmid int, node string) ([]output.AgentNetworkRow, error) {
+	node, err := s.resolveNode(ctx, vmid, node)
+	if err != nil {
+		return nil, err
+	}
+	return s.backend.AgentNetwork(ctx, node, vmid)
+}
+
+// Exec runs executable+argv inside the guest and waits for exit.
+func (s *AgentService) Exec(ctx context.Context, vmid int, node string, options AgentExecOptions) (output.AgentExecResult, error) {
+	node, err := s.resolveNode(ctx, vmid, node)
+	if err != nil {
+		return output.AgentExecResult{}, err
+	}
+	return s.backend.AgentExec(ctx, node, vmid, options)
+}
+
+// resolveNode resolves an omitted --node with the same cluster traversal
+// used by `vm get`.
+func (s *AgentService) resolveNode(ctx context.Context, vmid int, node string) (string, error) {
+	node = strings.TrimSpace(node)
+	if node != "" {
+		return node, nil
+	}
+	row, err := NewVMService(s.backend, TaskRunner{}, s.logger, s.verbose).Get(ctx, vmid, "")
+	if err != nil {
+		return "", err
+	}
+	return row.Node, nil
 }
