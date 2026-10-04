@@ -118,6 +118,7 @@ func NewAppWithBuildInfoAndDependencies(info BuildInfo, deps Dependencies) *cli.
 			newConfigCommand(),
 			newDoctorCommand(deps),
 			newStatusCommand(deps),
+			newCheckCommand(deps),
 			newNodeCommand(deps),
 			newGuestAggregateCommand(deps),
 			newTaskCommand(deps),
