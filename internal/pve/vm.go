@@ -77,7 +77,7 @@ func (g vmGuest) Config(ctx context.Context, values map[string]string) (Task, er
 }
 
 func (g vmGuest) Delete(ctx context.Context) (Task, error) {
-	task, err := g.vm.Delete(ctx)
+	task, err := g.vm.Delete(ctx, nil)
 	return wrapTask(task), err
 }
 

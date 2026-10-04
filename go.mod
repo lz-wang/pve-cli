@@ -3,7 +3,7 @@ module github.com/lz-wang/pvectl
 go 1.26
 
 require (
-	github.com/luthermonson/go-proxmox v0.7.1
+	github.com/luthermonson/go-proxmox v0.8.1
 	github.com/urfave/cli/v2 v2.27.7
 	gopkg.in/yaml.v3 v3.0.1
 )
