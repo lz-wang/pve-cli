@@ -89,15 +89,74 @@ print from the underlying CLI framework.
 
 ## Daily Commands
 
+### HomeLab Status and Health
+
+`status` answers "is my PVE basically fine right now?" with a compact overview.
+It tolerates partial failures: sections that cannot be queried are reported in
+`issues` instead of failing the whole command.
+
+```bash
+pvectl status
+pvectl status -o json
+```
+
+`check` reports HomeLab health with a per-check exit-code contract: `fail`
+makes the command exit non-zero, `warn` does not. With `--strict`, warnings
+also fail. This makes it suitable for cron, systemd timers, and automation.
+
+```bash
+pvectl check
+pvectl check --node pve1
+pvectl check --storage-warn 85 --storage-fail 95
+pvectl check --backup-tag backup --backup-max-age 36h
+pvectl check --strict
+```
+
+The backup coverage check only runs when both `--backup-tag` and
+`--backup-max-age` are set; guests without that tag are never judged.
+
+`doctor` stays separate: it checks whether `pvectl` itself works, not whether
+the HomeLab is healthy.
+
 ### Nodes
 
 ```bash
 pvectl node ls
+pvectl node get pve1
+pvectl node get pve1 -o json
 ```
+
+`node get` adds PVE version, kernel, load average, and CPU details on top of
+the `node ls` row data.
+
+### Task Inspection
+
+Tasks are first-class resources. Every mutating command prints its task ID on
+stderr; `task` commands let you inspect them afterwards.
+
+```bash
+pvectl task ls
+pvectl task ls --node pve1
+pvectl task ls --type vzdump
+pvectl task ls --status running
+pvectl task ls --limit 20
+
+pvectl task get UPID:pve1:0000F2A3:00000000:6839F4A1:vzdump:100:root@pam:
+
+pvectl task log UPID:pve1:0000F2A3:00000000:6839F4A1:vzdump:100:root@pam:
+pvectl task log UPID:pve1:0000F2A3:00000000:6839F4A1:vzdump:100:root@pam: --tail 100
+
+pvectl task wait UPID:pve1:0000F2A3:00000000:6839F4A1:vzdump:100:root@pam: --wait-timeout 20m
+```
+
+`task ls` without `--node` aggregates across all nodes and tolerates nodes
+that fail to answer as long as one succeeds. Known status values are
+`running`, `ok`, `error`, and `unknown`.
 
 ### Guest Aggregate View
 
-`guest` is a read-only aggregate view across VM/QEMU and LXC guests.
+`guest` aggregates VM/QEMU and LXC guests and hosts the bulk lifecycle
+operations.
 
 ```bash
 pvectl guest ls
@@ -105,10 +164,41 @@ pvectl guest ls --node pve1
 pvectl guest ls --type vm
 pvectl guest ls --type lxc
 pvectl guest ls --status running
+pvectl guest ls --tag infra
+pvectl guest ls --tag docker --tag production --tag-match all
+pvectl guest ls --tag docker --tag production --tag-match any
 pvectl guest get 100
 pvectl guest get 100 --type vm
 pvectl guest get 200 --type lxc
 ```
+
+Tag values are matched case-insensitively. `--tag` is repeatable; the default
+`--tag-match all` requires every listed tag, `any` requires at least one.
+
+#### Bulk Guest Operations
+
+```bash
+pvectl guest start --tag lab --dry-run
+pvectl guest start --tag lab
+pvectl guest shutdown --tag infra
+pvectl guest reboot --node pve1 --status running
+pvectl guest stop --tag legacy --force
+```
+
+Selection flags: `--node`, `--type all|vm|lxc`, `--status`, `--tag`,
+`--tag-match`. At least one of `--node`, `--status`, or `--tag` is required so
+a bare command never sweeps the whole cluster.
+
+Safety and execution:
+
+- `--dry-run` prints the affected guests and exits without changing anything.
+- Operations hitting more than one guest require a local `yes` confirmation;
+  `--force` skips it.
+- `--jobs N` (default 2) bounds concurrency; `--wait`/`--wait-timeout` wait
+  for each task.
+- One failing guest never aborts the run: every per-guest result is written to
+  stdout, progress goes to stderr, and the command exits non-zero only if at
+  least one guest failed.
 
 Use `guest` for inventory and inspection. Use `vm` and `lxc` commands for
 lifecycle and maintenance operations.
@@ -200,6 +290,28 @@ One-off VM/LXC backup restore is in scope as a disaster-recovery workflow:
 restoring a vzdump archive into a new, non-existing VMID. Overwriting an
 existing VMID is not supported; delete the guest first, then restore.
 
+### Restore a Backup Archive
+
+```bash
+pvectl vm restore backup:backup/vzdump-qemu-100-2026_06_06-00_00_00.vma.zst \
+  --node pve1 \
+  --vmid 101 \
+  --storage local-lvm \
+  --wait
+
+pvectl lxc restore backup:backup/vzdump-lxc-200-2026_06_06-00_00_00.tar.zst \
+  --node pve1 \
+  --vmid 201 \
+  --storage local-lvm \
+  --wait
+```
+
+`--node` and `--vmid` are required. The restore refuses to run when the target
+VMID already exists anywhere in the cluster; there is no `--force` overwrite.
+Results are written to stdout and include the task ID; wait progress goes to
+stderr. When the archive name encodes a vzdump kind (`vzdump-qemu-` or
+`vzdump-lxc-`), the kind must match the command.
+
 `pvectl` does not manage scheduled backup jobs, prune policies, backup
 deletion, PBS datastores, or PBS verification.
 
@@ -224,6 +336,17 @@ When `--node` is omitted, `pvectl` traverses all nodes returned by the cluster
 and lists storage status on each node. Use `--content` for a single content
 capability such as `backup`, `iso`, `images`, or `vztmpl`. Use `--type` for a
 single storage type such as `dir`, `lvmthin`, `nfs`, or `pbs`.
+
+### Storage Usage
+
+```bash
+pvectl storage usage
+pvectl storage usage --node pve1
+pvectl storage usage --content backup
+```
+
+`storage usage` is a compact daily-use view of the same data as `storage ls`;
+structured output reuses the `StorageRow` schema.
 
 ### Show Storage Status
 
@@ -302,12 +425,93 @@ pvectl lxc migrate 201 --target pve2 --online --wait
 ```bash
 pvectl vm snapshot ls 101
 pvectl vm snapshot create 101 before-upgrade --wait
+pvectl vm snapshot delete 101 before-upgrade --wait
 
 pvectl lxc snapshot ls 201
 pvectl lxc snapshot create 201 before-upgrade --wait
+pvectl lxc snapshot delete 201 before-upgrade --wait
 ```
 
-Snapshot rollback is a dangerous operation and is documented separately below.
+Snapshot rollback and snapshot delete are dangerous operations and are
+documented separately below.
+
+## VM Agent Commands (QEMU Guest Agent)
+
+Agent commands only work on VMs with the QEMU guest agent installed and
+enabled. LXC containers do not expose the agent API. The first release
+intentionally limits itself to `ping`, `network`, and `exec`.
+
+```bash
+pvectl vm agent ping 100 --node pve1
+pvectl vm agent network 100 -o json
+pvectl vm agent exec 100 --node pve1 -- /usr/bin/uname -a
+```
+
+`vm agent network` answers "which IP did this cloned VM get?". `vm agent exec`
+takes `executable + argv` after `--` and never wraps the command in a shell
+implicitly; choose `/bin/sh -c ...` yourself if you want shell semantics. The
+guest command's exit code is preserved in the structured result, and the
+command exits non-zero when the guest command failed.
+
+## VM Cloud-init Commands
+
+Cloud-init commands use PVE's native cloud-init configuration; `pvectl` never
+builds ISOs itself.
+
+```bash
+pvectl vm cloud-init get 100 -o json
+
+pvectl vm cloud-init set 100 \
+  --user debian \
+  --ssh-key-file ~/.ssh/id_ed25519.pub \
+  --ipconfig0 ip=dhcp \
+  --nameserver 192.168.2.67 \
+  --searchdomain lan \
+  --wait
+
+pvectl vm cloud-init update 100
+```
+
+Passwords are never accepted as a command-line flag; pass the environment
+variable name instead so the secret stays out of shell history and process
+lists:
+
+```bash
+export VM_PASSWORD=...
+pvectl vm cloud-init set 100 --password-env VM_PASSWORD
+```
+
+`cloud-init get` never echoes the password; it only reports
+`password_configured`. `cloud-init update` regenerates the cloud-init image so
+the next boot picks up pending changes.
+
+## Network Commands (read-only)
+
+```bash
+pvectl network ls --node pve1
+pvectl network ls --type bridge
+pvectl network ls --active
+pvectl network get vmbr0 --node pve1
+```
+
+Without `--node`, `network ls` aggregates across all nodes with the usual
+partial-success behavior. Network mutation (create/update/delete/apply) is a
+non-goal because a remote mistake can take down the whole node.
+
+## Firewall Commands (read-only)
+
+```bash
+pvectl firewall status --node pve1
+pvectl firewall ls --node pve1
+
+pvectl firewall status --node pve1 --type vm --vmid 100
+pvectl firewall ls --node pve1 --type vm --vmid 100
+
+pvectl firewall ls --node pve1 --type lxc --vmid 200
+```
+
+`--type node` is the default. `--vmid` is required when `--type` is `vm` or
+`lxc`. Firewall rule mutation is a non-goal.
 
 ## Dangerous Operations
 
@@ -347,6 +551,19 @@ PVE task, so use `--wait` when scripts need completion status:
 pvectl vm snapshot rollback 101 before-upgrade --force --wait
 pvectl lxc snapshot rollback 201 before-upgrade --force --wait
 ```
+
+### Snapshot Delete
+
+Snapshot delete commands require typing the exact snapshot name unless
+`--force` is passed:
+
+```bash
+pvectl vm snapshot delete 101 before-upgrade
+pvectl lxc snapshot delete 201 before-upgrade
+```
+
+Like rollback, delete is an asynchronous PVE task, so use `--wait` when scripts
+need completion status.
 
 ## Output Formats
 

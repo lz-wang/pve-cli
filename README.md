@@ -54,40 +54,63 @@ Use `pvectl config set-profile` when you need more than one profile.
 ## Daily Usage
 
 ```bash
+pvectl status
+pvectl check
+pvectl doctor
+
 pvectl node ls
 pvectl version
 
 pvectl guest ls
 pvectl guest get 100
 pvectl guest ls --status running
+pvectl guest ls --tag infra
+
+pvectl task ls
+pvectl task log UPID:pve1:0000F2A3:00000000:6839F4A1:vzdump:100:root@pam: --tail 100
 
 pvectl backup ls --node pve1 --storage backup
 
 pvectl storage ls
+pvectl storage usage
 pvectl storage content ls --node pve1 --storage local
 
 pvectl vm ls
 pvectl vm get 100
 pvectl vm start 100 --wait
 pvectl vm shutdown 100 --wait
-pvectl vm reboot 100 --wait
 pvectl vm backup 100 --storage backup --mode snapshot --wait
+pvectl vm restore backup:backup/vzdump-qemu-100.vma.zst --node pve1 --vmid 101 --storage local-lvm --wait
 pvectl vm stop 100
 
 pvectl lxc ls
 pvectl lxc get 200
 pvectl lxc start 200 --wait
-pvectl lxc shutdown 200 --wait
-pvectl lxc reboot 200 --wait
 pvectl lxc backup 200 --storage backup --mode snapshot --wait
 pvectl lxc stop 200
 ```
 
-Use `guest` for read-only aggregate views across VM/QEMU and LXC guests. Use
-`vm` and `lxc` for lifecycle operations.
+Shut down every guest tagged `infra`, with a preview first:
 
-Backup commands are intentionally limited to listing backup files and creating
-one-off guest backups.
+```bash
+pvectl guest shutdown --tag infra --dry-run
+pvectl guest shutdown --tag infra
+```
+
+Check backup coverage for guests tagged `backup` (with a 36h SLA) as part of a
+health check:
+
+```bash
+pvectl check --backup-tag backup --backup-max-age 36h
+```
+
+Use `guest` for aggregate views across VM/QEMU and LXC guests and for bulk
+lifecycle operations. Use `vm` and `lxc` for single-guest lifecycle operations.
+`network` and `firewall` are read-only inventory commands.
+
+Backup commands are intentionally limited to listing backup files, creating
+one-off guest backups, and restoring a backup archive into a new,
+non-existing VMID.
 
 Storage commands are read-only inventory helpers.
 

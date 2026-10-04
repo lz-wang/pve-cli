@@ -10,9 +10,13 @@ automation. This policy applies to documented behavior.
 - Documented flags and their accepted value shapes.
 - JSON and YAML output field names and field types.
 - Command results on stdout.
-- Task IDs and wait progress on stderr.
-- Local confirmation behavior for dangerous operations.
-- Doctor diagnostics as structured rows, including failure rows on stdout.
+- Task IDs, wait progress, and bulk-operation progress on stderr.
+- Local confirmation behavior for dangerous operations, including snapshot
+  delete and multi-guest bulk operations.
+- Bulk operations write one result row per guest to stdout and exit non-zero
+  only when at least one guest failed.
+- Doctor and check diagnostics as structured rows, including failure rows on
+  stdout.
 
 ## Allowed Non-breaking Changes
 

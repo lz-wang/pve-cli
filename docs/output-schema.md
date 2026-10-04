@@ -139,6 +139,211 @@ Used by `guest`, `vm`, and `lxc` list/detail commands.
 
 Known `status` values are `ok`, `warn`, `fail`, and `skip`.
 
+## CheckRow
+
+Used by `check`. `status` uses the same `ok`/`warn`/`fail`/`skip` vocabulary as
+`DoctorRow`.
+
+| Field | Type |
+| --- | --- |
+| `check` | string |
+| `status` | string |
+| `resource` | string, optional |
+| `message` | string |
+
+## TaskRow
+
+Used by `task ls` and `task get`.
+
+| Field | Type |
+| --- | --- |
+| `upid` | string |
+| `node` | string |
+| `type` | string |
+| `id` | string, optional |
+| `user` | string, optional |
+| `status` | string |
+| `exit_status` | string, optional |
+| `start_time` | int64, optional |
+| `end_time` | int64, optional |
+
+Known `status` values are `running`, `ok`, `error`, and `unknown`.
+
+## TaskLogRow
+
+| Field | Type |
+| --- | --- |
+| `line` | int |
+| `text` | string |
+
+## RestoreResult
+
+Used by `vm restore` and `lxc restore`.
+
+| Field | Type |
+| --- | --- |
+| `kind` | string |
+| `vmid` | uint64 |
+| `node` | string |
+| `archive` | string |
+| `storage` | string, optional |
+| `task` | string, optional |
+
+## StatusReport
+
+Used by `status`.
+
+| Field | Type |
+| --- | --- |
+| `nodes` | NodeSummary |
+| `guests` | GuestSummary |
+| `storages` | StorageSummary |
+| `backups` | BackupSummary |
+| `issues` | StatusIssue[], optional |
+
+NodeSummary: `total` (int), `online` (int), `offline` (int), `rows`
+(NodeRow[], optional).
+
+GuestSummary: `total`, `running`, `stopped`, `vm`, `lxc` (all int).
+
+StorageSummary: `total` (int), `active` (int), `rows` (StorageRow[], optional).
+
+BackupSummary: `count` (int), `latest_ctime` (uint64, optional).
+
+StatusIssue: `component` (string), `message` (string).
+
+## NodeDetail
+
+Used by `node get`.
+
+| Field | Type |
+| --- | --- |
+| `name` | string |
+| `status` | string |
+| `cpu` | number |
+| `mem` | uint64 |
+| `max_mem` | uint64 |
+| `disk` | uint64 |
+| `max_disk` | uint64 |
+| `uptime` | uint64 |
+| `pve_version` | string |
+| `kernel_version` | string |
+| `load_average` | string |
+| `cpu_model` | string |
+| `cpu_cores` | int |
+| `cpu_sockets` | int |
+
+## BulkGuestResult
+
+Used by bulk `guest start/shutdown/reboot/stop`. One row per affected guest;
+partial failures still write every row to stdout.
+
+| Field | Type |
+| --- | --- |
+| `kind` | string |
+| `vmid` | uint64 |
+| `node` | string |
+| `name` | string |
+| `action` | string |
+| `status` | string (`ok` or `error`) |
+| `task` | string, optional |
+| `error` | string, optional |
+
+## AgentNetworkRow
+
+Used by `vm agent network`.
+
+| Field | Type |
+| --- | --- |
+| `name` | string |
+| `hardware_address` | string, optional |
+| `addresses` | string[], optional |
+
+## AgentExecResult
+
+Used by `vm agent exec`.
+
+| Field | Type |
+| --- | --- |
+| `exit_code` | int |
+| `signal` | int, optional |
+| `stdout` | string, optional |
+| `stderr` | string, optional |
+| `truncated` | bool, optional |
+
+## CloudInitConfig
+
+Used by `vm cloud-init get`. The `cipassword` value is never echoed; only
+`password_configured` is reported.
+
+| Field | Type |
+| --- | --- |
+| `vmid` | uint64 |
+| `node` | string |
+| `user` | string, optional |
+| `password_configured` | bool |
+| `ssh_keys` | string, optional |
+| `ip_configs` | CloudInitIPConfig[], optional |
+| `nameserver` | string, optional |
+| `searchdomain` | string, optional |
+| `type` | string, optional |
+| `custom` | CloudInitCustom[], optional |
+
+CloudInitIPConfig: `device` (string, for example `ipconfig0`), `config`
+(string). CloudInitCustom: `device` (string), `volume` (string).
+
+## NetworkRow
+
+Used by `network ls` and `network get`.
+
+| Field | Type |
+| --- | --- |
+| `node` | string |
+| `name` | string |
+| `type` | string, optional |
+| `active` | bool |
+| `autostart` | bool |
+| `address` | string, optional |
+| `cidr` | string, optional |
+| `gateway` | string, optional |
+| `bridge_ports` | string, optional |
+| `bond_slaves` | string, optional |
+| `vlan_aware` | bool |
+| `comments` | string, optional |
+
+## FirewallStatusRow
+
+Used by `firewall status`.
+
+| Field | Type |
+| --- | --- |
+| `scope` | string (`node`, `vm`, or `lxc`) |
+| `node` | string |
+| `vmid` | uint64, optional |
+| `enabled` | bool |
+
+## FirewallRuleRow
+
+Used by `firewall ls`.
+
+| Field | Type |
+| --- | --- |
+| `scope` | string |
+| `node` | string |
+| `vmid` | uint64, optional |
+| `position` | int |
+| `enabled` | bool |
+| `direction` | string, optional |
+| `action` | string, optional |
+| `interface` | string, optional |
+| `source` | string, optional |
+| `destination` | string, optional |
+| `protocol` | string, optional |
+| `source_port` | string, optional |
+| `dest_port` | string, optional |
+| `log` | string, optional |
+| `comment` | string, optional |
+
 ## VersionInfo
 
 | Field | Type |

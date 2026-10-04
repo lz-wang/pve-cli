@@ -49,6 +49,32 @@ Checks include:
 
 Doctor emits structured diagnostic rows and avoids printing token secrets.
 
+`doctor` checks whether `pvectl` itself can work; `check` (below) reports
+whether the HomeLab is healthy.
+
+## HomeLab Status
+
+`pvectl status` aggregates a compact HomeLab overview:
+
+- node summary (total/online/offline with per-node rows)
+- guest summary (total, running, stopped, VM and LXC counts)
+- storage summary (total, active, per-storage rows)
+- backup summary (count, latest backup age across backup-capable storages)
+- per-component `issues` for queries that failed, instead of failing the whole
+  command
+
+## HomeLab Health Check
+
+`pvectl check` inspects HomeLab health with cron-friendly exit semantics:
+
+- offline nodes report `fail`
+- inactive storages report `fail`, disabled storages report `warn`
+- storage usage over `--storage-warn` (default 85%) reports `warn`, over
+  `--storage-fail` (default 95%) reports `fail`
+- optional backup coverage check with `--backup-tag` and `--backup-max-age`
+  for guests carrying that tag
+- `fail` exits non-zero; `--strict` makes warnings exit non-zero too
+
 ## Version
 
 `pvectl version` prints build and runtime metadata without reading config or
@@ -66,20 +92,54 @@ It supports the normal output formats:
 
 The node output includes status, CPU, memory, disk, and uptime fields.
 
+`pvectl node get NODE` shows node details: status, CPU, memory, disk, uptime,
+PVE version, kernel version, load average, and CPU model/cores/sockets.
+
+## Task Inspection
+
+PVE tasks are first-class resources:
+
+- `task ls` lists recent tasks; without `--node` it aggregates across nodes
+  with partial-success behavior
+- `task ls --type vzdump`, `task ls --status running`, `task ls --limit N`
+- `task get UPID` shows one task's status
+- `task log UPID` and `task log UPID --tail N` show task log output
+- `task wait UPID --wait-timeout DURATION` blocks until completion
+
+Known task status values: `running`, `ok`, `error`, `unknown`.
+
 ## Guest Aggregate View
 
-`pvectl guest` is a read-only aggregate view across VM/QEMU and LXC guests.
+`pvectl guest` aggregates VM/QEMU and LXC guests.
 
 - `guest ls` lists all guests.
 - `guest ls --node NODE` filters by node.
 - `guest ls --type vm` filters to VMs.
 - `guest ls --type lxc` filters to containers.
 - `guest ls --status running` filters by guest status.
+- `guest ls --tag TAG` filters by tag; repeatable, with `--tag-match all|any`
+  (default `all`).
 - `guest get VMID` resolves and shows a guest by ID.
 - `guest get VMID --type vm` or `--type lxc` disambiguates duplicate IDs.
 
 Guest output includes kind, VMID/CTID, name, node, status, CPU, memory, disk,
-and uptime fields where available from Proxmox VE.
+uptime, and tags fields where available from Proxmox VE.
+
+### Bulk Guest Operations
+
+`guest start`, `guest shutdown`, `guest reboot`, and `guest stop` operate on
+every guest matching a selection:
+
+- selection requires at least one of `--node`, `--status`, or `--tag`
+- `--type all|vm|lxc` narrows the guest kind
+- `--dry-run` prints the affected guests and exits
+- operations hitting more than one guest require a local `yes` confirmation;
+  `--force` skips it
+- `--jobs N` (default 2) bounds concurrency
+- `--wait`/`--wait-timeout` wait for each guest's task
+- one failing guest never aborts the run; per-guest results are written to
+  stdout as `BulkGuestResult` rows, progress goes to stderr, and the command
+  exits non-zero only when at least one guest failed
 
 ## VM/QEMU Management
 
@@ -209,12 +269,14 @@ VM and LXC snapshot commands are grouped under `snapshot`.
 - `vm snapshot ls VMID`
 - `vm snapshot create VMID SNAPNAME`
 - `vm snapshot rollback VMID SNAPNAME`
+- `vm snapshot delete VMID SNAPNAME`
 - `lxc snapshot ls CTID`
 - `lxc snapshot create CTID SNAPNAME`
 - `lxc snapshot rollback CTID SNAPNAME`
+- `lxc snapshot delete CTID SNAPNAME`
 
-Rollback is treated as a dangerous operation and requires local confirmation
-unless `--force` is passed.
+Rollback and delete are treated as dangerous operations and require local
+confirmation unless `--force` is passed.
 
 ## Backups
 
@@ -238,6 +300,66 @@ Backup support is intentionally lightweight.
 - `--protected` accepts `0` or `1`.
 - `--wait` waits for completion.
 
+`vm restore` and `lxc restore` recover a vzdump backup archive into a new,
+non-existing VMID/CTID:
+
+- `--node` and `--vmid` are required
+- `--storage` optionally selects target storage
+- restores refuse existing VMIDs; there is no overwrite flag
+- archive kind (`vzdump-qemu-`/`vzdump-lxc-`) must match the command when the
+  archive name encodes it
+
+## VM QEMU Guest Agent (VM only)
+
+`vm agent` queries the QEMU guest agent. LXC containers do not expose it.
+
+- `vm agent ping VMID` verifies the agent answers
+- `vm agent network VMID` lists interfaces and addresses as seen inside the
+  guest (answers "which IP did this cloned VM get?")
+- `vm agent exec VMID -- COMMAND [ARG...]` runs executable+argv in the guest
+  without an implicit shell; supports `--input` for stdin data and `--timeout`
+  for the wait bound; the guest exit code is preserved and reflected in the
+  command exit status
+
+File write/read, fs freeze, and password reset are intentionally out of scope.
+
+## VM Cloud-init
+
+Cloud-init commands use PVE-native cloud-init configuration.
+
+- `vm cloud-init get VMID` shows the normalized cloud-init config; the password
+  is never echoed, only `password_configured`
+- `vm cloud-init set VMID` updates `--user`, `--ssh-key-file`,
+  `--ipconfig0..3`, `--nameserver`, `--searchdomain`, and `--password-env`
+- passwords are only accepted through an environment variable named by
+  `--password-env`, never as a flag value
+- `vm cloud-init update VMID` regenerates the cloud-init image so the next
+  boot picks up pending changes
+
+## Network Inventory (read-only)
+
+`network` inspects node network interfaces.
+
+- `network ls --node NODE`
+- `network ls --type bridge`
+- `network ls --active`
+- `network ls` without `--node` aggregates across nodes with partial success
+- `network get IFACE --node NODE`
+
+Network mutation (create/update/delete/apply/reload) is a non-goal.
+
+## Firewall Inventory (read-only)
+
+`firewall` inspects firewall status and rules.
+
+- `firewall status --node NODE`
+- `firewall ls --node NODE`
+- `firewall status --node NODE --type vm --vmid VMID`
+- `firewall ls --node NODE --type vm --vmid VMID`
+- `firewall ls --node NODE --type lxc --vmid CTID`
+
+`--type node` is the default. Firewall rule mutation is a non-goal.
+
 ## Storage Inventory
 
 Storage commands are read-only.
@@ -250,6 +372,8 @@ Storage commands are read-only.
 - `storage ls --type dir`
 - `storage ls --active`
 - `storage ls --enabled`
+
+`storage usage` is a compact daily-use view reusing the `StorageRow` schema.
 
 `storage get STORAGE --node NODE` shows one storage on one node.
 
@@ -269,9 +393,13 @@ explicit:
 - `lxc delete`
 - `vm snapshot rollback`
 - `lxc snapshot rollback`
+- `vm snapshot delete`
+- `lxc snapshot delete`
+- bulk `guest start/shutdown/reboot/stop` hitting more than one guest
 
 Delete prompts require typing the exact VMID/CTID unless `--force` is passed.
-Snapshot rollback prompts require typing the exact snapshot name unless
+Snapshot rollback and delete prompts require typing the exact snapshot name
+unless `--force` is passed. Bulk operations require typing `yes` unless
 `--force` is passed.
 
 `--force` skips the local confirmation prompt.

@@ -48,6 +48,31 @@ API 连接。
 
 Doctor 输出结构化诊断行，并且不会打印 token secret。
 
+`doctor` 检查的是 `pvectl` 自身能否工作；`check`（见下文）检查 HomeLab 当前
+是否健康。
+
+## HomeLab Status
+
+`pvectl status` 聚合输出一份紧凑的 HomeLab 概览：
+
+- 节点摘要（total/online/offline，含每个节点的行）
+- guest 摘要（total、running、stopped、VM 与 LXC 数量）
+- 存储摘要（total、active，含每个存储的行）
+- 备份摘要（数量、跨备份存储的最新备份时间）
+- 查询失败的部分以 `issues` 呈现，而不是让整个命令失败
+
+## HomeLab 健康检查
+
+`pvectl check` 以适合 cron 的退出码语义检查 HomeLab 健康状况：
+
+- 离线节点报告 `fail`
+- inactive 存储报告 `fail`，disabled 存储报告 `warn`
+- 存储使用率超过 `--storage-warn`（默认 85%）报告 `warn`，超过
+  `--storage-fail`（默认 95%）报告 `fail`
+- 通过 `--backup-tag` 和 `--backup-max-age` 可选开启备份覆盖率检查，只针对
+  带该 tag 的 guest
+- `fail` 使退出码非零；`--strict` 让 `warn` 也非零
+
 ## 版本
 
 `pvectl version` 打印构建和运行时元数据。它不读取配置文件，也不连接
@@ -65,20 +90,51 @@ Proxmox VE。
 
 节点输出包含 status、CPU、memory、disk 和 uptime 字段。
 
+`pvectl node get NODE` 显示节点详情：status、CPU、memory、disk、uptime、PVE
+版本、内核版本、load average 以及 CPU 型号/核数/插槽数。
+
+## Task 检查
+
+PVE task 是一等资源：
+
+- `task ls` 列出最近的 task；省略 `--node` 时跨节点聚合并容忍部分节点失败
+- `task ls --type vzdump`、`task ls --status running`、`task ls --limit N`
+- `task get UPID` 显示单个 task 状态
+- `task log UPID` 与 `task log UPID --tail N` 显示 task 日志
+- `task wait UPID --wait-timeout DURATION` 阻塞等待完成
+
+task status 取值：`running`、`ok`、`error`、`unknown`。
+
 ## Guest 聚合视图
 
-`pvectl guest` 是跨 VM/QEMU 和 LXC 的只读聚合视图。
+`pvectl guest` 聚合 VM/QEMU 和 LXC guest。
 
 - `guest ls` 列出所有 guest。
 - `guest ls --node NODE` 按节点过滤。
 - `guest ls --type vm` 只显示 VM。
 - `guest ls --type lxc` 只显示容器。
 - `guest ls --status running` 按 guest 状态过滤。
+- `guest ls --tag TAG` 按 tag 过滤；可重复，配合 `--tag-match all|any`（默认
+  `all`）。
 - `guest get VMID` 解析并显示指定 ID 的 guest。
 - `guest get VMID --type vm` 或 `--type lxc` 用于消除重复 ID 歧义。
 
-Guest 输出包含 kind、VMID/CTID、name、node、status、CPU、memory、disk 和
-uptime 等 Proxmox VE 可提供的字段。
+Guest 输出包含 kind、VMID/CTID、name、node、status、CPU、memory、disk、
+uptime 和 tags 等 Proxmox VE 可提供的字段。
+
+### 批量 Guest 操作
+
+`guest start`、`guest shutdown`、`guest reboot`、`guest stop` 作用于所有匹配
+选择条件的 guest：
+
+- 选择条件至少需要 `--node`、`--status`、`--tag` 之一
+- `--type all|vm|lxc` 收窄 guest 类型
+- `--dry-run` 打印将受影响的 guest 后退出
+- 命中超过一个 guest 时需要本地输入 `yes` 确认；`--force` 跳过
+- `--jobs N`（默认 2）限制并发
+- `--wait`/`--wait-timeout` 等待每个 guest 的 task
+- 单个 guest 失败不会中止整批；每个 guest 的结果以 `BulkGuestResult` 行写入
+  stdout，进度输出到 stderr，只有至少一个 guest 失败时退出码才非零
 
 ## VM/QEMU 管理
 
@@ -206,11 +262,13 @@ VM 和 LXC 快照命令位于 `snapshot` 分组下。
 - `vm snapshot ls VMID`
 - `vm snapshot create VMID SNAPNAME`
 - `vm snapshot rollback VMID SNAPNAME`
+- `vm snapshot delete VMID SNAPNAME`
 - `lxc snapshot ls CTID`
 - `lxc snapshot create CTID SNAPNAME`
 - `lxc snapshot rollback CTID SNAPNAME`
+- `lxc snapshot delete CTID SNAPNAME`
 
-Rollback 被视为危险操作，除非传入 `--force`，否则需要本地确认。
+Rollback 和 delete 被视为危险操作，除非传入 `--force`，否则需要本地确认。
 
 ## 备份
 
@@ -234,6 +292,63 @@ Rollback 被视为危险操作，除非传入 `--force`，否则需要本地确�
 - `--protected` 接受 `0` 或 `1`。
 - `--wait` 等待完成。
 
+`vm restore` 和 `lxc restore` 将 vzdump 备份归档恢复到新的、尚不存在的
+VMID/CTID：
+
+- `--node` 和 `--vmid` 必填
+- `--storage` 可选指定目标存储
+- 目标 VMID 已存在时拒绝执行；没有覆盖开关
+- 归档名带 vzdump 类型前缀（`vzdump-qemu-`/`vzdump-lxc-`）时必须与命令类型
+  匹配
+
+## VM QEMU Guest Agent（仅 VM）
+
+`vm agent` 查询 QEMU guest agent。LXC 容器没有该 API。
+
+- `vm agent ping VMID` 验证 agent 是否可用
+- `vm agent network VMID` 列出 guest 内部看到的网卡和地址（回答"克隆出来的
+  VM 拿到了什么 IP"）
+- `vm agent exec VMID -- COMMAND [ARG...]` 在 guest 内执行 executable+argv，
+  不隐式包装 shell；支持 `--input` 传入 stdin 数据、`--timeout` 限制等待；
+  guest 命令退出码会被保留并反映在命令退出码中
+
+文件写入/读取、fs freeze、密码重置刻意不在范围内。
+
+## VM Cloud-init
+
+Cloud-init 命令使用 PVE 原生 cloud-init 配置。
+
+- `vm cloud-init get VMID` 显示归一化的 cloud-init 配置；密码永不回显，只报
+  告 `password_configured`
+- `vm cloud-init set VMID` 更新 `--user`、`--ssh-key-file`、`--ipconfig0..3`、
+  `--nameserver`、`--searchdomain` 和 `--password-env`
+- 密码只接受通过 `--password-env` 指定的环境变量名，绝不接受 flag 值
+- `vm cloud-init update VMID` 重新生成 cloud-init 镜像，让下次启动生效
+
+## 网络清单（只读）
+
+`network` 查看节点网络接口。
+
+- `network ls --node NODE`
+- `network ls --type bridge`
+- `network ls --active`
+- 省略 `--node` 时跨节点聚合并容忍部分节点失败
+- `network get IFACE --node NODE`
+
+网络变更（create/update/delete/apply/reload）是非目标。
+
+## 防火墙清单（只读）
+
+`firewall` 查看防火墙状态和规则。
+
+- `firewall status --node NODE`
+- `firewall ls --node NODE`
+- `firewall status --node NODE --type vm --vmid VMID`
+- `firewall ls --node NODE --type vm --vmid VMID`
+- `firewall ls --node NODE --type lxc --vmid CTID`
+
+`--type node` 是默认值。防火墙规则变更是非目标。
+
 ## 存储清单
 
 存储命令是只读的。
@@ -246,6 +361,8 @@ Rollback 被视为危险操作，除非传入 `--force`，否则需要本地确�
 - `storage ls --type dir`
 - `storage ls --active`
 - `storage ls --enabled`
+
+`storage usage` 是复用 `StorageRow` schema 的紧凑日常用量视图。
 
 `storage get STORAGE --node NODE` 显示某节点上的一个存储。
 
@@ -264,8 +381,12 @@ Rollback 被视为危险操作，除非传入 `--force`，否则需要本地确�
 - `lxc delete`
 - `vm snapshot rollback`
 - `lxc snapshot rollback`
+- `vm snapshot delete`
+- `lxc snapshot delete`
+- 命中超过一个 guest 的批量 `guest start/shutdown/reboot/stop`
 
 Delete prompt 要求输入精确的 VMID/CTID，除非传入 `--force`。Snapshot
-rollback prompt 要求输入精确的 snapshot name，除非传入 `--force`。
+rollback 和 delete prompt 要求输入精确的 snapshot name，除非传入 `--force`。
+批量操作要求输入 `yes`，除非传入 `--force`。
 
 `--force` 会跳过本地确认 prompt。
