@@ -821,6 +821,7 @@ type commandBackend struct {
 	taskByName     map[string]output.TaskRow
 	taskLog        map[string][]output.TaskLogRow
 	taskHandles    map[string]pve.Task
+	restoreOptions pve.RestoreOptions
 	backupTask     pve.Task
 	backupNode     string
 	backupOptions  pve.BackupOptions
@@ -926,6 +927,11 @@ func (b *commandBackend) TaskHandle(upid string) (pve.Task, error) {
 		return task, nil
 	}
 	return nil, pve.ErrNotFound
+}
+
+func (b *commandBackend) Restore(_ context.Context, options pve.RestoreOptions) (pve.Task, error) {
+	b.restoreOptions = options
+	return b.backupTask, nil
 }
 
 type commandGuest struct {

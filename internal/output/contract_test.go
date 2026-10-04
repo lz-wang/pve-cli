@@ -138,6 +138,21 @@ func TestStructuredOutputContracts(t *testing.T) {
 			},
 		},
 		{
+			name: "RestoreResult",
+			value: RestoreResult{
+				Kind: "vm", VMID: 101, Node: "pve1",
+				Archive: "backup:backup/vzdump-qemu-100.vma.zst", Storage: "local-lvm", Task: "UPID:pve1:restore",
+			},
+			fields: []contractField{
+				{"kind", stringType},
+				{"vmid", uint64Type},
+				{"node", stringType},
+				{"archive", stringType},
+				{"storage", stringType},
+				{"task", stringType},
+			},
+		},
+		{
 			name: "StorageRow",
 			value: StorageRow{
 				Node: "pve1", Storage: "local", Type: "dir", Active: true, Enabled: true,

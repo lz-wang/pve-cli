@@ -329,3 +329,7 @@ func (b doctorBackend) TaskLog(context.Context, string, string, TaskLogPage) ([]
 func (b doctorBackend) TaskHandle(string) (Task, error) {
 	return nil, ErrNotFound
 }
+
+func (b doctorBackend) Restore(context.Context, RestoreOptions) (Task, error) {
+	return nil, ErrNotFound
+}

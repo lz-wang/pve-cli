@@ -100,6 +100,15 @@ type BackupResult struct {
 	Task    string `json:"task,omitempty" yaml:"task,omitempty"`
 }
 
+type RestoreResult struct {
+	Kind    string `json:"kind" yaml:"kind"`
+	VMID    uint64 `json:"vmid" yaml:"vmid"`
+	Node    string `json:"node" yaml:"node"`
+	Archive string `json:"archive" yaml:"archive"`
+	Storage string `json:"storage,omitempty" yaml:"storage,omitempty"`
+	Task    string `json:"task,omitempty" yaml:"task,omitempty"`
+}
+
 type StorageRow struct {
 	Node         string  `json:"node" yaml:"node"`
 	Storage      string  `json:"storage" yaml:"storage"`
@@ -506,6 +515,28 @@ func WriteBackupResult(w io.Writer, format string, result BackupResult) error {
 			result.Node,
 			result.Storage,
 			result.Mode,
+			empty(result.Task),
+		); err != nil {
+			return err
+		}
+		return tw.Flush()
+	})
+}
+
+func WriteRestoreResult(w io.Writer, format string, result RestoreResult) error {
+	return Write(w, format, result, func(w io.Writer) error {
+		tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+		if _, err := fmt.Fprintln(tw, "KIND\tVMID\tNODE\tSTORAGE\tARCHIVE\tTASK"); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(
+			tw,
+			"%s\t%d\t%s\t%s\t%s\t%s\n",
+			result.Kind,
+			result.VMID,
+			result.Node,
+			empty(result.Storage),
+			result.Archive,
 			empty(result.Task),
 		); err != nil {
 			return err
