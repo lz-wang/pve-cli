@@ -125,3 +125,8 @@ func (g vmGuest) RollbackSnapshot(ctx context.Context, name string) (Task, error
 	task, err := g.vm.Snapshot(name).Rollback(ctx)
 	return wrapTask(task), err
 }
+
+func (g vmGuest) DeleteSnapshot(ctx context.Context, name string) (Task, error) {
+	task, err := g.vm.Snapshot(name).Delete(ctx)
+	return wrapTask(task), err
+}

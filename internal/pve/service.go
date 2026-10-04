@@ -199,6 +199,16 @@ func (s *GuestService) RollbackSnapshot(ctx context.Context, vmid int, node, nam
 	})
 }
 
+func (s *GuestService) DeleteSnapshot(ctx context.Context, vmid int, node, name string) error {
+	name, err := normalizeSnapshotName(name)
+	if err != nil {
+		return err
+	}
+	return s.run(ctx, vmid, node, func(guest Guest) (Task, error) {
+		return guest.DeleteSnapshot(ctx, name)
+	})
+}
+
 func (s *GuestService) run(ctx context.Context, vmid int, node string, action func(Guest) (Task, error)) error {
 	guest, err := s.resolve(ctx, vmid, node)
 	if err != nil {

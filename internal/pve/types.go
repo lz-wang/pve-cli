@@ -23,6 +23,7 @@ type Guest interface {
 	Snapshots(ctx context.Context) ([]output.SnapshotRow, error)
 	CreateSnapshot(ctx context.Context, name string) (Task, error)
 	RollbackSnapshot(ctx context.Context, name string) (Task, error)
+	DeleteSnapshot(ctx context.Context, name string) (Task, error)
 }
 
 type Task interface {

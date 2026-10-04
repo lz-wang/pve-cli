@@ -888,6 +888,7 @@ type commandGuest struct {
 	snapshots        []output.SnapshotRow
 	createdSnapshot  string
 	rollbackSnapshot string
+	deletedSnapshot  string
 }
 
 func (g *commandGuest) Row() output.GuestRow {
@@ -960,6 +961,11 @@ func (g *commandGuest) CreateSnapshot(_ context.Context, name string) (pve.Task,
 
 func (g *commandGuest) RollbackSnapshot(_ context.Context, name string) (pve.Task, error) {
 	g.rollbackSnapshot = name
+	return g.task, nil
+}
+
+func (g *commandGuest) DeleteSnapshot(_ context.Context, name string) (pve.Task, error) {
+	g.deletedSnapshot = name
 	return g.task, nil
 }
 

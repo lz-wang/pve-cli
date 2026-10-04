@@ -122,3 +122,8 @@ func (g lxcGuest) RollbackSnapshot(ctx context.Context, name string) (Task, erro
 	task, err := g.ct.Snapshot(name).Rollback(ctx, false)
 	return wrapTask(task), err
 }
+
+func (g lxcGuest) DeleteSnapshot(ctx context.Context, name string) (Task, error) {
+	task, err := g.ct.Snapshot(name).Delete(ctx)
+	return wrapTask(task), err
+}

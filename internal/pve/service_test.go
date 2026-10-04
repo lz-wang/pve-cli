@@ -504,6 +504,7 @@ type fakeGuest struct {
 	snapshots        []output.SnapshotRow
 	createdSnapshot  string
 	rollbackSnapshot string
+	deletedSnapshot  string
 }
 
 func (g *fakeGuest) Row() output.GuestRow {
@@ -579,6 +580,11 @@ func (g *fakeGuest) CreateSnapshot(_ context.Context, name string) (Task, error)
 
 func (g *fakeGuest) RollbackSnapshot(_ context.Context, name string) (Task, error) {
 	g.rollbackSnapshot = name
+	return g.task, nil
+}
+
+func (g *fakeGuest) DeleteSnapshot(_ context.Context, name string) (Task, error) {
+	g.deletedSnapshot = name
 	return g.task, nil
 }
 
