@@ -12,9 +12,12 @@ func TestParseGuestTags(t *testing.T) {
 	}{
 		{"", []string{}},
 		{"infra", []string{"infra"}},
-		{"infra,production", []string{"infra", "production"}},
-		{" infra , production ", []string{"infra", "production"}},
-		{"Infra,,PRODUCTION", []string{"infra", "production"}},
+		// Proxmox VE joins guest tags with ";" (go-proxmox TagSeperator).
+		{"infra;production", []string{"infra", "production"}},
+		{"a;b;c", []string{"a", "b", "c"}},
+		{"production;webserver", []string{"production", "webserver"}},
+		{" infra ; production ", []string{"infra", "production"}},
+		{"Infra;;PRODUCTION", []string{"infra", "production"}},
 	}
 	for _, tc := range cases {
 		if got := ParseGuestTags(tc.raw); !reflect.DeepEqual(got, tc.want) {
@@ -35,7 +38,7 @@ func TestParseTagMatch(t *testing.T) {
 }
 
 func TestMatchGuestTags(t *testing.T) {
-	guest := ParseGuestTags("infra,docker")
+	guest := ParseGuestTags("infra;docker")
 
 	cases := []struct {
 		wanted []string

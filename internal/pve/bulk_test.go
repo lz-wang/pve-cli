@@ -30,7 +30,7 @@ func TestBulkServiceSelectFiltersAndSorts(t *testing.T) {
 			"pve2": {{Kind: "vm", VMID: 102, Name: "play", Node: "pve2", Status: "running", Tags: "sandbox"}},
 		},
 		lxcRows: map[string][]output.GuestRow{
-			"pve1": {{Kind: "lxc", VMID: 200, Name: "agh", Node: "pve1", Status: "running", Tags: "infra,production"}},
+			"pve1": {{Kind: "lxc", VMID: 200, Name: "agh", Node: "pve1", Status: "running", Tags: "infra;production"}},
 		},
 	}
 	svc := NewBulkService(backend, TaskRunner{}, nil, false)

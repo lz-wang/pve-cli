@@ -19,7 +19,7 @@ func bulkTestBackend() *commandBackend {
 			},
 		},
 		lxcs: map[string][]output.GuestRow{
-			"pve1": {{Kind: "lxc", VMID: 200, Name: "agh", Node: "pve1", Status: "running", Tags: "infra"}},
+			"pve1": {{Kind: "lxc", VMID: 200, Name: "agh", Node: "pve1", Status: "running", Tags: "infra;production"}},
 		},
 		vmGuests: map[string]map[int]*commandGuest{
 			"pve1": {

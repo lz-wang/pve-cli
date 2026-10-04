@@ -11,11 +11,12 @@ const (
 	TagMatchAny = "any"
 )
 
-// ParseGuestTags splits a raw PVE tags string (comma-separated) into
-// normalized tag values. This is the single place raw tag strings are
-// decoded.
+// ParseGuestTags splits a raw PVE tags string into normalized tag values.
+// Proxmox VE (and go-proxmox's TagSeperator) joins guest tags with ";", so
+// that is the canonical separator. This is the single place raw tag strings
+// are decoded.
 func ParseGuestTags(raw string) []string {
-	parts := strings.Split(raw, ",")
+	parts := strings.Split(raw, ";")
 	tags := make([]string, 0, len(parts))
 	for _, part := range parts {
 		tag := strings.ToLower(strings.TrimSpace(part))

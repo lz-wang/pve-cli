@@ -16,12 +16,12 @@ func TestGuestListCommandTagFiltering(t *testing.T) {
 		nodes: []output.NodeRow{{Name: "pve1"}},
 		vms: map[string][]output.GuestRow{
 			"pve1": {
-				{Kind: "vm", VMID: 100, Name: "debian", Node: "pve1", Status: "running", Tags: "infra,docker"},
+				{Kind: "vm", VMID: 100, Name: "debian", Node: "pve1", Status: "running", Tags: "infra;docker"},
 				{Kind: "vm", VMID: 101, Name: "play", Node: "pve1", Status: "running", Tags: "sandbox"},
 			},
 		},
 		lxcs: map[string][]output.GuestRow{
-			"pve1": {{Kind: "lxc", VMID: 200, Name: "agh", Node: "pve1", Status: "running", Tags: "infra,production"}},
+			"pve1": {{Kind: "lxc", VMID: 200, Name: "agh", Node: "pve1", Status: "running", Tags: "infra;production"}},
 		},
 	}
 

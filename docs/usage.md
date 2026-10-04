@@ -174,6 +174,8 @@ pvectl guest get 200 --type lxc
 
 Tag values are matched case-insensitively. `--tag` is repeatable; the default
 `--tag-match all` requires every listed tag, `any` requires at least one.
+Proxmox VE stores guest tags as one semicolon-separated string (for example
+`infra;production`); `pvectl` decodes that format before matching.
 
 #### Bulk Guest Operations
 
