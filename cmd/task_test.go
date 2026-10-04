@@ -347,3 +347,68 @@ func TestTaskWaitCommandWritesFinalRow(t *testing.T) {
 		t.Fatalf("stdout = %s", stdout.String())
 	}
 }
+
+func TestVMCloudInitGetCommandWritesConfig(t *testing.T) {
+	cfgPath := writeTestConfig(t, "json")
+	backend := &commandBackend{
+		nodes: []output.NodeRow{{Name: "pve1"}},
+		cloudInitConfigs: map[int]output.CloudInitConfig{
+			100: {
+				VMID: 100, Node: "pve1", User: "debian", PasswordConfigured: true,
+				IPConfigs: []output.CloudInitIPConfig{{Device: "ipconfig0", Config: "ip=dhcp"}},
+			},
+		},
+	}
+	var stdout bytes.Buffer
+
+	err := RunWithDependencies([]string{
+		"pvectl", "--config", cfgPath,
+		"vm", "cloud-init", "get", "100",
+	}, "test", testDeps(&stdout, backend))
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	out := stdout.String()
+	if !strings.Contains(out, `"user": "debian"`) || !strings.Contains(out, `"password_configured": true`) {
+		t.Fatalf("stdout = %s", out)
+	}
+	if strings.Contains(out, "s3cret") {
+		t.Fatal("cloud-init get must never echo passwords")
+	}
+}
+
+func TestVMCloudInitSetCommandUpdatesConfig(t *testing.T) {
+	cfgPath := writeTestConfig(t, "table")
+	task := &commandTask{upid: "UPID:pve1:cloudinit"}
+	guest := &commandGuest{
+		row:  output.GuestRow{Kind: "vm", VMID: 100, Node: "pve1"},
+		task: task,
+	}
+	backend := &commandBackend{
+		nodes:    []output.NodeRow{{Name: "pve1"}},
+		vmGuests: map[string]map[int]*commandGuest{"pve1": {100: guest}},
+	}
+	t.Setenv("VM_PASSWORD", "s3cret")
+
+	err := RunWithDependencies([]string{
+		"pvectl", "--config", cfgPath,
+		"vm", "cloud-init", "set", "100",
+		"--user", "debian",
+		"--ipconfig0", "ip=dhcp",
+		"--nameserver", "192.168.2.67",
+		"--password-env", "VM_PASSWORD",
+		"--wait",
+	}, "test", testDeps(&bytes.Buffer{}, backend))
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if guest.configValues["ciuser"] != "debian" || guest.configValues["ipconfig0"] != "ip=dhcp" || guest.configValues["nameserver"] != "192.168.2.67" {
+		t.Fatalf("config values = %#v", guest.configValues)
+	}
+	if guest.configValues["cipassword"] != "s3cret" {
+		t.Fatalf("cipassword = %q", guest.configValues["cipassword"])
+	}
+	if !task.waited {
+		t.Fatal("expected set to wait")
+	}
+}

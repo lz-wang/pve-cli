@@ -48,6 +48,16 @@ var flagsWithValues = map[string]bool{
 	"--limit":            true,
 	"--tag":              true,
 	"--tag-match":        true,
+	"--user":             true,
+	"--password-env":     true,
+	"--ssh-key-file":     true,
+	"--nameserver":       true,
+	"--searchdomain":     true,
+	"--ipconfig0":        true,
+	"--ipconfig1":        true,
+	"--ipconfig2":        true,
+	"--ipconfig3":        true,
+	"--input":            true,
 	"--endpoint":         true,
 	"--token-id":         true,
 	"--token-secret-env": true,
@@ -64,7 +74,7 @@ func normalizeArgs(args []string) []string {
 		return args
 	}
 	leafIndex := resourceIndex + 1
-	if leafIndex < len(args) && (args[leafIndex] == "snapshot" || args[leafIndex] == "content" || args[leafIndex] == "agent") && leafIndex+1 < len(args) {
+	if leafIndex < len(args) && (args[leafIndex] == "snapshot" || args[leafIndex] == "content" || args[leafIndex] == "agent" || args[leafIndex] == "cloud-init") && leafIndex+1 < len(args) {
 		leafIndex++
 	}
 	if strings.HasPrefix(args[leafIndex], "-") {

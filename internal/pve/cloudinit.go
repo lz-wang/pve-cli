@@ -3,6 +3,9 @@ package pve
 import (
 	"context"
 	"fmt"
+	"log/slog"
+	"os"
+	"regexp"
 	"strings"
 
 	proxmox "github.com/luthermonson/go-proxmox"
@@ -84,4 +87,88 @@ func parseCloudInitCustom(raw string) []output.CloudInitCustom {
 		custom = append(custom, output.CloudInitCustom{Device: device, Volume: volume})
 	}
 	return custom
+}
+
+// CloudInitSetOptions describes one `vm cloud-init set` request. The password
+// travels through an environment variable; pvectl never takes it as a flag.
+type CloudInitSetOptions struct {
+	User         string
+	PasswordEnv  string
+	SSHKeyFile   string
+	IPConfigs    map[string]string
+	Nameserver   string
+	SearchDomain string
+}
+
+// CloudInitService reads and updates PVE-native cloud-init settings on VMs.
+type CloudInitService struct {
+	backend CloudInitBackend
+	tasks   TaskRunner
+	logger  *slog.Logger
+	verbose bool
+}
+
+func NewCloudInitService(backend CloudInitBackend, tasks TaskRunner, logger *slog.Logger, verbose bool) *CloudInitService {
+	return &CloudInitService{backend: backend, tasks: tasks, logger: logger, verbose: verbose}
+}
+
+// Get returns the normalized cloud-init config for a VM.
+func (s *CloudInitService) Get(ctx context.Context, vmid int, node string) (output.CloudInitConfig, error) {
+	return s.backend.VirtualMachineCloudInit(ctx, node, vmid)
+}
+
+// Set maps the requested options onto PVE cloud-init keys and updates the VM
+// config through the regular config path.
+func (s *CloudInitService) Set(ctx context.Context, vmid int, node string, options CloudInitSetOptions) error {
+	values, err := cloudInitValues(options)
+	if err != nil {
+		return err
+	}
+	return NewVMService(s.backend, s.tasks, s.logger, s.verbose).Config(ctx, vmid, node, values)
+}
+
+func cloudInitValues(options CloudInitSetOptions) (map[string]string, error) {
+	values := make(map[string]string)
+	if strings.TrimSpace(options.User) != "" {
+		values["ciuser"] = options.User
+	}
+	if strings.TrimSpace(options.PasswordEnv) != "" {
+		secret := os.Getenv(options.PasswordEnv)
+		if strings.TrimSpace(secret) == "" {
+			return nil, fmt.Errorf("environment variable %s is not set", options.PasswordEnv)
+		}
+		values["cipassword"] = secret
+	}
+	if strings.TrimSpace(options.SSHKeyFile) != "" {
+		data, err := os.ReadFile(options.SSHKeyFile)
+		if err != nil {
+			return nil, fmt.Errorf("read ssh key file: %w", err)
+		}
+		keys := strings.Fields(string(data))
+		if len(keys) == 0 {
+			return nil, fmt.Errorf("ssh key file %s is empty", options.SSHKeyFile)
+		}
+		values["sshkeys"] = proxmox.EncodeSSHKeys(keys...)
+	}
+	for device, config := range options.IPConfigs {
+		device = strings.ToLower(strings.TrimSpace(device))
+		config = strings.TrimSpace(config)
+		if device == "" || config == "" {
+			return nil, fmt.Errorf("ipconfig device and value are required")
+		}
+		if !regexp.MustCompile(`^ipconfig\d+$`).MatchString(device) {
+			return nil, fmt.Errorf("invalid ipconfig device %q", device)
+		}
+		values[device] = config
+	}
+	if strings.TrimSpace(options.Nameserver) != "" {
+		values["nameserver"] = options.Nameserver
+	}
+	if strings.TrimSpace(options.SearchDomain) != "" {
+		values["searchdomain"] = options.SearchDomain
+	}
+	if len(values) == 0 {
+		return nil, fmt.Errorf("at least one cloud-init option is required")
+	}
+	return values, nil
 }

@@ -8,7 +8,7 @@ import (
 
 func newVMCommand(deps Dependencies) *cli.Command {
 	vmCommand := newGuestCommand("vm", "Manage QEMU virtual machines", deps)
-	vmCommand.Subcommands = append(vmCommand.Subcommands, newVMAgentCommand(deps))
+	vmCommand.Subcommands = append(vmCommand.Subcommands, newVMAgentCommand(deps), newVMCloudInitCommand(deps))
 	return vmCommand
 }
 
