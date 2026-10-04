@@ -337,3 +337,15 @@ func (b doctorBackend) TaskHandle(string) (Task, error) {
 func (b doctorBackend) Restore(context.Context, RestoreOptions) (Task, error) {
 	return nil, ErrNotFound
 }
+
+func (b doctorBackend) AgentPing(context.Context, string, int) error {
+	return ErrNotFound
+}
+
+func (b doctorBackend) AgentNetwork(context.Context, string, int) ([]output.AgentNetworkRow, error) {
+	return nil, ErrNotFound
+}
+
+func (b doctorBackend) AgentExec(context.Context, string, int, AgentExecOptions) (output.AgentExecResult, error) {
+	return output.AgentExecResult{}, ErrNotFound
+}

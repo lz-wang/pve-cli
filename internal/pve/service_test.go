@@ -403,37 +403,41 @@ func TestGuestServiceSnapshotTaskFailure(t *testing.T) {
 }
 
 type fakeBackend struct {
-	nodes          []output.NodeRow
-	nodeDetails    map[string]output.NodeDetail
-	vms            map[string]map[int]*fakeGuest
-	lxcs           map[string]map[int]*fakeGuest
-	vmRows         map[string][]output.GuestRow
-	lxcRows        map[string][]output.GuestRow
-	backupRows     map[string]map[string][]output.BackupRow
-	storageRows    map[string][]output.StorageRow
-	storageByName  map[string]map[string]output.StorageRow
-	storageContent map[string]map[string][]output.StorageContentRow
-	backupTask     Task
-	backupNode     string
-	backupOptions  BackupOptions
-	backupErrs     map[string]error
-	vmErrs         map[string]error
-	lxcErrs        map[string]error
-	storageErrs    map[string]error
-	taskErrs       map[string]error
-	taskRows       map[string][]output.TaskRow
-	taskByName     map[string]output.TaskRow
-	taskLogPages   map[string][][]output.TaskLogRow
-	taskHandle     Task
-	restoreOptions RestoreOptions
-	restoreTask    Task
-	vmCalls        int
-	lxcCalls       int
-	nodeCalls      int
-	vmListCalls    map[string]int
-	lxcListCalls   map[string]int
-	backupCalls    int
-	storageCalls   map[string]int
+	nodes            []output.NodeRow
+	nodeDetails      map[string]output.NodeDetail
+	vms              map[string]map[int]*fakeGuest
+	lxcs             map[string]map[int]*fakeGuest
+	vmRows           map[string][]output.GuestRow
+	lxcRows          map[string][]output.GuestRow
+	backupRows       map[string]map[string][]output.BackupRow
+	storageRows      map[string][]output.StorageRow
+	storageByName    map[string]map[string]output.StorageRow
+	storageContent   map[string]map[string][]output.StorageContentRow
+	backupTask       Task
+	backupNode       string
+	backupOptions    BackupOptions
+	backupErrs       map[string]error
+	vmErrs           map[string]error
+	lxcErrs          map[string]error
+	storageErrs      map[string]error
+	taskErrs         map[string]error
+	taskRows         map[string][]output.TaskRow
+	taskByName       map[string]output.TaskRow
+	taskLogPages     map[string][][]output.TaskLogRow
+	taskHandle       Task
+	restoreOptions   RestoreOptions
+	restoreTask      Task
+	agentErrs        map[string]error
+	agentNetwork     []output.AgentNetworkRow
+	agentExecOptions AgentExecOptions
+	agentExecResult  output.AgentExecResult
+	vmCalls          int
+	lxcCalls         int
+	nodeCalls        int
+	vmListCalls      map[string]int
+	lxcListCalls     map[string]int
+	backupCalls      int
+	storageCalls     map[string]int
 }
 
 func (b *fakeBackend) Nodes(context.Context) ([]output.NodeRow, error) {
@@ -565,6 +569,28 @@ func (b *fakeBackend) TaskHandle(string) (Task, error) {
 func (b *fakeBackend) Restore(_ context.Context, options RestoreOptions) (Task, error) {
 	b.restoreOptions = options
 	return b.restoreTask, nil
+}
+
+func (b *fakeBackend) AgentPing(_ context.Context, node string, vmid int) error {
+	if err := b.agentErrs["ping/"+node]; err != nil {
+		return err
+	}
+	return nil
+}
+
+func (b *fakeBackend) AgentNetwork(_ context.Context, node string, vmid int) ([]output.AgentNetworkRow, error) {
+	if err := b.agentErrs["network/"+node]; err != nil {
+		return nil, err
+	}
+	return b.agentNetwork, nil
+}
+
+func (b *fakeBackend) AgentExec(_ context.Context, node string, vmid int, options AgentExecOptions) (output.AgentExecResult, error) {
+	b.agentExecOptions = options
+	if err := b.agentErrs["exec/"+node]; err != nil {
+		return output.AgentExecResult{}, err
+	}
+	return b.agentExecResult, nil
 }
 
 type fakeGuest struct {

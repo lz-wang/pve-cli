@@ -176,6 +176,20 @@ type BulkGuestResult struct {
 	Error  string `json:"error,omitempty" yaml:"error,omitempty"`
 }
 
+type AgentNetworkRow struct {
+	Name            string   `json:"name" yaml:"name"`
+	HardwareAddress string   `json:"hardware_address,omitempty" yaml:"hardware_address,omitempty"`
+	Addresses       []string `json:"addresses,omitempty" yaml:"addresses,omitempty"`
+}
+
+type AgentExecResult struct {
+	ExitCode  int    `json:"exit_code" yaml:"exit_code"`
+	Signal    int    `json:"signal,omitempty" yaml:"signal,omitempty"`
+	Stdout    string `json:"stdout,omitempty" yaml:"stdout,omitempty"`
+	Stderr    string `json:"stderr,omitempty" yaml:"stderr,omitempty"`
+	Truncated bool   `json:"truncated,omitempty" yaml:"truncated,omitempty"`
+}
+
 type StorageRow struct {
 	Node         string  `json:"node" yaml:"node"`
 	Storage      string  `json:"storage" yaml:"storage"`
@@ -330,6 +344,46 @@ func WriteCheckRows(w io.Writer, format string, rows []CheckRow) error {
 				empty(row.Resource),
 				row.Message,
 			); err != nil {
+				return err
+			}
+		}
+		return tw.Flush()
+	})
+}
+
+func WriteAgentNetworkRows(w io.Writer, format string, rows []AgentNetworkRow) error {
+	return Write(w, format, rows, func(w io.Writer) error {
+		tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+		if _, err := fmt.Fprintln(tw, "NAME\tHARDWARE_ADDRESS\tADDRESSES"); err != nil {
+			return err
+		}
+		for _, row := range rows {
+			if _, err := fmt.Fprintf(
+				tw,
+				"%s\t%s\t%s\n",
+				empty(row.Name),
+				empty(row.HardwareAddress),
+				strings.Join(row.Addresses, ","),
+			); err != nil {
+				return err
+			}
+		}
+		return tw.Flush()
+	})
+}
+
+func WriteAgentExecResult(w io.Writer, format string, result AgentExecResult) error {
+	return Write(w, format, result, func(w io.Writer) error {
+		tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+		lines := [][2]string{
+			{"ExitCode", fmt.Sprint(result.ExitCode)},
+			{"Signal", fmt.Sprint(result.Signal)},
+			{"Stdout", result.Stdout},
+			{"Stderr", result.Stderr},
+			{"Truncated", formatBool(result.Truncated)},
+		}
+		for _, line := range lines {
+			if _, err := fmt.Fprintf(tw, "%s:\t%s\n", line[0], line[1]); err != nil {
 				return err
 			}
 		}

@@ -859,28 +859,32 @@ func TestConfigSetProfileCommandDoesNotRequireSecretEnv(t *testing.T) {
 }
 
 type commandBackend struct {
-	nodes          []output.NodeRow
-	nodeDetails    map[string]output.NodeDetail
-	vms            map[string][]output.GuestRow
-	lxcs           map[string][]output.GuestRow
-	vmGuests       map[string]map[int]*commandGuest
-	lxcGuests      map[string]map[int]*commandGuest
-	backups        map[string]map[string][]output.BackupRow
-	storages       map[string][]output.StorageRow
-	storageByName  map[string]map[string]output.StorageRow
-	storageContent map[string]map[string][]output.StorageContentRow
-	taskRows       map[string][]output.TaskRow
-	taskErrs       map[string]error
-	taskByName     map[string]output.TaskRow
-	taskLog        map[string][]output.TaskLogRow
-	taskHandles    map[string]pve.Task
-	restoreOptions pve.RestoreOptions
-	backupTask     pve.Task
-	backupNode     string
-	backupOptions  pve.BackupOptions
-	backupCalls    int
-	storageErrs    map[string]error
-	backupErrs     map[string]error
+	nodes            []output.NodeRow
+	nodeDetails      map[string]output.NodeDetail
+	vms              map[string][]output.GuestRow
+	lxcs             map[string][]output.GuestRow
+	vmGuests         map[string]map[int]*commandGuest
+	lxcGuests        map[string]map[int]*commandGuest
+	backups          map[string]map[string][]output.BackupRow
+	storages         map[string][]output.StorageRow
+	storageByName    map[string]map[string]output.StorageRow
+	storageContent   map[string]map[string][]output.StorageContentRow
+	taskRows         map[string][]output.TaskRow
+	taskErrs         map[string]error
+	taskByName       map[string]output.TaskRow
+	taskLog          map[string][]output.TaskLogRow
+	taskHandles      map[string]pve.Task
+	restoreOptions   pve.RestoreOptions
+	agentErr         error
+	agentNetwork     []output.AgentNetworkRow
+	agentExecOptions pve.AgentExecOptions
+	agentExecResult  output.AgentExecResult
+	backupTask       pve.Task
+	backupNode       string
+	backupOptions    pve.BackupOptions
+	backupCalls      int
+	storageErrs      map[string]error
+	backupErrs       map[string]error
 }
 
 func (b *commandBackend) Nodes(context.Context) ([]output.NodeRow, error) {
@@ -1000,6 +1004,25 @@ func (b *commandBackend) TaskHandle(upid string) (pve.Task, error) {
 func (b *commandBackend) Restore(_ context.Context, options pve.RestoreOptions) (pve.Task, error) {
 	b.restoreOptions = options
 	return b.backupTask, nil
+}
+
+func (b *commandBackend) AgentPing(_ context.Context, node string, vmid int) error {
+	return b.agentErr
+}
+
+func (b *commandBackend) AgentNetwork(_ context.Context, node string, vmid int) ([]output.AgentNetworkRow, error) {
+	if b.agentErr != nil {
+		return nil, b.agentErr
+	}
+	return b.agentNetwork, nil
+}
+
+func (b *commandBackend) AgentExec(_ context.Context, node string, vmid int, options pve.AgentExecOptions) (output.AgentExecResult, error) {
+	b.agentExecOptions = options
+	if b.agentErr != nil {
+		return output.AgentExecResult{}, b.agentErr
+	}
+	return b.agentExecResult, nil
 }
 
 type commandGuest struct {

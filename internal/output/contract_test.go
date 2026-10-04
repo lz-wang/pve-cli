@@ -297,6 +297,31 @@ func TestStructuredOutputContracts(t *testing.T) {
 			},
 		},
 		{
+			name: "AgentNetworkRow",
+			value: AgentNetworkRow{
+				Name: "eth0", HardwareAddress: "bc:24:11:2f:ab:12",
+				Addresses: []string{"192.168.2.10/24"},
+			},
+			fields: []contractField{
+				{"name", stringType},
+				{"hardware_address", stringType},
+				{"addresses", reflect.TypeOf([]string{})},
+			},
+		},
+		{
+			name: "AgentExecResult",
+			value: AgentExecResult{
+				ExitCode: 2, Signal: 1, Stdout: "Linux", Stderr: "warn", Truncated: true,
+			},
+			fields: []contractField{
+				{"exit_code", intType},
+				{"signal", intType},
+				{"stdout", stringType},
+				{"stderr", stringType},
+				{"truncated", boolType},
+			},
+		},
+		{
 			name: "TaskRow",
 			value: TaskRow{
 				UPID: "UPID:pve1:0001:0000:vzdump:100:root@pam:", Node: "pve1", Type: "vzdump",
