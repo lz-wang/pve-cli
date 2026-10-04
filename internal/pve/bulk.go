@@ -110,11 +110,11 @@ func ParseBulkAction(value string) (string, error) {
 // BulkExecuteOptions controls concurrent execution of a lifecycle action
 // over an already-selected guest list.
 type BulkExecuteOptions struct {
-	Action    string
-	Jobs      int
-	Wait      bool
+	Action      string
+	Jobs        int
+	Wait        bool
 	WaitTimeout time.Duration
-	ErrWriter io.Writer
+	ErrWriter   io.Writer
 }
 
 // syncWriter serializes progress writes. Every guest runs in its own

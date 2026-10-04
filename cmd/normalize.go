@@ -3,18 +3,18 @@ package cmd
 import "strings"
 
 var commandRoots = map[string]bool{
-	"config":  true,
-	"status":  true,
-	"check":   true,
-	"node":    true,
-	"guest":   true,
-	"task":    true,
-	"backup":  true,
-	"storage": true,
-	"network": true,
+	"config":   true,
+	"status":   true,
+	"check":    true,
+	"node":     true,
+	"guest":    true,
+	"task":     true,
+	"backup":   true,
+	"storage":  true,
+	"network":  true,
 	"firewall": true,
-	"vm":      true,
-	"lxc":     true,
+	"vm":       true,
+	"lxc":      true,
 }
 
 var flagsWithValues = map[string]bool{

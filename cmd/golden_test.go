@@ -263,8 +263,8 @@ func goldenBackend() *commandBackend {
 		cloudInitConfigs: map[int]output.CloudInitConfig{
 			100: {
 				VMID: 100, Node: "pve1", User: "debian", PasswordConfigured: true,
-				SSHKeys: "ssh-ed25519 AAAAtest key@host",
-				IPConfigs: []output.CloudInitIPConfig{{Device: "ipconfig0", Config: "ip=dhcp"}},
+				SSHKeys:    "ssh-ed25519 AAAAtest key@host",
+				IPConfigs:  []output.CloudInitIPConfig{{Device: "ipconfig0", Config: "ip=dhcp"}},
 				Nameserver: "192.168.2.67", SearchDomain: "lan", Type: "nocloud",
 			},
 		},
