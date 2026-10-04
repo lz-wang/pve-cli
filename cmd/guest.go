@@ -7,7 +7,9 @@ import (
 )
 
 func newVMCommand(deps Dependencies) *cli.Command {
-	return newGuestCommand("vm", "Manage QEMU virtual machines", deps)
+	vmCommand := newGuestCommand("vm", "Manage QEMU virtual machines", deps)
+	vmCommand.Subcommands = append(vmCommand.Subcommands, newVMAgentCommand(deps))
+	return vmCommand
 }
 
 func newLXCCommand(deps Dependencies) *cli.Command {

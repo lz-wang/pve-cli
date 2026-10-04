@@ -64,6 +64,49 @@ func TestStorageUsageCommandWritesUsage(t *testing.T) {
 	}
 }
 
+func TestVMAgentPingCommand(t *testing.T) {
+	cfgPath := writeTestConfig(t, "table")
+	backend := &commandBackend{
+		nodes: []output.NodeRow{{Name: "pve1"}},
+	}
+	var stdout bytes.Buffer
+
+	err := RunWithDependencies([]string{
+		"pvectl", "--config", cfgPath,
+		"vm", "agent", "ping", "100",
+		"--node", "pve1",
+	}, "test", testDeps(&stdout, backend))
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "agent ok") {
+		t.Fatalf("stdout = %s", stdout.String())
+	}
+}
+
+func TestVMAgentNetworkCommandWritesRows(t *testing.T) {
+	cfgPath := writeTestConfig(t, "json")
+	backend := &commandBackend{
+		nodes: []output.NodeRow{{Name: "pve1"}},
+		agentNetwork: []output.AgentNetworkRow{
+			{Name: "eth0", HardwareAddress: "bc:24:11:2f:ab:12", Addresses: []string{"192.168.2.10/24"}},
+		},
+	}
+	var stdout bytes.Buffer
+
+	err := RunWithDependencies([]string{
+		"pvectl", "--config", cfgPath,
+		"vm", "agent", "network", "100",
+	}, "test", testDeps(&stdout, backend))
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	out := stdout.String()
+	if !strings.Contains(out, `"name": "eth0"`) || !strings.Contains(out, "192.168.2.10/24") {
+		t.Fatalf("stdout = %s", out)
+	}
+}
+
 func TestStatusCommandWritesReport(t *testing.T) {
 	cfgPath := writeTestConfig(t, "json")
 	backend := &commandBackend{
@@ -104,7 +147,7 @@ func TestStatusCommandWritesReport(t *testing.T) {
 func TestStatusCommandReportsPartialIssues(t *testing.T) {
 	cfgPath := writeTestConfig(t, "json")
 	backend := &commandBackend{
-		nodes:     []output.NodeRow{{Name: "pve1", Status: "online"}},
+		nodes:       []output.NodeRow{{Name: "pve1", Status: "online"}},
 		storageErrs: map[string]error{"pve1": errors.New("timeout")},
 	}
 	var stdout bytes.Buffer
