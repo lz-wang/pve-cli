@@ -391,9 +391,17 @@ type fakeBackend struct {
 	backupTask     Task
 	backupNode     string
 	backupOptions  BackupOptions
+	backupErrs     map[string]error
 	vmErrs         map[string]error
 	lxcErrs        map[string]error
 	storageErrs    map[string]error
+	taskErrs       map[string]error
+	taskRows       map[string][]output.TaskRow
+	taskByName     map[string]output.TaskRow
+	taskLogPages   map[string][][]output.TaskLogRow
+	taskHandle     Task
+	restoreOptions RestoreOptions
+	restoreTask    Task
 	vmCalls        int
 	lxcCalls       int
 	nodeCalls      int
@@ -447,6 +455,9 @@ func (b *fakeBackend) LXC(_ context.Context, node string, vmid int) (Guest, erro
 }
 
 func (b *fakeBackend) Backups(_ context.Context, node, storage string) ([]output.BackupRow, error) {
+	if err := b.backupErrs[node+"/"+storage]; err != nil {
+		return nil, err
+	}
 	if b.backupRows == nil {
 		return nil, nil
 	}
@@ -487,6 +498,41 @@ func (b *fakeBackend) StorageContents(_ context.Context, node, storage string) (
 		return nil, nil
 	}
 	return b.storageContent[node][storage], nil
+}
+
+func (b *fakeBackend) Tasks(_ context.Context, node string, _ TaskListBackendOptions) ([]output.TaskRow, error) {
+	if err := b.taskErrs[node]; err != nil {
+		return nil, err
+	}
+	return b.taskRows[node], nil
+}
+
+func (b *fakeBackend) Task(_ context.Context, _, upid string) (output.TaskRow, error) {
+	if row, ok := b.taskByName[upid]; ok {
+		return row, nil
+	}
+	return output.TaskRow{}, ErrNotFound
+}
+
+func (b *fakeBackend) TaskLog(_ context.Context, _, upid string, page TaskLogPage) ([]output.TaskLogRow, error) {
+	pages := b.taskLogPages[upid]
+	idx := page.Start / taskLogPageSize
+	if idx >= len(pages) {
+		return nil, nil
+	}
+	return pages[idx], nil
+}
+
+func (b *fakeBackend) TaskHandle(string) (Task, error) {
+	if b.taskHandle == nil {
+		return nil, ErrNotFound
+	}
+	return b.taskHandle, nil
+}
+
+func (b *fakeBackend) Restore(_ context.Context, options RestoreOptions) (Task, error) {
+	b.restoreOptions = options
+	return b.restoreTask, nil
 }
 
 type fakeGuest struct {

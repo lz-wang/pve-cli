@@ -109,6 +109,45 @@ type RestoreResult struct {
 	Task    string `json:"task,omitempty" yaml:"task,omitempty"`
 }
 
+type StatusReport struct {
+	Nodes    NodeSummary    `json:"nodes" yaml:"nodes"`
+	Guests   GuestSummary   `json:"guests" yaml:"guests"`
+	Storages StorageSummary `json:"storages" yaml:"storages"`
+	Backups  BackupSummary  `json:"backups" yaml:"backups"`
+	Issues   []StatusIssue  `json:"issues,omitempty" yaml:"issues,omitempty"`
+}
+
+type NodeSummary struct {
+	Total   int       `json:"total" yaml:"total"`
+	Online  int       `json:"online" yaml:"online"`
+	Offline int       `json:"offline" yaml:"offline"`
+	Rows    []NodeRow `json:"rows,omitempty" yaml:"rows,omitempty"`
+}
+
+type GuestSummary struct {
+	Total   int `json:"total" yaml:"total"`
+	Running int `json:"running" yaml:"running"`
+	Stopped int `json:"stopped" yaml:"stopped"`
+	VM      int `json:"vm" yaml:"vm"`
+	LXC     int `json:"lxc" yaml:"lxc"`
+}
+
+type StorageSummary struct {
+	Total  int          `json:"total" yaml:"total"`
+	Active int          `json:"active" yaml:"active"`
+	Rows   []StorageRow `json:"rows,omitempty" yaml:"rows,omitempty"`
+}
+
+type BackupSummary struct {
+	Count       int    `json:"count" yaml:"count"`
+	LatestCtime uint64 `json:"latest_ctime,omitempty" yaml:"latest_ctime,omitempty"`
+}
+
+type StatusIssue struct {
+	Component string `json:"component" yaml:"component"`
+	Message   string `json:"message" yaml:"message"`
+}
+
 type StorageRow struct {
 	Node         string  `json:"node" yaml:"node"`
 	Storage      string  `json:"storage" yaml:"storage"`

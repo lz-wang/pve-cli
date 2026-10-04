@@ -223,6 +223,26 @@ func TestStructuredOutputContracts(t *testing.T) {
 			},
 		},
 		{
+			name: "StatusReport",
+			value: StatusReport{
+				Nodes: NodeSummary{
+					Total: 1, Online: 1,
+					Rows: []NodeRow{{Name: "pve1", Status: "online"}},
+				},
+				Guests:   GuestSummary{Total: 7, Running: 5, Stopped: 2, VM: 4, LXC: 3},
+				Storages: StorageSummary{Total: 1, Active: 1, Rows: []StorageRow{{Node: "pve1", Storage: "local"}}},
+				Backups:  BackupSummary{Count: 21, LatestCtime: 1710000000},
+				Issues:   []StatusIssue{{Component: "backup", Message: "query failed"}},
+			},
+			fields: []contractField{
+				{"nodes", reflect.TypeOf(NodeSummary{})},
+				{"guests", reflect.TypeOf(GuestSummary{})},
+				{"storages", reflect.TypeOf(StorageSummary{})},
+				{"backups", reflect.TypeOf(BackupSummary{})},
+				{"issues", reflect.TypeOf([]StatusIssue{})},
+			},
+		},
+		{
 			name: "TaskRow",
 			value: TaskRow{
 				UPID: "UPID:pve1:0001:0000:vzdump:100:root@pam:", Node: "pve1", Type: "vzdump",
