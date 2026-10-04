@@ -26,6 +26,10 @@ type GuestListOptions struct {
 	Status   string
 	Tags     []string
 	TagMatch string
+	// RequireComplete fails the whole listing when any node cannot be
+	// queried. Read-only aggregation tolerates partial results; mutations
+	// (bulk selection) must fail closed so no guest is silently missed.
+	RequireComplete bool
 }
 
 type GuestGetOptions struct {
@@ -103,6 +107,9 @@ func (s *GuestAggregateService) List(ctx context.Context, options GuestListOptio
 
 		nodeRows, err := s.listOnNode(ctx, node.Name, includeVM, includeLXC)
 		if err != nil {
+			if options.RequireComplete {
+				return nil, fmt.Errorf("complete guest selection required, node %s could not be queried: %w", node.Name, err)
+			}
 			if firstErr == nil {
 				firstErr = err
 			}

@@ -2,6 +2,8 @@ package pve
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"testing"
 
 	"github.com/lz-wang/pvectl/internal/output"
@@ -57,6 +59,36 @@ func TestBulkServiceSelectFiltersAndSorts(t *testing.T) {
 
 	if _, err := svc.Select(context.Background(), GuestSelector{Tags: []string{"infra"}, TagMatch: "bogus"}); err == nil {
 		t.Fatal("expected invalid tag match error")
+	}
+}
+
+func TestBulkServiceSelectFailsClosedOnPartialNodes(t *testing.T) {
+	backend := &fakeBackend{
+		nodes: []output.NodeRow{{Name: "pve1"}, {Name: "pve2"}, {Name: "pve3"}},
+		vmRows: map[string][]output.GuestRow{
+			"pve1": {{Kind: "vm", VMID: 100, Name: "debian", Node: "pve1", Status: "running", Tags: "infra"}},
+			"pve3": {{Kind: "vm", VMID: 103, Name: "web", Node: "pve3", Status: "running", Tags: "infra"}},
+		},
+		vmErrs: map[string]error{"pve2": errors.New("timeout")},
+	}
+	svc := NewBulkService(backend, TaskRunner{}, nil, false)
+
+	rows, err := svc.Select(context.Background(), GuestSelector{Tags: []string{"infra"}})
+	if err == nil {
+		t.Fatalf("bulk selection must fail closed when a node cannot be queried, got rows %#v", rows)
+	}
+	if !strings.Contains(err.Error(), "pve2") {
+		t.Fatalf("error = %v", err)
+	}
+
+	// An explicit --node keeps its existing behavior: only that node must
+	// answer.
+	rows, err = svc.Select(context.Background(), GuestSelector{Node: "pve1"})
+	if err != nil {
+		t.Fatalf("node-scoped select: %v", err)
+	}
+	if len(rows) != 1 || rows[0].VMID != 100 {
+		t.Fatalf("rows = %#v", rows)
 	}
 }
 

@@ -58,7 +58,9 @@ func NewBulkService(backend GuestBackend, tasks TaskRunner, logger *slog.Logger,
 }
 
 // Select resolves the selector to matching guest rows across all nodes.
-// Selection tolerates per-node failures as long as one node answers.
+// Selection is the input to mutations, so it fails closed: when any node
+// cannot be queried, the selection is refused instead of proceeding with a
+// partial view of the cluster.
 func (s *BulkService) Select(ctx context.Context, selector GuestSelector) ([]output.GuestRow, error) {
 	if err := selector.Validate(); err != nil {
 		return nil, err
@@ -76,11 +78,12 @@ func (s *BulkService) Select(ctx context.Context, selector GuestSelector) ([]out
 	}
 
 	rows, err := NewGuestAggregateService(s.backend, s.logger, s.verbose).List(ctx, GuestListOptions{
-		Node:     selector.Node,
-		Type:     guestType,
-		Status:   selector.Status,
-		Tags:     selector.Tags,
-		TagMatch: tagMatch,
+		Node:            selector.Node,
+		Type:            guestType,
+		Status:          selector.Status,
+		Tags:            selector.Tags,
+		TagMatch:        tagMatch,
+		RequireComplete: true,
 	})
 	if err != nil {
 		return nil, err
