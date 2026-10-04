@@ -233,6 +233,18 @@ func TestStructuredOutputContracts(t *testing.T) {
 			},
 		},
 		{
+			name: "CheckRow",
+			value: CheckRow{
+				Check: "storage-usage", Status: DoctorStatusWarn, Resource: "backup", Message: "usage 87%",
+			},
+			fields: []contractField{
+				{"check", stringType},
+				{"status", reflect.TypeOf(DoctorStatus(""))},
+				{"resource", stringType},
+				{"message", stringType},
+			},
+		},
+		{
 			name: "VersionInfo",
 			value: VersionInfo{
 				Version: "v1.0.0", Commit: "abc1234", Date: "2026-06-06T00:00:00Z",

@@ -212,6 +212,13 @@ type DoctorRow struct {
 	Message string       `json:"message" yaml:"message"`
 }
 
+type CheckRow struct {
+	Check    string       `json:"check" yaml:"check"`
+	Status   DoctorStatus `json:"status" yaml:"status"`
+	Resource string       `json:"resource,omitempty" yaml:"resource,omitempty"`
+	Message  string       `json:"message" yaml:"message"`
+}
+
 type TaskRow struct {
 	UPID       string `json:"upid" yaml:"upid"`
 	Node       string `json:"node" yaml:"node"`
@@ -300,6 +307,28 @@ func WriteNodeRows(w io.Writer, format string, rows []NodeRow) error {
 				FormatBytes(row.Disk),
 				FormatBytes(row.MaxDisk),
 				FormatUptime(row.Uptime),
+			); err != nil {
+				return err
+			}
+		}
+		return tw.Flush()
+	})
+}
+
+func WriteCheckRows(w io.Writer, format string, rows []CheckRow) error {
+	return Write(w, format, rows, func(w io.Writer) error {
+		tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+		if _, err := fmt.Fprintln(tw, "STATUS\tCHECK\tRESOURCE\tMESSAGE"); err != nil {
+			return err
+		}
+		for _, row := range rows {
+			if _, err := fmt.Fprintf(
+				tw,
+				"%s\t%s\t%s\t%s\n",
+				row.Status,
+				row.Check,
+				empty(row.Resource),
+				row.Message,
 			); err != nil {
 				return err
 			}
