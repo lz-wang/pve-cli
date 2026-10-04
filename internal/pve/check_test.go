@@ -221,3 +221,74 @@ func TestCheckServiceNodeFilter(t *testing.T) {
 		}
 	}
 }
+
+func TestCheckServiceUnknownNodeFailsClosed(t *testing.T) {
+	backend := &fakeBackend{
+		nodes: []output.NodeRow{{Name: "pve1", Status: "online"}},
+	}
+	svc := NewCheckService(backend)
+
+	result, err := svc.Run(context.Background(), CheckOptions{Node: "pve-does-not-exist"})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if !result.Failed {
+		t.Fatalf("unknown node must fail the check: %#v", result)
+	}
+	if len(result.Rows) != 1 {
+		t.Fatalf("rows = %#v", result.Rows)
+	}
+	row := result.Rows[0]
+	if row.Check != "node-exists" || row.Status != output.DoctorStatusFail || row.Resource != "pve-does-not-exist" {
+		t.Fatalf("row = %#v", row)
+	}
+}
+
+func TestCheckServiceBackupQueryFailureIsNotACoverageGap(t *testing.T) {
+	backend := &fakeBackend{
+		nodes: []output.NodeRow{{Name: "pve1", Status: "online"}},
+		vmRows: map[string][]output.GuestRow{
+			"pve1": {{Kind: "vm", VMID: 100, Node: "pve1", Tags: "backup"}},
+		},
+		lxcs:    map[string]map[int]*fakeGuest{},
+		lxcRows: map[string][]output.GuestRow{},
+		storageRows: map[string][]output.StorageRow{
+			"pve1": {{Node: "pve1", Storage: "backup", Active: true, Enabled: true, Content: "backup"}},
+		},
+		backupErrs: map[string]error{"pve1/backup": errors.New("timeout")},
+	}
+	svc := NewCheckService(backend)
+
+	result, err := svc.Run(context.Background(), CheckOptions{
+		BackupTag:    "backup",
+		BackupMaxAge: 36 * time.Hour,
+	})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+
+	var sourceRow, guestRow *output.CheckRow
+	for i := range result.Rows {
+		row := &result.Rows[i]
+		if row.Check != "backup-coverage" {
+			continue
+		}
+		switch {
+		case row.Resource == "pve1/backup":
+			sourceRow = row
+		case parseableGuestResource(row.Resource):
+			guestRow = row
+		}
+	}
+	if sourceRow == nil || sourceRow.Status != output.DoctorStatusWarn || sourceRow.Message != "list backups: timeout" {
+		t.Fatalf("source row = %#v", sourceRow)
+	}
+	if guestRow == nil || guestRow.Message != "backup status unavailable" {
+		t.Fatalf("guest row = %#v, want backup status unavailable, not no backup found", guestRow)
+	}
+}
+
+func parseableGuestResource(resource string) bool {
+	_, err := parseCheckVMID(resource)
+	return err == nil
+}

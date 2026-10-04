@@ -69,6 +69,18 @@ func (s *CheckService) Run(ctx context.Context, options CheckOptions) (CheckResu
 		s.checkNode(node, &result)
 	}
 
+	// A filtered-out-everything run must never look healthy: cron and other
+	// schedulers treat exit 0 as green, so an unknown --node is a failure.
+	if options.Node != "" && len(nodeNames) == 0 {
+		result.add(output.CheckRow{
+			Check:    "node-exists",
+			Status:   output.DoctorStatusFail,
+			Resource: options.Node,
+			Message:  "node not found",
+		})
+		return result, nil
+	}
+
 	storages, storageErrs := s.collectStorages(ctx, nodeNames)
 	for _, nodeName := range sortedKeys(storageErrs) {
 		result.add(output.CheckRow{
@@ -194,13 +206,31 @@ func (s *CheckService) checkBackupCoverage(ctx context.Context, nodes []string, 
 		return
 	}
 
-	latest := s.collectLatestBackups(ctx, storages)
+	latest, backupErrs := s.collectLatestBackups(ctx, storages)
+	for _, source := range sortedKeys(backupErrs) {
+		result.add(output.CheckRow{
+			Check:    "backup-coverage",
+			Status:   output.DoctorStatusWarn,
+			Resource: source,
+			Message:  fmt.Sprintf("list backups: %v", backupErrs[source]),
+		})
+	}
+	// When every backup source failed, "no backup found" would misreport a
+	// query outage as a coverage gap; keep the two diagnoses apart.
+	unavailable := len(backupErrs) > 0 && len(backupErrs) >= countBackupSources(storages)
 	now := uint64(time.Now().Unix())
 	cutoff := now - uint64(options.BackupMaxAge.Seconds())
 	for _, guest := range guests {
 		resource := fmt.Sprintf("%s %d", guest.Kind, guest.VMID)
 		ctime, ok := latest[backupGuestKey(guest.Kind, guest.VMID)]
 		switch {
+		case !ok && unavailable:
+			result.add(output.CheckRow{
+				Check:    "backup-coverage",
+				Status:   output.DoctorStatusWarn,
+				Resource: resource,
+				Message:  "backup status unavailable",
+			})
 		case !ok:
 			result.add(output.CheckRow{
 				Check:    "backup-coverage",
@@ -254,14 +284,18 @@ func (s *CheckService) collectTaggedGuests(ctx context.Context, nodes []string, 
 	return tagged, errs
 }
 
-func (s *CheckService) collectLatestBackups(ctx context.Context, storages []output.StorageRow) map[string]uint64 {
+// collectLatestBackups returns the newest backup per guest plus one error per
+// backup-capable storage that could not be queried.
+func (s *CheckService) collectLatestBackups(ctx context.Context, storages []output.StorageRow) (map[string]uint64, map[string]error) {
 	latest := make(map[string]uint64)
+	errs := make(map[string]error)
 	for _, storage := range storages {
 		if !storageHasContent(storage.Content, "backup") {
 			continue
 		}
 		rows, err := s.backend.Backups(ctx, storage.Node, storage.Storage)
 		if err != nil {
+			errs[storage.Node+"/"+storage.Storage] = err
 			continue
 		}
 		for _, row := range rows {
@@ -271,7 +305,17 @@ func (s *CheckService) collectLatestBackups(ctx context.Context, storages []outp
 			}
 		}
 	}
-	return latest
+	return latest, errs
+}
+
+func countBackupSources(storages []output.StorageRow) int {
+	count := 0
+	for _, storage := range storages {
+		if storageHasContent(storage.Content, "backup") {
+			count++
+		}
+	}
+	return count
 }
 
 func backupGuestKey(kind string, vmid uint64) string {

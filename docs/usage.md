@@ -113,7 +113,10 @@ pvectl check --strict
 ```
 
 The backup coverage check only runs when both `--backup-tag` and
-`--backup-max-age` are set; guests without that tag are never judged.
+`--backup-max-age` are set; guests without that tag are never judged. An
+unknown `--node` fails the check instead of reporting an empty green run, and
+backup storages that cannot be queried report `backup status unavailable`
+rather than `no backup found`.
 
 `doctor` stays separate: it checks whether `pvectl` itself works, not whether
 the HomeLab is healthy.
