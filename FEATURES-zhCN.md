@@ -1,10 +1,12 @@
-# pvectl 功能说明
+# pve 功能说明
 
-`pvectl` 是一个小而明确的个人 HomeLab Proxmox VE CLI。它通过
+`pve` 是一个小而明确的个人 HomeLab Proxmox VE CLI。它通过
 `go-proxmox` 调用 Proxmox VE API，重点覆盖日常 VM/QEMU 和 LXC 工作流。
 
 ## 全局 CLI 能力
 
+- 本地构建、安装和发布包统一使用 `pve` 二进制名称；Homebrew 通过
+  `brew install lz-wang/tap/pve` 安装。
 - 通过 `--output` 或 `-o` 支持 `table`、`json`、`yaml` 输出。
 - 通过 `--profile` 支持选择 profile。
 - 通过 `--config` 支持指定配置文件路径。
@@ -16,7 +18,11 @@
 
 ## 配置
 
-`pvectl config` 管理本地 YAML 配置和 profile 选择。
+`pve config` 管理本地 YAML 配置和 profile 选择。
+
+默认配置路径为 `~/.config/pve/config.yaml`。已有配置文件可移至此路径，
+或通过 `--config` 显式指定；不回退查找旧路径，也不自动迁移。token-secret
+环境变量名由用户指定，文档使用 `PVE_*` 作为示例。
 
 - `config init` 初始化默认 HomeLab profile。
 - `config set-profile NAME` 创建或更新指定 profile。
@@ -30,7 +36,7 @@ secret 值。
 
 ## 诊断
 
-`pvectl doctor` 校验本地配置；除非使用 `--offline`，否则也会验证 Proxmox
+`pve doctor` 校验本地配置；除非使用 `--offline`，否则也会验证 Proxmox
 API 连接。
 
 检查项包括：
@@ -48,12 +54,12 @@ API 连接。
 
 Doctor 输出结构化诊断行，并且不会打印 token secret。
 
-`doctor` 检查的是 `pvectl` 自身能否工作；`check`（见下文）检查 HomeLab 当前
+`doctor` 检查的是 `pve` 自身能否工作；`check`（见下文）检查 HomeLab 当前
 是否健康。
 
 ## HomeLab Status
 
-`pvectl status` 聚合输出一份紧凑的 HomeLab 概览：
+`pve status` 聚合输出一份紧凑的 HomeLab 概览：
 
 - 节点摘要（total/online/offline，含每个节点的行）
 - guest 摘要（total、running、stopped、VM 与 LXC 数量）
@@ -64,7 +70,7 @@ Doctor 输出结构化诊断行，并且不会打印 token secret。
 
 ## HomeLab 健康检查
 
-`pvectl check` 以适合 cron 的退出码语义检查 HomeLab 健康状况：
+`pve check` 以适合 cron 的退出码语义检查 HomeLab 健康状况：
 
 - 离线节点报告 `fail`
 - inactive 存储报告 `fail`，disabled 存储报告 `warn`
@@ -78,22 +84,22 @@ Doctor 输出结构化诊断行，并且不会打印 token secret。
 
 ## 版本
 
-`pvectl version` 打印构建和运行时元数据。它不读取配置文件，也不连接
+`pve version` 打印构建和运行时元数据。它不读取配置文件，也不连接
 Proxmox VE。
 
 支持常规输出格式：
 
-- `pvectl version`
-- `pvectl version -o json`
-- `pvectl version -o yaml`
+- `pve version`
+- `pve version -o json`
+- `pve version -o yaml`
 
 ## 节点
 
-`pvectl node ls` 列出 Proxmox VE 节点。
+`pve node ls` 列出 Proxmox VE 节点。
 
 节点输出包含 status、CPU、memory、disk 和 uptime 字段。
 
-`pvectl node get NODE` 显示节点详情：status、CPU、memory、disk、uptime、PVE
+`pve node get NODE` 显示节点详情：status、CPU、memory、disk、uptime、PVE
 版本、内核版本、load average 以及 CPU 型号/核数/插槽数。
 
 ## Task 检查
@@ -110,7 +116,7 @@ task status 取值：`running`、`ok`、`error`、`unknown`。
 
 ## Guest 聚合视图
 
-`pvectl guest` 聚合 VM/QEMU 和 LXC guest。
+`pve guest` 聚合 VM/QEMU 和 LXC guest。
 
 - `guest ls` 列出所有 guest。
 - `guest ls --node NODE` 按节点过滤。
@@ -118,7 +124,7 @@ task status 取值：`running`、`ok`、`error`、`unknown`。
 - `guest ls --type lxc` 只显示容器。
 - `guest ls --status running` 按 guest 状态过滤。
 - `guest ls --tag TAG` 按 tag 过滤；可重复，配合 `--tag-match all|any`（默认
-  `all`）。Proxmox VE 用 `;` 连接 guest tags，`pvectl` 先按该格式解码再匹配。
+  `all`）。Proxmox VE 用 `;` 连接 guest tags，`pve` 先按该格式解码再匹配。
 - `guest get VMID` 解析并显示指定 ID 的 guest。
 - `guest get VMID --type vm` 或 `--type lxc` 用于消除重复 ID 歧义。
 
@@ -143,7 +149,7 @@ uptime 和 tags 等 Proxmox VE 可提供的字段。
 
 ## VM/QEMU 管理
 
-`pvectl vm` 管理 QEMU 虚拟机。
+`pve vm` 管理 QEMU 虚拟机。
 
 读取操作：
 
@@ -172,7 +178,7 @@ uptime 和 tags 等 Proxmox VE 可提供的字段。
 
 ## LXC 管理
 
-`pvectl lxc` 为 LXC 容器提供与 VM 类似的命令形态。
+`pve lxc` 为 LXC 容器提供与 VM 类似的命令形态。
 
 读取操作：
 
@@ -234,8 +240,8 @@ config API。
 示例：
 
 ```bash
-pvectl vm config 101 --set memory=4096 --set cores=4 --wait
-pvectl lxc config 201 --set memory=2048 --set cores=2 --wait
+pve vm config 101 --set memory=4096 --set cores=4 --wait
+pve lxc config 201 --set memory=2048 --set cores=2 --wait
 ```
 
 ## 扩容
@@ -245,8 +251,8 @@ pvectl lxc config 201 --set memory=2048 --set cores=2 --wait
 示例：
 
 ```bash
-pvectl vm resize 101 --disk scsi0 --size +20G --wait
-pvectl lxc resize 201 --disk rootfs --size +10G --wait
+pve vm resize 101 --disk scsi0 --size +20G --wait
+pve lxc resize 201 --disk rootfs --size +10G --wait
 ```
 
 ## 迁移

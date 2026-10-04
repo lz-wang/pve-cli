@@ -25,7 +25,7 @@ func TestNodeGetCommandWritesDetail(t *testing.T) {
 	var stdout bytes.Buffer
 
 	err := RunWithDependencies([]string{
-		"pvectl", "--config", cfgPath,
+		"pve", "--config", cfgPath,
 		"node", "get", "pve1",
 	}, "test", testDeps(&stdout, backend))
 	if err != nil {
@@ -52,7 +52,7 @@ func TestStorageUsageCommandWritesUsage(t *testing.T) {
 	var stdout bytes.Buffer
 
 	err := RunWithDependencies([]string{
-		"pvectl", "--config", cfgPath,
+		"pve", "--config", cfgPath,
 		"storage", "usage",
 	}, "test", testDeps(&stdout, backend))
 	if err != nil {
@@ -72,7 +72,7 @@ func TestVMAgentPingCommand(t *testing.T) {
 	var stdout bytes.Buffer
 
 	err := RunWithDependencies([]string{
-		"pvectl", "--config", cfgPath,
+		"pve", "--config", cfgPath,
 		"vm", "agent", "ping", "100",
 		"--node", "pve1",
 	}, "test", testDeps(&stdout, backend))
@@ -98,7 +98,7 @@ func TestVMAgentPingCommandResolvesNodeWhenOmitted(t *testing.T) {
 	var stdout bytes.Buffer
 
 	err := RunWithDependencies([]string{
-		"pvectl", "--config", cfgPath,
+		"pve", "--config", cfgPath,
 		"vm", "agent", "ping", "100",
 	}, "test", testDeps(&stdout, backend))
 	if err != nil {
@@ -109,7 +109,7 @@ func TestVMAgentPingCommandResolvesNodeWhenOmitted(t *testing.T) {
 	}
 
 	if err := RunWithDependencies([]string{
-		"pvectl", "--config", cfgPath,
+		"pve", "--config", cfgPath,
 		"vm", "agent", "ping", "999",
 	}, "test", testDeps(&bytes.Buffer{}, backend)); err == nil {
 		t.Fatal("expected not-found error for missing vm")
@@ -130,7 +130,7 @@ func TestVMAgentNetworkCommandWritesRows(t *testing.T) {
 	var stdout bytes.Buffer
 
 	err := RunWithDependencies([]string{
-		"pvectl", "--config", cfgPath,
+		"pve", "--config", cfgPath,
 		"vm", "agent", "network", "100",
 	}, "test", testDeps(&stdout, backend))
 	if err != nil {
@@ -151,7 +151,7 @@ func TestVMAgentExecCommandWritesResult(t *testing.T) {
 	var stdout bytes.Buffer
 
 	err := RunWithDependencies([]string{
-		"pvectl", "--config", cfgPath,
+		"pve", "--config", cfgPath,
 		"vm", "agent", "exec", "100",
 		"--node", "pve1",
 		"--",
@@ -177,7 +177,7 @@ func TestVMAgentExecCommandFailsOnNonZeroExit(t *testing.T) {
 	}
 
 	err := RunWithDependencies([]string{
-		"pvectl", "--config", cfgPath,
+		"pve", "--config", cfgPath,
 		"vm", "agent", "exec", "100",
 		"--",
 		"/bin/false",
@@ -191,7 +191,7 @@ func TestVMAgentExecCommandRequiresCommand(t *testing.T) {
 	cfgPath := writeTestConfig(t, "table")
 
 	err := RunWithDependencies([]string{
-		"pvectl", "--config", cfgPath,
+		"pve", "--config", cfgPath,
 		"vm", "agent", "exec", "100",
 	}, "test", testDeps(&bytes.Buffer{}, &commandBackend{}))
 	if err == nil {
@@ -222,7 +222,7 @@ func TestStatusCommandWritesReport(t *testing.T) {
 	var stdout bytes.Buffer
 
 	err := RunWithDependencies([]string{
-		"pvectl", "--config", cfgPath,
+		"pve", "--config", cfgPath,
 		"status",
 	}, "test", testDeps(&stdout, backend))
 	if err != nil {
@@ -245,7 +245,7 @@ func TestStatusCommandReportsPartialIssues(t *testing.T) {
 	var stdout bytes.Buffer
 
 	err := RunWithDependencies([]string{
-		"pvectl", "--config", cfgPath,
+		"pve", "--config", cfgPath,
 		"status",
 	}, "test", testDeps(&stdout, backend))
 	if err != nil {
@@ -270,7 +270,7 @@ func TestTaskListCommandWritesRows(t *testing.T) {
 	var stdout bytes.Buffer
 
 	err := RunWithDependencies([]string{
-		"pvectl", "--config", cfgPath,
+		"pve", "--config", cfgPath,
 		"task", "ls",
 		"--type", "vzdump",
 	}, "test", testDeps(&stdout, backend))
@@ -297,7 +297,7 @@ func TestTaskListCommandPartialNodeFailure(t *testing.T) {
 	var stdout bytes.Buffer
 
 	err := RunWithDependencies([]string{
-		"pvectl", "--config", cfgPath,
+		"pve", "--config", cfgPath,
 		"task", "ls",
 	}, "test", testDeps(&stdout, backend))
 	if err != nil {
@@ -319,7 +319,7 @@ func TestTaskGetCommandWritesDetail(t *testing.T) {
 	var stdout bytes.Buffer
 
 	err := RunWithDependencies([]string{
-		"pvectl", "--config", cfgPath,
+		"pve", "--config", cfgPath,
 		"task", "get", testUPID,
 	}, "test", testDeps(&stdout, backend))
 	if err != nil {
@@ -344,7 +344,7 @@ func TestTaskLogCommandWritesRowsWithTail(t *testing.T) {
 	var stdout bytes.Buffer
 
 	err := RunWithDependencies([]string{
-		"pvectl", "--config", cfgPath,
+		"pve", "--config", cfgPath,
 		"task", "log", testUPID,
 		"--tail", "1",
 	}, "test", testDeps(&stdout, backend))
@@ -371,7 +371,7 @@ func TestTaskWaitCommandWritesFinalRow(t *testing.T) {
 	var stdout bytes.Buffer
 
 	err := RunWithDependencies([]string{
-		"pvectl", "--config", cfgPath,
+		"pve", "--config", cfgPath,
 		"task", "wait", testUPID,
 		"--wait-timeout", "1s",
 	}, "test", testDeps(&stdout, backend))
@@ -400,7 +400,7 @@ func TestVMCloudInitGetCommandWritesConfig(t *testing.T) {
 	var stdout bytes.Buffer
 
 	err := RunWithDependencies([]string{
-		"pvectl", "--config", cfgPath,
+		"pve", "--config", cfgPath,
 		"vm", "cloud-init", "get", "100",
 	}, "test", testDeps(&stdout, backend))
 	if err != nil {
@@ -429,7 +429,7 @@ func TestVMCloudInitSetCommandUpdatesConfig(t *testing.T) {
 	t.Setenv("VM_PASSWORD", "s3cret")
 
 	err := RunWithDependencies([]string{
-		"pvectl", "--config", cfgPath,
+		"pve", "--config", cfgPath,
 		"vm", "cloud-init", "set", "100",
 		"--user", "debian",
 		"--ipconfig0", "ip=dhcp",
@@ -462,7 +462,7 @@ func TestVMCloudInitUpdateCommandRegenerates(t *testing.T) {
 	var stdout bytes.Buffer
 
 	err := RunWithDependencies([]string{
-		"pvectl", "--config", cfgPath,
+		"pve", "--config", cfgPath,
 		"vm", "cloud-init", "update", "100",
 	}, "test", testDeps(&stdout, backend))
 	if err != nil {
@@ -490,7 +490,7 @@ func TestNetworkListCommandWritesRows(t *testing.T) {
 	var stdout bytes.Buffer
 
 	err := RunWithDependencies([]string{
-		"pvectl", "--config", cfgPath,
+		"pve", "--config", cfgPath,
 		"network", "ls",
 		"--node", "pve1",
 		"--type", "bridge",
@@ -516,7 +516,7 @@ func TestNetworkGetCommandWritesDetail(t *testing.T) {
 	var stdout bytes.Buffer
 
 	err := RunWithDependencies([]string{
-		"pvectl", "--config", cfgPath,
+		"pve", "--config", cfgPath,
 		"network", "get", "vmbr0",
 		"--node", "pve1",
 	}, "test", testDeps(&stdout, backend))
@@ -539,7 +539,7 @@ func TestFirewallStatusCommandWritesStatus(t *testing.T) {
 	var stdout bytes.Buffer
 
 	err := RunWithDependencies([]string{
-		"pvectl", "--config", cfgPath,
+		"pve", "--config", cfgPath,
 		"firewall", "status",
 		"--node", "pve1",
 	}, "test", testDeps(&stdout, backend))
@@ -562,7 +562,7 @@ func TestFirewallListCommandVMRequiresVMID(t *testing.T) {
 	var stdout bytes.Buffer
 
 	err := RunWithDependencies([]string{
-		"pvectl", "--config", cfgPath,
+		"pve", "--config", cfgPath,
 		"firewall", "ls",
 		"--node", "pve1",
 		"--type", "vm",
@@ -576,7 +576,7 @@ func TestFirewallListCommandVMRequiresVMID(t *testing.T) {
 	}
 
 	err = RunWithDependencies([]string{
-		"pvectl", "--config", cfgPath,
+		"pve", "--config", cfgPath,
 		"firewall", "ls",
 		"--node", "pve1",
 		"--type", "vm",

@@ -9,7 +9,7 @@ import (
 func newVersionCommand(info BuildInfo) *cli.Command {
 	return &cli.Command{
 		Name:  "version",
-		Usage: "Show pvectl build and runtime version information",
+		Usage: "Show pve build and runtime version information",
 		Flags: commonOutputFlags(),
 		Action: func(c *cli.Context) error {
 			if err := requireNoExtraArgs(c, 0); err != nil {

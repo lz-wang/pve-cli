@@ -27,7 +27,7 @@
   {
     "check": "TOKEN_SECRET_ENV",
     "status": "ok",
-    "message": "PVECTL_TOKEN is set"
+    "message": "PVE_TOKEN is set"
   },
   {
     "check": "TIMEOUT",

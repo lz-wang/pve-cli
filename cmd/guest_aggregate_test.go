@@ -27,7 +27,7 @@ func TestGuestListCommandTagFiltering(t *testing.T) {
 
 	var stdout bytes.Buffer
 	err := RunWithDependencies([]string{
-		"pvectl", "--config", cfgPath,
+		"pve", "--config", cfgPath,
 		"guest", "ls",
 		"--tag", "infra",
 		"--tag", "docker",
@@ -42,7 +42,7 @@ func TestGuestListCommandTagFiltering(t *testing.T) {
 
 	stdout.Reset()
 	err = RunWithDependencies([]string{
-		"pvectl", "--config", cfgPath,
+		"pve", "--config", cfgPath,
 		"guest", "ls",
 		"--tag", "infra",
 		"--tag", "production",
@@ -77,7 +77,7 @@ func TestGuestListCommandStatusAndTagFiltersTogether(t *testing.T) {
 
 	var stdout bytes.Buffer
 	err := RunWithDependencies([]string{
-		"pvectl", "--config", cfgPath,
+		"pve", "--config", cfgPath,
 		"guest", "ls",
 		"--status", "running",
 		"--tag", "infra",
@@ -104,7 +104,7 @@ func TestGuestListCommandWritesTableWithKind(t *testing.T) {
 		lxcs:  map[string][]output.GuestRow{"pve1": {{Kind: "lxc", VMID: 200, Name: "app", Node: "pve1", Status: "stopped"}}},
 	}
 
-	err := RunWithDependencies([]string{"pvectl", "--config", cfgPath, "guest", "ls"}, "test", commandDeps(&stdout, &stderr, backend))
+	err := RunWithDependencies([]string{"pve", "--config", cfgPath, "guest", "ls"}, "test", commandDeps(&stdout, &stderr, backend))
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
@@ -126,7 +126,7 @@ func TestGuestListCommandFiltersTypeVM(t *testing.T) {
 		lxcs:  map[string][]output.GuestRow{"pve1": {{Kind: "lxc", VMID: 200, Name: "app-lxc", Node: "pve1", Status: "running"}}},
 	}
 
-	err := RunWithDependencies([]string{"pvectl", "--config", cfgPath, "guest", "ls", "--type", "vm"}, "test", testDeps(&stdout, backend))
+	err := RunWithDependencies([]string{"pve", "--config", cfgPath, "guest", "ls", "--type", "vm"}, "test", testDeps(&stdout, backend))
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
@@ -145,7 +145,7 @@ func TestGuestListCommandWritesJSON(t *testing.T) {
 		lxcs:  map[string][]output.GuestRow{"pve1": {{Kind: "lxc", VMID: 200, Name: "app", Node: "pve1"}}},
 	}
 
-	err := RunWithDependencies([]string{"pvectl", "--config", cfgPath, "guest", "ls", "-o", "json"}, "test", testDeps(&stdout, backend))
+	err := RunWithDependencies([]string{"pve", "--config", cfgPath, "guest", "ls", "-o", "json"}, "test", testDeps(&stdout, backend))
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
@@ -163,7 +163,7 @@ func TestGuestGetCommandAuto(t *testing.T) {
 		vmGuests: map[string]map[int]*commandGuest{"pve1": {100: {row: output.GuestRow{Kind: "vm", VMID: 100, Name: "debian", Node: "pve1"}}}},
 	}
 
-	err := RunWithDependencies([]string{"pvectl", "--config", cfgPath, "guest", "get", "100"}, "test", testDeps(&stdout, backend))
+	err := RunWithDependencies([]string{"pve", "--config", cfgPath, "guest", "get", "100"}, "test", testDeps(&stdout, backend))
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
@@ -186,7 +186,7 @@ func TestGuestGetCommandTypeAndTrailingFlags(t *testing.T) {
 		},
 	}
 
-	err := RunWithDependencies([]string{"pvectl", "--config", cfgPath, "guest", "get", "300", "--type", "vm", "-o", "json"}, "test", testDeps(&stdout, backend))
+	err := RunWithDependencies([]string{"pve", "--config", cfgPath, "guest", "get", "300", "--type", "vm", "-o", "json"}, "test", testDeps(&stdout, backend))
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
@@ -204,7 +204,7 @@ func TestGuestGetCommandAmbiguous(t *testing.T) {
 		lxcGuests: map[string]map[int]*commandGuest{"pve1": {300: {row: output.GuestRow{Kind: "lxc", VMID: 300, Node: "pve1"}}}},
 	}
 
-	err := RunWithDependencies([]string{"pvectl", "--config", cfgPath, "guest", "get", "300"}, "test", testDeps(&bytes.Buffer{}, backend))
+	err := RunWithDependencies([]string{"pve", "--config", cfgPath, "guest", "get", "300"}, "test", testDeps(&bytes.Buffer{}, backend))
 	if err == nil || !strings.Contains(err.Error(), "guest 300 is ambiguous") {
 		t.Fatalf("error = %v", err)
 	}
@@ -213,7 +213,7 @@ func TestGuestGetCommandAmbiguous(t *testing.T) {
 func TestGuestCommandInvalidType(t *testing.T) {
 	cfgPath := writeTestConfig(t, "table")
 
-	err := RunWithDependencies([]string{"pvectl", "--config", cfgPath, "guest", "ls", "--type", "foo"}, "test", testDeps(&bytes.Buffer{}, &commandBackend{}))
+	err := RunWithDependencies([]string{"pve", "--config", cfgPath, "guest", "ls", "--type", "foo"}, "test", testDeps(&bytes.Buffer{}, &commandBackend{}))
 	if err == nil || err.Error() != `invalid guest type "foo", expected all, vm, or lxc` {
 		t.Fatalf("error = %v", err)
 	}

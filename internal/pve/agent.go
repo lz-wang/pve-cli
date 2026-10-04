@@ -28,7 +28,7 @@ type AgentBackend interface {
 }
 
 // AgentExecOptions describes one guest agent exec request. Command is
-// executable + argv; pvectl never wraps it in a shell implicitly.
+// executable + argv; pve never wraps it in a shell implicitly.
 type AgentExecOptions struct {
 	Command []string
 	Input   string

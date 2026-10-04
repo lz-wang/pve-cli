@@ -48,7 +48,7 @@ func TestWriteGuestRowsTable(t *testing.T) {
 func TestWriteDoctorRowsTableJSONAndYAML(t *testing.T) {
 	rows := []DoctorRow{
 		{Check: "CONFIG_PATH", Status: DoctorStatusOK, Message: "/tmp/config.yaml"},
-		{Check: "TOKEN_SECRET_ENV", Status: DoctorStatusFail, Message: "environment variable PVECTL_TOKEN is empty"},
+		{Check: "TOKEN_SECRET_ENV", Status: DoctorStatusFail, Message: "environment variable PVE_TOKEN is empty"},
 	}
 
 	var table bytes.Buffer

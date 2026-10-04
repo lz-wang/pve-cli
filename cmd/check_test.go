@@ -20,7 +20,7 @@ func TestCheckCommandHealthyExitsZero(t *testing.T) {
 	var stdout bytes.Buffer
 
 	err := RunWithDependencies([]string{
-		"pvectl", "--config", cfgPath,
+		"pve", "--config", cfgPath,
 		"check",
 	}, "test", testDeps(&stdout, backend))
 	if err != nil {
@@ -39,7 +39,7 @@ func TestCheckCommandFailsOnFailureRows(t *testing.T) {
 	var stdout bytes.Buffer
 
 	err := RunWithDependencies([]string{
-		"pvectl", "--config", cfgPath,
+		"pve", "--config", cfgPath,
 		"check",
 	}, "test", testDeps(&stdout, backend))
 	if err == nil {
@@ -60,7 +60,7 @@ func TestCheckCommandWarnPassesByDefaultFailsInStrict(t *testing.T) {
 	}
 
 	err := RunWithDependencies([]string{
-		"pvectl", "--config", cfgPath,
+		"pve", "--config", cfgPath,
 		"check",
 	}, "test", testDeps(&bytes.Buffer{}, backend))
 	if err != nil {
@@ -68,7 +68,7 @@ func TestCheckCommandWarnPassesByDefaultFailsInStrict(t *testing.T) {
 	}
 
 	err = RunWithDependencies([]string{
-		"pvectl", "--config", cfgPath,
+		"pve", "--config", cfgPath,
 		"check",
 		"--strict",
 	}, "test", testDeps(&bytes.Buffer{}, backend))
@@ -94,7 +94,7 @@ func TestCheckCommandBackupCoverage(t *testing.T) {
 	var stdout bytes.Buffer
 
 	err := RunWithDependencies([]string{
-		"pvectl", "--config", cfgPath,
+		"pve", "--config", cfgPath,
 		"check",
 		"--backup-tag", "backup",
 		"--backup-max-age", "36h",
@@ -107,7 +107,7 @@ func TestCheckCommandBackupCoverage(t *testing.T) {
 	}
 
 	err = RunWithDependencies([]string{
-		"pvectl", "--config", cfgPath,
+		"pve", "--config", cfgPath,
 		"check",
 		"--backup-tag", "backup",
 	}, "test", testDeps(&bytes.Buffer{}, backend))
@@ -123,7 +123,7 @@ func TestCheckCommandRejectsBadThresholds(t *testing.T) {
 	}
 
 	err := RunWithDependencies([]string{
-		"pvectl", "--config", cfgPath,
+		"pve", "--config", cfgPath,
 		"check",
 		"--storage-warn", "95",
 		"--storage-fail", "85",

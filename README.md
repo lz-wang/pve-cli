@@ -1,8 +1,8 @@
-# pvectl
+# pve
 
 Personal HomeLab Proxmox VE CLI.
 
-`pvectl` wraps the Proxmox VE API through
+`pve` wraps the Proxmox VE API through
 [`go-proxmox`](https://github.com/luthermonson/go-proxmox) and focuses on
 daily VM/QEMU and LXC operations. It is intentionally small: resource-oriented
 commands for a personal Proxmox cluster, not a full management platform.
@@ -12,7 +12,7 @@ commands for a personal Proxmox cluster, not a full management platform.
 With Homebrew:
 
 ```bash
-brew install lz-wang/tap/pvectl
+brew install lz-wang/tap/pve
 ```
 
 From source:
@@ -21,7 +21,7 @@ From source:
 make build
 ```
 
-The binary is written to `bin/pvectl`.
+The binary is written to `bin/pve`.
 
 Optional local install:
 
@@ -36,72 +36,72 @@ in Proxmox VE, export the token secret, initialize the profile, then run a
 diagnostic check:
 
 ```bash
-export PVECTL_HOME_TOKEN_SECRET="your-token-secret"
+export PVE_HOME_TOKEN_SECRET="your-token-secret"
 
-pvectl config init \
+pve config init \
   --endpoint https://pve.lan:8006/api2/json \
-  --token-id automation@pve!pvectl \
-  --token-secret-env PVECTL_HOME_TOKEN_SECRET \
+  --token-id automation@pve!pve \
+  --token-secret-env PVE_HOME_TOKEN_SECRET \
   --insecure
 
-pvectl doctor
+pve doctor
 ```
 
-`pvectl` stores only the environment variable name in
-`~/.config/pvectl/config.yaml`; it does not write token secrets to disk.
-Use `pvectl config set-profile` when you need more than one profile.
+`pve` stores only the environment variable name in
+`~/.config/pve/config.yaml`; it does not write token secrets to disk.
+Use `pve config set-profile` when you need more than one profile.
 
 ## Daily Usage
 
 ```bash
-pvectl status
-pvectl check
-pvectl doctor
+pve status
+pve check
+pve doctor
 
-pvectl node ls
-pvectl version
+pve node ls
+pve version
 
-pvectl guest ls
-pvectl guest get 100
-pvectl guest ls --status running
-pvectl guest ls --tag infra
+pve guest ls
+pve guest get 100
+pve guest ls --status running
+pve guest ls --tag infra
 
-pvectl task ls
-pvectl task log UPID:pve1:0000F2A3:00000000:6839F4A1:vzdump:100:root@pam: --tail 100
+pve task ls
+pve task log UPID:pve1:0000F2A3:00000000:6839F4A1:vzdump:100:root@pam: --tail 100
 
-pvectl backup ls --node pve1 --storage backup
+pve backup ls --node pve1 --storage backup
 
-pvectl storage ls
-pvectl storage usage
-pvectl storage content ls --node pve1 --storage local
+pve storage ls
+pve storage usage
+pve storage content ls --node pve1 --storage local
 
-pvectl vm ls
-pvectl vm get 100
-pvectl vm start 100 --wait
-pvectl vm shutdown 100 --wait
-pvectl vm backup 100 --storage backup --mode snapshot --wait
-pvectl vm restore backup:backup/vzdump-qemu-100.vma.zst --node pve1 --vmid 101 --storage local-lvm --wait
-pvectl vm stop 100
+pve vm ls
+pve vm get 100
+pve vm start 100 --wait
+pve vm shutdown 100 --wait
+pve vm backup 100 --storage backup --mode snapshot --wait
+pve vm restore backup:backup/vzdump-qemu-100.vma.zst --node pve1 --vmid 101 --storage local-lvm --wait
+pve vm stop 100
 
-pvectl lxc ls
-pvectl lxc get 200
-pvectl lxc start 200 --wait
-pvectl lxc backup 200 --storage backup --mode snapshot --wait
-pvectl lxc stop 200
+pve lxc ls
+pve lxc get 200
+pve lxc start 200 --wait
+pve lxc backup 200 --storage backup --mode snapshot --wait
+pve lxc stop 200
 ```
 
 Shut down every guest tagged `infra`, with a preview first:
 
 ```bash
-pvectl guest shutdown --tag infra --dry-run
-pvectl guest shutdown --tag infra
+pve guest shutdown --tag infra --dry-run
+pve guest shutdown --tag infra
 ```
 
 Check backup coverage for guests tagged `backup` (with a 36h SLA) as part of a
 health check:
 
 ```bash
-pvectl check --backup-tag backup --backup-max-age 36h
+pve check --backup-tag backup --backup-max-age 36h
 ```
 
 Use `guest` for aggregate views across VM/QEMU and LXC guests and for bulk
@@ -117,7 +117,7 @@ Storage commands are read-only inventory helpers.
 Default output is `table` for humans. Use `-o json` for scripts:
 
 ```bash
-pvectl guest get 100 -o json
+pve guest get 100 -o json
 ```
 
 JSON and YAML fields are stable within v1.x. See [docs/usage.md](docs/usage.md)
@@ -132,15 +132,16 @@ Tag releases publish GitHub Release assets and then update
 `lz-wang/homebrew-tap`. Configure the `HOMEBREW_TAP_TOKEN` repository secret in
 `lz-wang/pvectl` with permission to push to the tap repository.
 
-To regenerate the Formula locally for an existing release:
+To regenerate `Formula/pve.rb` locally, set `PVE_RELEASE_TAG` to a release tag
+that publishes `pve-*` assets and run:
 
 ```bash
-scripts/update-homebrew-formula.sh v1.0.0 /Users/lzwang/projects/homebrew-tap
+scripts/update-homebrew-formula.sh "$PVE_RELEASE_TAG" /Users/lzwang/projects/homebrew-tap
 ```
 
 ## Non-goals
 
-`pvectl` is not intended to be:
+`pve` is not intended to be:
 
 - a Web UI
 - a server mode or HTTP API

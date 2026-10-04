@@ -71,7 +71,7 @@ func NewAppWithBuildInfoAndDependencies(info BuildInfo, deps Dependencies) *cli.
 	deps = deps.withDefaults()
 
 	app := &cli.App{
-		Name:                   "pvectl",
+		Name:                   "pve",
 		Usage:                  "Personal HomeLab Proxmox VE CLI",
 		Version:                info.Version,
 		UseShortOptionHandling: true,

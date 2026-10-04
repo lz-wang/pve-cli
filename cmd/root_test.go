@@ -90,7 +90,7 @@ func TestVMListCommandUsesDefaultOutputFromProfile(t *testing.T) {
 		},
 	}
 
-	err := RunWithDependencies([]string{"pvectl", "--config", cfgPath, "vm", "ls"}, "test", deps)
+	err := RunWithDependencies([]string{"pve", "--config", cfgPath, "vm", "ls"}, "test", deps)
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
@@ -101,12 +101,12 @@ func TestVMListCommandUsesDefaultOutputFromProfile(t *testing.T) {
 
 func TestVMListCommandUsesSelectedProfile(t *testing.T) {
 	cfgPath := filepath.Join(t.TempDir(), "config.yaml")
-	t.Setenv("PVECTL_TOKEN", "secret")
+	t.Setenv("PVE_TOKEN", "secret")
 	cfg := config.Empty()
 	if err := cfg.SetProfile("home", config.Profile{
 		Endpoint:       "https://pve-home.example:8006/api2/json",
 		TokenID:        "root@pam!home",
-		TokenSecretEnv: "PVECTL_TOKEN",
+		TokenSecretEnv: "PVE_TOKEN",
 		DefaultOutput:  "table",
 	}); err != nil {
 		t.Fatalf("set home profile: %v", err)
@@ -114,7 +114,7 @@ func TestVMListCommandUsesSelectedProfile(t *testing.T) {
 	if err := cfg.SetProfile("lab", config.Profile{
 		Endpoint:       "https://pve-lab.example:8006/api2/json",
 		TokenID:        "root@pam!lab",
-		TokenSecretEnv: "PVECTL_TOKEN",
+		TokenSecretEnv: "PVE_TOKEN",
 		DefaultOutput:  "json",
 	}); err != nil {
 		t.Fatalf("set lab profile: %v", err)
@@ -141,7 +141,7 @@ func TestVMListCommandUsesSelectedProfile(t *testing.T) {
 		},
 	}
 
-	err := RunWithDependencies([]string{"pvectl", "--config", cfgPath, "--profile", "lab", "vm", "ls"}, "test", deps)
+	err := RunWithDependencies([]string{"pve", "--config", cfgPath, "--profile", "lab", "vm", "ls"}, "test", deps)
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
@@ -168,7 +168,7 @@ func TestVMCloneCommandPrintsNewVMIDAndWaits(t *testing.T) {
 	var stdout bytes.Buffer
 
 	err := RunWithDependencies([]string{
-		"pvectl", "--config", cfgPath,
+		"pve", "--config", cfgPath,
 		"vm", "clone", "9000",
 		"--newid", "101",
 		"--name", "app-vm",
@@ -202,7 +202,7 @@ func TestVMRebootCommandWaits(t *testing.T) {
 	}
 
 	err := RunWithDependencies([]string{
-		"pvectl", "--config", cfgPath,
+		"pve", "--config", cfgPath,
 		"vm", "reboot", "101",
 		"--wait",
 	}, "test", testDeps(&bytes.Buffer{}, backend))
@@ -230,7 +230,7 @@ func TestLXCRebootCommandWaits(t *testing.T) {
 	}
 
 	err := RunWithDependencies([]string{
-		"pvectl", "--config", cfgPath,
+		"pve", "--config", cfgPath,
 		"lxc", "reboot", "201",
 		"--wait",
 	}, "test", testDeps(&bytes.Buffer{}, backend))
@@ -260,7 +260,7 @@ func TestLXCCloneCommandMapsHostname(t *testing.T) {
 	var stdout bytes.Buffer
 
 	err := RunWithDependencies([]string{
-		"pvectl", "--config", cfgPath,
+		"pve", "--config", cfgPath,
 		"lxc", "clone", "900",
 		"--newid", "201",
 		"--hostname", "app-lxc",
@@ -294,7 +294,7 @@ func TestVMConfigCommandPassesSetValuesAndWaits(t *testing.T) {
 	}
 
 	err := RunWithDependencies([]string{
-		"pvectl", "--config", cfgPath,
+		"pve", "--config", cfgPath,
 		"vm", "config", "101",
 		"--set", "memory=4096",
 		"--set", "cores=4",
@@ -324,7 +324,7 @@ func TestLXCConfigCommandPassesSetValues(t *testing.T) {
 	}
 
 	err := RunWithDependencies([]string{
-		"pvectl", "--config", cfgPath,
+		"pve", "--config", cfgPath,
 		"lxc", "config", "201",
 		"--set", "memory=2048",
 		"--set", "cores=2",
@@ -354,7 +354,7 @@ func TestVMDeleteCommandForceSkipsConfirmation(t *testing.T) {
 	}
 
 	err := RunWithDependencies([]string{
-		"pvectl", "--config", cfgPath,
+		"pve", "--config", cfgPath,
 		"vm", "delete", "101",
 		"--force",
 	}, "test", testDeps(&bytes.Buffer{}, backend))
@@ -384,7 +384,7 @@ func TestLXCDeleteCommandConfirmsAndWaits(t *testing.T) {
 	deps.Stdin = strings.NewReader("201\n")
 
 	err := RunWithDependencies([]string{
-		"pvectl", "--config", cfgPath,
+		"pve", "--config", cfgPath,
 		"lxc", "delete", "201",
 		"--wait",
 	}, "test", deps)
@@ -413,7 +413,7 @@ func TestDeleteCommandAbortsOnConfirmationMismatch(t *testing.T) {
 	deps.Stdin = strings.NewReader("102\n")
 
 	err := RunWithDependencies([]string{
-		"pvectl", "--config", cfgPath,
+		"pve", "--config", cfgPath,
 		"vm", "delete", "101",
 	}, "test", deps)
 	if err == nil {
@@ -437,7 +437,7 @@ func TestVMMigrateCommandPassesTargetOnlineAndWaits(t *testing.T) {
 	}
 
 	err := RunWithDependencies([]string{
-		"pvectl", "--config", cfgPath,
+		"pve", "--config", cfgPath,
 		"vm", "migrate", "101",
 		"--target", "pve2",
 		"--online",
@@ -466,7 +466,7 @@ func TestLXCMigrateCommandPassesTargetOnline(t *testing.T) {
 	}
 
 	err := RunWithDependencies([]string{
-		"pvectl", "--config", cfgPath,
+		"pve", "--config", cfgPath,
 		"lxc", "migrate", "201",
 		"--target", "pve2",
 		"--online",
@@ -493,7 +493,7 @@ func TestVMResizeCommandPassesDiskSizeAndWaits(t *testing.T) {
 	}
 
 	err := RunWithDependencies([]string{
-		"pvectl", "--config", cfgPath,
+		"pve", "--config", cfgPath,
 		"vm", "resize", "101",
 		"--disk", "scsi0",
 		"--size", "+20G",
@@ -522,7 +522,7 @@ func TestLXCResizeCommandPassesDiskSize(t *testing.T) {
 	}
 
 	err := RunWithDependencies([]string{
-		"pvectl", "--config", cfgPath,
+		"pve", "--config", cfgPath,
 		"lxc", "resize", "201",
 		"--disk", "rootfs",
 		"--size", "+10G",
@@ -551,7 +551,7 @@ func TestVMSnapshotListCommandWritesRows(t *testing.T) {
 	var stdout bytes.Buffer
 
 	err := RunWithDependencies([]string{
-		"pvectl", "--config", cfgPath,
+		"pve", "--config", cfgPath,
 		"vm", "snapshot", "ls", "101",
 	}, "test", testDeps(&stdout, backend))
 	if err != nil {
@@ -577,7 +577,7 @@ func TestLXCSnapshotListCommandWritesRows(t *testing.T) {
 	var stdout bytes.Buffer
 
 	err := RunWithDependencies([]string{
-		"pvectl", "--config", cfgPath,
+		"pve", "--config", cfgPath,
 		"lxc", "snapshot", "ls", "201",
 	}, "test", testDeps(&stdout, backend))
 	if err != nil {
@@ -601,7 +601,7 @@ func TestVMSnapshotCreateCommandWaits(t *testing.T) {
 	}
 
 	err := RunWithDependencies([]string{
-		"pvectl", "--config", cfgPath,
+		"pve", "--config", cfgPath,
 		"vm", "snapshot", "create", "101", "before-upgrade",
 		"--wait",
 	}, "test", testDeps(&bytes.Buffer{}, backend))
@@ -629,7 +629,7 @@ func TestLXCSnapshotCreateCommandWaits(t *testing.T) {
 	}
 
 	err := RunWithDependencies([]string{
-		"pvectl", "--config", cfgPath,
+		"pve", "--config", cfgPath,
 		"lxc", "snapshot", "create", "201", "before-upgrade",
 		"--wait",
 	}, "test", testDeps(&bytes.Buffer{}, backend))
@@ -657,7 +657,7 @@ func TestVMSnapshotRollbackCommandForceWaits(t *testing.T) {
 	}
 
 	err := RunWithDependencies([]string{
-		"pvectl", "--config", cfgPath,
+		"pve", "--config", cfgPath,
 		"vm", "snapshot", "rollback", "101", "before-upgrade",
 		"--force",
 		"--wait",
@@ -686,7 +686,7 @@ func TestLXCSnapshotRollbackCommandForceWaits(t *testing.T) {
 	}
 
 	err := RunWithDependencies([]string{
-		"pvectl", "--config", cfgPath,
+		"pve", "--config", cfgPath,
 		"lxc", "snapshot", "rollback", "201", "before-upgrade",
 		"--force",
 		"--wait",
@@ -716,7 +716,7 @@ func TestSnapshotRollbackCommandConfirms(t *testing.T) {
 	deps.Stdin = strings.NewReader("before-upgrade\n")
 
 	err := RunWithDependencies([]string{
-		"pvectl", "--config", cfgPath,
+		"pve", "--config", cfgPath,
 		"vm", "snapshot", "rollback", "101", "before-upgrade",
 	}, "test", deps)
 	if err != nil {
@@ -740,7 +740,7 @@ func TestVMSnapshotDeleteCommandForceWaits(t *testing.T) {
 	}
 
 	err := RunWithDependencies([]string{
-		"pvectl", "--config", cfgPath,
+		"pve", "--config", cfgPath,
 		"vm", "snapshot", "delete", "101", "before-upgrade",
 		"--force",
 		"--wait",
@@ -770,7 +770,7 @@ func TestSnapshotDeleteCommandConfirms(t *testing.T) {
 	deps.Stdin = strings.NewReader("wrong-name\n")
 
 	err := RunWithDependencies([]string{
-		"pvectl", "--config", cfgPath,
+		"pve", "--config", cfgPath,
 		"lxc", "snapshot", "delete", "201", "before-upgrade",
 	}, "test", deps)
 	if err == nil {
@@ -791,7 +791,7 @@ func TestVMRestoreCommandWritesResultAndWaits(t *testing.T) {
 	var stdout bytes.Buffer
 
 	err := RunWithDependencies([]string{
-		"pvectl", "--config", cfgPath,
+		"pve", "--config", cfgPath,
 		"vm", "restore", "backup:backup/vzdump-qemu-100.vma.zst",
 		"--node", "pve1",
 		"--vmid", "101",
@@ -820,7 +820,7 @@ func TestRestoreCommandRejectsExistingVMID(t *testing.T) {
 	}
 
 	err := RunWithDependencies([]string{
-		"pvectl", "--config", cfgPath,
+		"pve", "--config", cfgPath,
 		"vm", "restore", "backup:backup/vzdump-qemu-100.vma.zst",
 		"--node", "pve1",
 		"--vmid", "101",
@@ -836,12 +836,12 @@ func TestRestoreCommandRejectsExistingVMID(t *testing.T) {
 func TestConfigSetProfileCommandDoesNotRequireSecretEnv(t *testing.T) {
 	cfgPath := filepath.Join(t.TempDir(), "config.yaml")
 	err := RunWithDependencies([]string{
-		"pvectl",
+		"pve",
 		"--config", cfgPath,
 		"config", "set-profile", "home",
 		"--endpoint", "https://pve.example:8006/api2/json",
 		"--token-id", "root@pam!test",
-		"--token-secret-env", "PVECTL_TOKEN",
+		"--token-secret-env", "PVE_TOKEN",
 		"--default-output", "yaml",
 	}, "test", Dependencies{Stdout: &bytes.Buffer{}, Stderr: &bytes.Buffer{}})
 	if err != nil {
@@ -853,7 +853,7 @@ func TestConfigSetProfileCommandDoesNotRequireSecretEnv(t *testing.T) {
 		t.Fatalf("read config: %v", err)
 	}
 	got := string(data)
-	if strings.Contains(got, "token_secret:") || !strings.Contains(got, "token_secret_env: PVECTL_TOKEN") {
+	if strings.Contains(got, "token_secret:") || !strings.Contains(got, "token_secret_env: PVE_TOKEN") {
 		t.Fatalf("config content = %s", got)
 	}
 }
@@ -1221,12 +1221,12 @@ func (t *commandTask) Failed() bool {
 func writeTestConfig(t *testing.T, defaultOutput string) string {
 	t.Helper()
 	cfgPath := filepath.Join(t.TempDir(), "config.yaml")
-	t.Setenv("PVECTL_TOKEN", "secret")
+	t.Setenv("PVE_TOKEN", "secret")
 	cfg := config.Empty()
 	if err := cfg.SetProfile("home", config.Profile{
 		Endpoint:       "https://pve.example:8006/api2/json",
 		TokenID:        "root@pam!test",
-		TokenSecretEnv: "PVECTL_TOKEN",
+		TokenSecretEnv: "PVE_TOKEN",
 		DefaultOutput:  defaultOutput,
 	}); err != nil {
 		t.Fatalf("set profile: %v", err)

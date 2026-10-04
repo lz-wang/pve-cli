@@ -9,7 +9,7 @@ fi
 tag="$1"
 tap_dir="${2:-/Users/lzwang/projects/homebrew-tap}"
 formula_dir="${tap_dir}/Formula"
-formula_path="${formula_dir}/pvectl.rb"
+formula_path="${formula_dir}/pve.rb"
 release_base_url="https://github.com/lz-wang/pvectl/releases/download/${tag}"
 
 if ! command -v curl >/dev/null 2>&1; then
@@ -26,10 +26,10 @@ fetch_sha256() {
   awk '{ print $1 }' <<<"$sha_line"
 }
 
-darwin_amd64_sha="$(fetch_sha256 "pvectl-${tag}-darwin-amd64")"
-darwin_arm64_sha="$(fetch_sha256 "pvectl-${tag}-darwin-arm64")"
-linux_amd64_sha="$(fetch_sha256 "pvectl-${tag}-linux-amd64")"
-linux_arm64_sha="$(fetch_sha256 "pvectl-${tag}-linux-arm64")"
+darwin_amd64_sha="$(fetch_sha256 "pve-${tag}-darwin-amd64")"
+darwin_arm64_sha="$(fetch_sha256 "pve-${tag}-darwin-arm64")"
+linux_amd64_sha="$(fetch_sha256 "pve-${tag}-linux-amd64")"
+linux_arm64_sha="$(fetch_sha256 "pve-${tag}-linux-arm64")"
 
 for value in "$darwin_amd64_sha" "$darwin_arm64_sha" "$linux_amd64_sha" "$linux_arm64_sha"; do
   if ! [[ "$value" =~ ^[0-9a-fA-F]{64}$ ]]; then
@@ -41,7 +41,7 @@ done
 mkdir -p "$formula_dir"
 
 cat >"$formula_path" <<EOF
-class Pvectl < Formula
+class Pve < Formula
   desc "Personal HomeLab Proxmox VE CLI"
   homepage "https://github.com/lz-wang/pvectl"
   license "MIT"
@@ -49,32 +49,32 @@ class Pvectl < Formula
 
   on_macos do
     if Hardware::CPU.arm?
-      url "${release_base_url}/pvectl-${tag}-darwin-arm64"
+      url "${release_base_url}/pve-${tag}-darwin-arm64"
       sha256 "${darwin_arm64_sha}"
     else
-      url "${release_base_url}/pvectl-${tag}-darwin-amd64"
+      url "${release_base_url}/pve-${tag}-darwin-amd64"
       sha256 "${darwin_amd64_sha}"
     end
   end
 
   on_linux do
     if Hardware::CPU.arm?
-      url "${release_base_url}/pvectl-${tag}-linux-arm64"
+      url "${release_base_url}/pve-${tag}-linux-arm64"
       sha256 "${linux_arm64_sha}"
     else
-      url "${release_base_url}/pvectl-${tag}-linux-amd64"
+      url "${release_base_url}/pve-${tag}-linux-amd64"
       sha256 "${linux_amd64_sha}"
     end
   end
 
   def install
-    binary = Dir["pvectl-*"].first
+    binary = Dir["pve-*"].first
     chmod 0755, binary
-    bin.install binary => "pvectl"
+    bin.install binary => "pve"
   end
 
   test do
-    assert_match "${tag}", shell_output("#{bin}/pvectl version -o json")
+    assert_match "${tag}", shell_output("#{bin}/pve version -o json")
   end
 end
 EOF

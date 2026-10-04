@@ -15,7 +15,7 @@ const (
 	DefaultStorageFailPercent = 95
 )
 
-// CheckService inspects HomeLab health. doctor checks whether pvectl itself
+// CheckService inspects HomeLab health. doctor checks whether pve itself
 // can work; check reports whether the HomeLab is healthy right now.
 type CheckService struct {
 	backend Backend

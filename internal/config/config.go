@@ -10,7 +10,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-const DefaultPath = "~/.config/pvectl/config.yaml"
+const DefaultPath = "~/.config/pve/config.yaml"
 
 type Config struct {
 	CurrentProfile string             `yaml:"current_profile,omitempty"`

@@ -15,12 +15,12 @@ func TestConfigInitCommandWritesProfile(t *testing.T) {
 	cfgPath := filepath.Join(t.TempDir(), "config.yaml")
 
 	err := RunWithDependencies([]string{
-		"pvectl",
+		"pve",
 		"--config", cfgPath,
 		"config", "init",
 		"--endpoint", "https://pve.example:8006/api2/json",
 		"--token-id", "root@pam!test",
-		"--token-secret-env", "PVECTL_TOKEN",
+		"--token-secret-env", "PVE_TOKEN",
 		"--insecure",
 	}, "test", Dependencies{Stdout: &bytes.Buffer{}, Stderr: &bytes.Buffer{}})
 	if err != nil {
@@ -35,7 +35,7 @@ func TestConfigInitCommandWritesProfile(t *testing.T) {
 		t.Fatalf("current profile = %q, want home", cfg.CurrentProfile)
 	}
 	profile := cfg.Profiles["home"]
-	if profile.Endpoint != "https://pve.example:8006/api2/json" || profile.TokenSecretEnv != "PVECTL_TOKEN" {
+	if profile.Endpoint != "https://pve.example:8006/api2/json" || profile.TokenSecretEnv != "PVE_TOKEN" {
 		t.Fatalf("profile = %#v", profile)
 	}
 	if !profile.InsecureSkipVerify || profile.Timeout != "30s" || profile.DefaultOutput != "table" {
@@ -63,12 +63,12 @@ func TestConfigInitNoUseLeavesCurrentEmpty(t *testing.T) {
 	cfgPath := filepath.Join(t.TempDir(), "config.yaml")
 
 	err := RunWithDependencies([]string{
-		"pvectl",
+		"pve",
 		"--config", cfgPath,
 		"config", "init",
 		"--endpoint", "https://pve.example:8006/api2/json",
 		"--token-id", "root@pam!test",
-		"--token-secret-env", "PVECTL_TOKEN",
+		"--token-secret-env", "PVE_TOKEN",
 		"--no-use",
 	}, "test", Dependencies{Stdout: &bytes.Buffer{}, Stderr: &bytes.Buffer{}})
 	if err != nil {
@@ -90,24 +90,24 @@ func TestConfigInitNoUseLeavesCurrentEmpty(t *testing.T) {
 func TestConfigInitOverwriteBehavior(t *testing.T) {
 	cfgPath := filepath.Join(t.TempDir(), "config.yaml")
 	baseArgs := []string{
-		"pvectl",
+		"pve",
 		"--config", cfgPath,
 		"config", "init",
 		"--endpoint", "https://pve.example:8006/api2/json",
 		"--token-id", "root@pam!test",
-		"--token-secret-env", "PVECTL_TOKEN",
+		"--token-secret-env", "PVE_TOKEN",
 	}
 	if err := RunWithDependencies(baseArgs, "test", Dependencies{Stdout: &bytes.Buffer{}, Stderr: &bytes.Buffer{}}); err != nil {
 		t.Fatalf("run initial init: %v", err)
 	}
 
 	replacementArgs := []string{
-		"pvectl",
+		"pve",
 		"--config", cfgPath,
 		"config", "init",
 		"--endpoint", "https://other.example:8006/api2/json",
 		"--token-id", "root@pam!test",
-		"--token-secret-env", "PVECTL_TOKEN",
+		"--token-secret-env", "PVE_TOKEN",
 	}
 	if err := RunWithDependencies(replacementArgs, "test", Dependencies{Stdout: &bytes.Buffer{}, Stderr: &bytes.Buffer{}}); err == nil {
 		t.Fatal("expected duplicate profile error")
@@ -128,7 +128,7 @@ func TestConfigInitOverwriteBehavior(t *testing.T) {
 
 func TestConfigInitRequiredFlagFailure(t *testing.T) {
 	err := RunWithDependencies([]string{
-		"pvectl",
+		"pve",
 		"--config", filepath.Join(t.TempDir(), "config.yaml"),
 		"config", "init",
 	}, "test", Dependencies{Stdout: &bytes.Buffer{}, Stderr: &bytes.Buffer{}})
@@ -141,19 +141,19 @@ func TestConfigProfileCommands(t *testing.T) {
 	cfgPath := filepath.Join(t.TempDir(), "config.yaml")
 
 	err := RunWithDependencies([]string{
-		"pvectl",
+		"pve",
 		"--config", cfgPath,
 		"config", "set-profile", "lab",
 		"--endpoint", "https://pve-lab.example:8006/api2/json",
 		"--token-id", "root@pam!test",
-		"--token-secret-env", "PVECTL_TOKEN",
+		"--token-secret-env", "PVE_TOKEN",
 	}, "test", Dependencies{Stdout: &bytes.Buffer{}, Stderr: &bytes.Buffer{}})
 	if err != nil {
 		t.Fatalf("set profile: %v", err)
 	}
 
 	err = RunWithDependencies([]string{
-		"pvectl",
+		"pve",
 		"--config", cfgPath,
 		"config", "use-profile", "lab",
 	}, "test", Dependencies{Stdout: &bytes.Buffer{}, Stderr: &bytes.Buffer{}})
@@ -163,7 +163,7 @@ func TestConfigProfileCommands(t *testing.T) {
 
 	var stdout bytes.Buffer
 	err = RunWithDependencies([]string{
-		"pvectl",
+		"pve",
 		"--config", cfgPath,
 		"config", "current-profile",
 	}, "test", Dependencies{Stdout: &stdout, Stderr: &bytes.Buffer{}})
@@ -176,7 +176,7 @@ func TestConfigProfileCommands(t *testing.T) {
 }
 
 func TestOldContextNamesAreRejected(t *testing.T) {
-	if err := RunWithDependencies([]string{"pvectl", "--context", "home", "version"}, "test", Dependencies{
+	if err := RunWithDependencies([]string{"pve", "--context", "home", "version"}, "test", Dependencies{
 		Stdout: &bytes.Buffer{},
 		Stderr: &bytes.Buffer{},
 	}); err == nil {
@@ -185,7 +185,7 @@ func TestOldContextNamesAreRejected(t *testing.T) {
 
 	for _, command := range []string{"set-context", "use-context", "current-context"} {
 		err := RunWithDependencies([]string{
-			"pvectl",
+			"pve",
 			"--config", filepath.Join(t.TempDir(), "config.yaml"),
 			"config", command, "home",
 		}, "test", Dependencies{Stdout: &bytes.Buffer{}, Stderr: &bytes.Buffer{}})
@@ -203,7 +203,7 @@ func TestDoctorOfflineCommand(t *testing.T) {
 	var stdout bytes.Buffer
 
 	err := RunWithDependencies([]string{
-		"pvectl",
+		"pve",
 		"--config", cfgPath,
 		"doctor", "--offline",
 	}, "test", Dependencies{Stdout: &stdout, Stderr: &bytes.Buffer{}})
@@ -221,7 +221,7 @@ func TestDoctorOfflineJSONCommand(t *testing.T) {
 	var stdout bytes.Buffer
 
 	err := RunWithDependencies([]string{
-		"pvectl",
+		"pve",
 		"--config", cfgPath,
 		"doctor", "--offline", "-o", "json",
 	}, "test", Dependencies{Stdout: &stdout, Stderr: &bytes.Buffer{}})
@@ -240,7 +240,7 @@ func TestDoctorNodeCommand(t *testing.T) {
 	var stdout bytes.Buffer
 
 	err := RunWithDependencies([]string{
-		"pvectl",
+		"pve",
 		"--config", cfgPath,
 		"doctor", "--node", "pve1",
 	}, "test", testDeps(&stdout, backend))
@@ -256,7 +256,7 @@ func TestDoctorNodeCommand(t *testing.T) {
 func TestDoctorFailureReturnsError(t *testing.T) {
 	var stdout bytes.Buffer
 	err := RunWithDependencies([]string{
-		"pvectl",
+		"pve",
 		"--config", filepath.Join(t.TempDir(), "missing.yaml"),
 		"doctor", "--offline",
 	}, "test", Dependencies{Stdout: &stdout, Stderr: &bytes.Buffer{}})

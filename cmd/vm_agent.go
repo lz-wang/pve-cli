@@ -98,7 +98,7 @@ func vmAgentExecCommand(deps Dependencies) *cli.Command {
 		),
 		Action: func(c *cli.Context) error {
 			if c.NArg() < 2 {
-				return fmt.Errorf("expected VMID and COMMAND, for example: pvectl vm agent exec 100 -- /usr/bin/uname -a")
+				return fmt.Errorf("expected VMID and COMMAND, for example: pve vm agent exec 100 -- /usr/bin/uname -a")
 			}
 			vmid, err := parseVMID(c.Args().First())
 			if err != nil {

@@ -65,7 +65,7 @@ func TestDoctorProfileNotFound(t *testing.T) {
 }
 
 func TestDoctorMissingEndpoint(t *testing.T) {
-	t.Setenv("PVECTL_DOCTOR_TOKEN", "secret")
+	t.Setenv("PVE_DOCTOR_TOKEN", "secret")
 	profile := validDoctorProfile()
 	profile.Endpoint = ""
 	path := writeDoctorProfile(t, profile)
@@ -92,19 +92,19 @@ func TestDoctorMissingTokenEnv(t *testing.T) {
 
 func TestDoctorTokenEnvEmpty(t *testing.T) {
 	profile := validDoctorProfile()
-	profile.TokenSecretEnv = "PVECTL_DOCTOR_EMPTY_TOKEN"
+	profile.TokenSecretEnv = "PVE_DOCTOR_EMPTY_TOKEN"
 	path := writeDoctorProfile(t, profile)
 
 	result := NewDoctorService(nil).Run(context.Background(), DoctorOptions{ConfigPath: path, Offline: true})
 
 	row := requireDoctorRow(t, result, "TOKEN_SECRET_ENV", output.DoctorStatusFail)
-	if !strings.Contains(row.Message, "PVECTL_DOCTOR_EMPTY_TOKEN") {
+	if !strings.Contains(row.Message, "PVE_DOCTOR_EMPTY_TOKEN") {
 		t.Fatalf("token env message = %q", row.Message)
 	}
 }
 
 func TestDoctorInvalidTimeout(t *testing.T) {
-	t.Setenv("PVECTL_DOCTOR_TOKEN", "secret")
+	t.Setenv("PVE_DOCTOR_TOKEN", "secret")
 	profile := validDoctorProfile()
 	profile.Timeout = "soon"
 	path := writeDoctorProfile(t, profile)
@@ -115,7 +115,7 @@ func TestDoctorInvalidTimeout(t *testing.T) {
 }
 
 func TestDoctorInvalidOutput(t *testing.T) {
-	t.Setenv("PVECTL_DOCTOR_TOKEN", "secret")
+	t.Setenv("PVE_DOCTOR_TOKEN", "secret")
 	profile := validDoctorProfile()
 	profile.DefaultOutput = "xml"
 	path := writeDoctorProfile(t, profile)
@@ -129,7 +129,7 @@ func TestDoctorInvalidOutput(t *testing.T) {
 }
 
 func TestDoctorInvalidEndpointURL(t *testing.T) {
-	t.Setenv("PVECTL_DOCTOR_TOKEN", "secret")
+	t.Setenv("PVE_DOCTOR_TOKEN", "secret")
 	profile := validDoctorProfile()
 	profile.Endpoint = "ftp://pve.lan/api2/json"
 	path := writeDoctorProfile(t, profile)
@@ -140,7 +140,7 @@ func TestDoctorInvalidEndpointURL(t *testing.T) {
 }
 
 func TestDoctorOfflineSkipsAPI(t *testing.T) {
-	t.Setenv("PVECTL_DOCTOR_TOKEN", "secret")
+	t.Setenv("PVE_DOCTOR_TOKEN", "secret")
 	path := writeDoctorProfile(t, validDoctorProfile())
 	called := false
 	service := NewDoctorService(func(config.Profile, ClientOptions) (Backend, error) {
@@ -161,7 +161,7 @@ func TestDoctorOfflineSkipsAPI(t *testing.T) {
 }
 
 func TestDoctorOnlineNodesOK(t *testing.T) {
-	t.Setenv("PVECTL_DOCTOR_TOKEN", "secret")
+	t.Setenv("PVE_DOCTOR_TOKEN", "secret")
 	path := writeDoctorProfile(t, validDoctorProfile())
 	service := NewDoctorService(doctorFactory(doctorBackend{
 		nodes: []output.NodeRow{{Name: "pve1"}, {Name: "pve2"}},
@@ -180,7 +180,7 @@ func TestDoctorOnlineNodesOK(t *testing.T) {
 }
 
 func TestDoctorOnlineNodesFail(t *testing.T) {
-	t.Setenv("PVECTL_DOCTOR_TOKEN", "secret")
+	t.Setenv("PVE_DOCTOR_TOKEN", "secret")
 	path := writeDoctorProfile(t, validDoctorProfile())
 	service := NewDoctorService(doctorFactory(doctorBackend{
 		nodesErr: errors.New("permission denied"),
@@ -196,7 +196,7 @@ func TestDoctorOnlineNodesFail(t *testing.T) {
 }
 
 func TestDoctorNodeExists(t *testing.T) {
-	t.Setenv("PVECTL_DOCTOR_TOKEN", "secret")
+	t.Setenv("PVE_DOCTOR_TOKEN", "secret")
 	path := writeDoctorProfile(t, validDoctorProfile())
 	service := NewDoctorService(doctorFactory(doctorBackend{
 		nodes: []output.NodeRow{{Name: "pve1"}},
@@ -208,7 +208,7 @@ func TestDoctorNodeExists(t *testing.T) {
 }
 
 func TestDoctorNodeMissing(t *testing.T) {
-	t.Setenv("PVECTL_DOCTOR_TOKEN", "secret")
+	t.Setenv("PVE_DOCTOR_TOKEN", "secret")
 	path := writeDoctorProfile(t, validDoctorProfile())
 	service := NewDoctorService(doctorFactory(doctorBackend{
 		nodes: []output.NodeRow{{Name: "pve1"}},
@@ -256,8 +256,8 @@ func writeDoctorConfig(t *testing.T, cfg *config.Config) string {
 func validDoctorProfile() config.Profile {
 	return config.Profile{
 		Endpoint:       "https://pve.lan:8006/api2/json",
-		TokenID:        "automation@pve!pvectl",
-		TokenSecretEnv: "PVECTL_DOCTOR_TOKEN",
+		TokenID:        "automation@pve!pve",
+		TokenSecretEnv: "PVE_DOCTOR_TOKEN",
 		Timeout:        "30s",
 		DefaultOutput:  "table",
 	}

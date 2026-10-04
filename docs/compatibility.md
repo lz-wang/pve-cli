@@ -1,7 +1,18 @@
 # Compatibility Policy
 
-`pvectl` v1.x is intended to be stable for personal HomeLab scripts and
+`pve` v1.x is intended to be stable for personal HomeLab scripts and
 automation. This policy applies to documented behavior.
+
+## Executable Rename
+
+The executable is now `pve`, and the Homebrew formula is `lz-wang/tap/pve`.
+This is an intentional exception to the v1.x compatibility policy: no
+`pvectl` executable alias is provided. Update scripts to invoke `pve`.
+
+The default config path is now `~/.config/pve/config.yaml`. Move an existing
+config file there or select its location with `--config`; the old directory
+is not searched or migrated automatically. Token-secret environment variable
+names remain user-defined.
 
 ## Stable Within v1.x
 

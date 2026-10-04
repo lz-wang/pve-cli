@@ -12,7 +12,7 @@ import (
 func newDoctorCommand(deps Dependencies) *cli.Command {
 	return &cli.Command{
 		Name:  "doctor",
-		Usage: "Diagnose pvectl config and Proxmox API connectivity",
+		Usage: "Diagnose pve config and Proxmox API connectivity",
 		Flags: append(
 			[]cli.Flag{
 				&cli.BoolFlag{Name: "offline", Usage: "check local config only without connecting to Proxmox VE"},

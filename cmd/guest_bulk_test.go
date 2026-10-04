@@ -50,7 +50,7 @@ func TestGuestBulkShutdownDryRunListsPlan(t *testing.T) {
 	var stdout bytes.Buffer
 
 	err := RunWithDependencies([]string{
-		"pvectl", "--config", cfgPath,
+		"pve", "--config", cfgPath,
 		"guest", "shutdown",
 		"--tag", "infra",
 		"--dry-run",
@@ -69,7 +69,7 @@ func TestGuestBulkShutdownExecutesWithForce(t *testing.T) {
 	backend := bulkTestBackend()
 
 	err := RunWithDependencies([]string{
-		"pvectl", "--config", cfgPath,
+		"pve", "--config", cfgPath,
 		"guest", "shutdown",
 		"--tag", "infra",
 		"--force",
@@ -92,7 +92,7 @@ func TestGuestBulkExecutesAfterConfirmation(t *testing.T) {
 	deps.Stdin = strings.NewReader("no\n")
 
 	err := RunWithDependencies([]string{
-		"pvectl", "--config", cfgPath,
+		"pve", "--config", cfgPath,
 		"guest", "shutdown",
 		"--tag", "infra",
 	}, "test", deps)
@@ -108,7 +108,7 @@ func TestGuestBulkExecutesAfterConfirmation(t *testing.T) {
 	deps.Stdin = strings.NewReader("yes\n")
 
 	err = RunWithDependencies([]string{
-		"pvectl", "--config", cfgPath,
+		"pve", "--config", cfgPath,
 		"guest", "shutdown",
 		"--tag", "infra",
 	}, "test", deps)
@@ -127,7 +127,7 @@ func TestGuestBulkSingleGuestSkipsConfirmation(t *testing.T) {
 	deps.Stdin = strings.NewReader("")
 
 	err := RunWithDependencies([]string{
-		"pvectl", "--config", cfgPath,
+		"pve", "--config", cfgPath,
 		"guest", "stop",
 		"--tag", "sandbox",
 	}, "test", deps)
@@ -146,7 +146,7 @@ func TestGuestBulkPartialFailureWritesAllResultsAndFails(t *testing.T) {
 	var stdout bytes.Buffer
 
 	err := RunWithDependencies([]string{
-		"pvectl", "--config", cfgPath,
+		"pve", "--config", cfgPath,
 		"guest", "shutdown",
 		"--tag", "infra",
 		"--force",
@@ -168,7 +168,7 @@ func TestGuestBulkWithoutScopeFails(t *testing.T) {
 	cfgPath := writeTestConfig(t, "table")
 
 	err := RunWithDependencies([]string{
-		"pvectl", "--config", cfgPath,
+		"pve", "--config", cfgPath,
 		"guest", "shutdown",
 		"--dry-run",
 	}, "test", testDeps(&bytes.Buffer{}, &commandBackend{}))
@@ -184,7 +184,7 @@ func TestGuestBulkKeepsProgressOnStderrAndResultsOnStdout(t *testing.T) {
 	var stderr bytes.Buffer
 
 	err := RunWithDependencies([]string{
-		"pvectl", "--config", cfgPath,
+		"pve", "--config", cfgPath,
 		"guest", "shutdown",
 		"--tag", "infra",
 		"--force",

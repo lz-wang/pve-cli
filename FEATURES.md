@@ -1,11 +1,13 @@
-# pvectl Features
+# pve Features
 
-`pvectl` is a small, resource-oriented Proxmox VE CLI for personal HomeLab
+`pve` is a small, resource-oriented Proxmox VE CLI for personal HomeLab
 operations. It wraps the Proxmox VE API through `go-proxmox` and focuses on
 daily VM/QEMU and LXC workflows.
 
 ## Global CLI Capabilities
 
+- Uses the `pve` executable for local builds, installs, and release packages;
+  Homebrew installs it with `brew install lz-wang/tap/pve`.
 - Supports `table`, `json`, and `yaml` output via `--output` or `-o`.
 - Supports profile selection with `--profile`.
 - Supports custom config paths with `--config`.
@@ -17,7 +19,12 @@ daily VM/QEMU and LXC workflows.
 
 ## Configuration
 
-`pvectl config` manages local YAML configuration and profile selection.
+`pve config` manages local YAML configuration and profile selection.
+
+The default config path is `~/.config/pve/config.yaml`. Existing config files
+can be moved there or selected with `--config`; no old-path fallback or
+automatic migration is performed. Token-secret environment variable names
+are user-defined; documentation uses `PVE_*` examples.
 
 - `config init` initializes a default HomeLab profile.
 - `config set-profile NAME` creates or updates a named profile.
@@ -31,7 +38,7 @@ only `token_secret_env`, not the token secret value.
 
 ## Diagnostics
 
-`pvectl doctor` validates the local configuration and, unless `--offline` is
+`pve doctor` validates the local configuration and, unless `--offline` is
 used, verifies Proxmox API connectivity.
 
 Checks include:
@@ -49,12 +56,12 @@ Checks include:
 
 Doctor emits structured diagnostic rows and avoids printing token secrets.
 
-`doctor` checks whether `pvectl` itself can work; `check` (below) reports
+`doctor` checks whether `pve` itself can work; `check` (below) reports
 whether the HomeLab is healthy.
 
 ## HomeLab Status
 
-`pvectl status` aggregates a compact HomeLab overview:
+`pve status` aggregates a compact HomeLab overview:
 
 - node summary (total/online/offline with per-node rows)
 - guest summary (total, running, stopped, VM and LXC counts)
@@ -66,7 +73,7 @@ whether the HomeLab is healthy.
 
 ## HomeLab Health Check
 
-`pvectl check` inspects HomeLab health with cron-friendly exit semantics:
+`pve check` inspects HomeLab health with cron-friendly exit semantics:
 
 - offline nodes report `fail`
 - inactive storages report `fail`, disabled storages report `warn`
@@ -80,22 +87,22 @@ whether the HomeLab is healthy.
 
 ## Version
 
-`pvectl version` prints build and runtime metadata without reading config or
+`pve version` prints build and runtime metadata without reading config or
 connecting to Proxmox VE.
 
 It supports the normal output formats:
 
-- `pvectl version`
-- `pvectl version -o json`
-- `pvectl version -o yaml`
+- `pve version`
+- `pve version -o json`
+- `pve version -o yaml`
 
 ## Nodes
 
-`pvectl node ls` lists Proxmox VE nodes.
+`pve node ls` lists Proxmox VE nodes.
 
 The node output includes status, CPU, memory, disk, and uptime fields.
 
-`pvectl node get NODE` shows node details: status, CPU, memory, disk, uptime,
+`pve node get NODE` shows node details: status, CPU, memory, disk, uptime,
 PVE version, kernel version, load average, and CPU model/cores/sockets.
 
 ## Task Inspection
@@ -113,7 +120,7 @@ Known task status values: `running`, `ok`, `error`, `unknown`.
 
 ## Guest Aggregate View
 
-`pvectl guest` aggregates VM/QEMU and LXC guests.
+`pve guest` aggregates VM/QEMU and LXC guests.
 
 - `guest ls` lists all guests.
 - `guest ls --node NODE` filters by node.
@@ -122,7 +129,7 @@ Known task status values: `running`, `ok`, `error`, `unknown`.
 - `guest ls --status running` filters by guest status.
 - `guest ls --tag TAG` filters by tag; repeatable, with `--tag-match all|any`
   (default `all`). Proxmox VE stores guest tags as one `;`-separated string;
-  `pvectl` decodes that format before matching.
+  `pve` decodes that format before matching.
 - `guest get VMID` resolves and shows a guest by ID.
 - `guest get VMID --type vm` or `--type lxc` disambiguates duplicate IDs.
 
@@ -150,7 +157,7 @@ every guest matching a selection:
 
 ## VM/QEMU Management
 
-`pvectl vm` manages QEMU virtual machines.
+`pve vm` manages QEMU virtual machines.
 
 Read operations:
 
@@ -180,7 +187,7 @@ cluster nodes.
 
 ## LXC Management
 
-`pvectl lxc` mirrors the VM command shape for LXC containers.
+`pve lxc` mirrors the VM command shape for LXC containers.
 
 Read operations:
 
@@ -243,8 +250,8 @@ guest config API.
 Examples:
 
 ```bash
-pvectl vm config 101 --set memory=4096 --set cores=4 --wait
-pvectl lxc config 201 --set memory=2048 --set cores=2 --wait
+pve vm config 101 --set memory=4096 --set cores=4 --wait
+pve lxc config 201 --set memory=2048 --set cores=2 --wait
 ```
 
 ## Resize
@@ -254,8 +261,8 @@ pvectl lxc config 201 --set memory=2048 --set cores=2 --wait
 Examples:
 
 ```bash
-pvectl vm resize 101 --disk scsi0 --size +20G --wait
-pvectl lxc resize 201 --disk rootfs --size +10G --wait
+pve vm resize 101 --disk scsi0 --size +20G --wait
+pve lxc resize 201 --disk rootfs --size +10G --wait
 ```
 
 ## Migrate

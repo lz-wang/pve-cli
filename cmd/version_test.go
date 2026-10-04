@@ -50,7 +50,7 @@ func TestVersionCommandFormatsWithoutConfigOrBackend(t *testing.T) {
 			var stdout bytes.Buffer
 			var stderr bytes.Buffer
 			err := RunWithBuildInfoAndDependencies([]string{
-				"pvectl",
+				"pve",
 				"--config", filepath.Join(t.TempDir(), "missing.yaml"),
 				"version",
 				"-o", tc.format,
@@ -79,14 +79,14 @@ func TestVersionCommandFormatsWithoutConfigOrBackend(t *testing.T) {
 
 func TestVersionFlagKeepsCompactOutput(t *testing.T) {
 	var stdout bytes.Buffer
-	err := RunWithBuildInfoAndDependencies([]string{"pvectl", "--version"}, BuildInfo{Version: "v1.0.0"}, Dependencies{
+	err := RunWithBuildInfoAndDependencies([]string{"pve", "--version"}, BuildInfo{Version: "v1.0.0"}, Dependencies{
 		Stdout: &stdout,
 		Stderr: &bytes.Buffer{},
 	})
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
-	if got, want := stdout.String(), "pvectl version v1.0.0\n"; got != want {
+	if got, want := stdout.String(), "pve version v1.0.0\n"; got != want {
 		t.Fatalf("--version output = %q, want %q", got, want)
 	}
 }

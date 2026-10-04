@@ -156,7 +156,7 @@ jobs:
           COMMIT: ${{ needs.test.outputs.commit }}
           DATE: ${{ needs.test.outputs.date }}
         run: |
-          output="pvectl-${VERSION}-${GOOS}-${GOARCH}${{ matrix.suffix }}"
+          output="pve-${VERSION}-${GOOS}-${GOARCH}${{ matrix.suffix }}"
           CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=${VERSION} -X main.commit=${COMMIT} -X main.date=${DATE}" -o "${output}" ./main.go
           sha256sum "${output}" > "${output}.sha256"
 
@@ -165,10 +165,10 @@ jobs:
         run: |
           set -euo pipefail
           version="${{ needs.test.outputs.version }}"
-          name="pvectl_${version}_${{ matrix.goos }}_${{ matrix.goarch }}"
+          name="pve_${version}_${{ matrix.goos }}_${{ matrix.goarch }}"
           package_dir="release/${name}"
           mkdir -p "${package_dir}"
-          cp "pvectl-${version}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.suffix }}" "${package_dir}/pvectl${{ matrix.suffix }}"
+          cp "pve-${version}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.suffix }}" "${package_dir}/pve${{ matrix.suffix }}"
           if [[ "${{ matrix.archive }}" == 'zip' ]]; then
             archive="release/${name}.zip"
             (cd "${package_dir}" && zip -qr "${GITHUB_WORKSPACE}/${archive}" .)
@@ -187,17 +187,17 @@ jobs:
           webdav_password: ${{ secrets.WEBDAV_PASSWORD }}
           webdav_upload_path: "/Shares/github/${{ github.repository }}/${{ needs.test.outputs.version }}"
           files: |
-            release/pvectl_${{ needs.test.outputs.version }}_${{ matrix.goos }}_${{ matrix.goarch }}.${{ matrix.archive }}
-            release/pvectl_${{ needs.test.outputs.version }}_${{ matrix.goos }}_${{ matrix.goarch }}.${{ matrix.archive }}.sha256
+            release/pve_${{ needs.test.outputs.version }}_${{ matrix.goos }}_${{ matrix.goarch }}.${{ matrix.archive }}
+            release/pve_${{ needs.test.outputs.version }}_${{ matrix.goos }}_${{ matrix.goarch }}.${{ matrix.archive }}.sha256
 
       - name: Upload release artifact
         if: ${{ needs.test.outputs.is_release == 'true' }}
         uses: actions/upload-artifact@v4
         with:
-          name: pvectl-${{ needs.test.outputs.version }}-${{ matrix.goos }}-${{ matrix.goarch }}
+          name: pve-${{ needs.test.outputs.version }}-${{ matrix.goos }}-${{ matrix.goarch }}
           path: |
-            pvectl-${{ needs.test.outputs.version }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.suffix }}
-            pvectl-${{ needs.test.outputs.version }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.suffix }}.sha256
+            pve-${{ needs.test.outputs.version }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.suffix }}
+            pve-${{ needs.test.outputs.version }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.suffix }}.sha256
           if-no-files-found: error
 
   publish:
@@ -279,7 +279,7 @@ jobs:
           fi
           git clone "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/lz-wang/homebrew-tap.git" homebrew-tap
 
-      - name: Update pvectl formula
+      - name: Update pve formula
         env:
           TAG: ${{ needs.test.outputs.release_tag }}
         run: scripts/update-homebrew-formula.sh "$TAG" homebrew-tap
@@ -291,12 +291,12 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Formula/pvectl.rb
+          git add Formula/pve.rb
           if git diff --cached --quiet; then
-            echo "Formula/pvectl.rb is already up to date for ${TAG}."
+            echo "Formula/pve.rb is already up to date for ${TAG}."
             exit 0
           fi
-          git commit -m "Update pvectl to ${TAG}"
+          git commit -m "Update pve to ${TAG}"
           git push
 
   notify:
@@ -310,7 +310,7 @@ jobs:
           PUSHOVER_USER: ${{ secrets.PUSHOVER_USER }}
         run: |
           MESSAGE=$(cat <<'EOF'
-          <b>pvectl 构建通知</b>
+          <b>pve 构建通知</b>
           <u>测试结果</u>: ${{ needs.test.result == 'success' && '<font color="#00aa00"><b>success</b></font>' || format('<font color="#cc0000"><b>{0}</b></font>', needs.test.result) }}
           <u>构建结果</u>: ${{ needs.build.result == 'success' && '<font color="#00aa00"><b>success</b></font>' || format('<font color="#cc0000"><b>{0}</b></font>', needs.build.result) }}
           <u>发布结果</u>: ${{ needs.publish.result == 'success' && '<font color="#00aa00"><b>success</b></font>' || format('<font color="#666666"><b>{0}</b></font>', needs.publish.result) }}
@@ -324,6 +324,6 @@ jobs:
           curl -fsS https://api.pushover.net/1/messages.json \
             --data-urlencode "token=${PUSHOVER_TOKEN}" \
             --data-urlencode "user=${PUSHOVER_USER}" \
-            --data-urlencode "title=pvectl 构建通知" \
+            --data-urlencode "title=pve 构建通知" \
             --data-urlencode "html=1" \
             --data-urlencode "message=${MESSAGE}"

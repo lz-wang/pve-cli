@@ -28,107 +28,107 @@ func TestCommandJSONGoldenOutputs(t *testing.T) {
 	}{
 		{
 			name:       "node ls",
-			args:       []string{"pvectl", "--config", cfgPath, "node", "ls", "-o", "json"},
+			args:       []string{"pve", "--config", cfgPath, "node", "ls", "-o", "json"},
 			goldenFile: "node_ls.json",
 		},
 		{
 			name:       "guest ls",
-			args:       []string{"pvectl", "--config", cfgPath, "guest", "ls", "-o", "json"},
+			args:       []string{"pve", "--config", cfgPath, "guest", "ls", "-o", "json"},
 			goldenFile: "guest_ls.json",
 		},
 		{
 			name:       "guest get",
-			args:       []string{"pvectl", "--config", cfgPath, "guest", "get", "100", "-o", "json"},
+			args:       []string{"pve", "--config", cfgPath, "guest", "get", "100", "-o", "json"},
 			goldenFile: "guest_get.json",
 		},
 		{
 			name:       "vm get",
-			args:       []string{"pvectl", "--config", cfgPath, "vm", "get", "100", "-o", "json"},
+			args:       []string{"pve", "--config", cfgPath, "vm", "get", "100", "-o", "json"},
 			goldenFile: "vm_get.json",
 		},
 		{
 			name:       "lxc get",
-			args:       []string{"pvectl", "--config", cfgPath, "lxc", "get", "200", "-o", "json"},
+			args:       []string{"pve", "--config", cfgPath, "lxc", "get", "200", "-o", "json"},
 			goldenFile: "lxc_get.json",
 		},
 		{
 			name:       "backup ls",
-			args:       []string{"pvectl", "--config", cfgPath, "backup", "ls", "--node", "pve1", "--storage", "backup", "-o", "json"},
+			args:       []string{"pve", "--config", cfgPath, "backup", "ls", "--node", "pve1", "--storage", "backup", "-o", "json"},
 			goldenFile: "backup_ls.json",
 		},
 		{
 			name:       "storage ls",
-			args:       []string{"pvectl", "--config", cfgPath, "storage", "ls", "-o", "json"},
+			args:       []string{"pve", "--config", cfgPath, "storage", "ls", "-o", "json"},
 			goldenFile: "storage_ls.json",
 		},
 		{
 			name:       "storage content ls",
-			args:       []string{"pvectl", "--config", cfgPath, "storage", "content", "ls", "--node", "pve1", "--storage", "backup", "-o", "json"},
+			args:       []string{"pve", "--config", cfgPath, "storage", "content", "ls", "--node", "pve1", "--storage", "backup", "-o", "json"},
 			goldenFile: "storage_content_ls.json",
 		},
 		{
 			name:       "doctor offline",
-			args:       []string{"pvectl", "--config", cfgPath, "doctor", "--offline", "-o", "json"},
+			args:       []string{"pve", "--config", cfgPath, "doctor", "--offline", "-o", "json"},
 			goldenFile: "doctor_offline.json",
 		},
 		{
 			name:       "version",
-			args:       []string{"pvectl", "version", "-o", "json"},
+			args:       []string{"pve", "version", "-o", "json"},
 			goldenFile: "version.json",
 		},
 		{
 			name:       "task ls",
-			args:       []string{"pvectl", "--config", cfgPath, "task", "ls", "-o", "json"},
+			args:       []string{"pve", "--config", cfgPath, "task", "ls", "-o", "json"},
 			goldenFile: "task_ls.json",
 		},
 		{
 			name:       "status",
-			args:       []string{"pvectl", "--config", cfgPath, "status", "-o", "json"},
+			args:       []string{"pve", "--config", cfgPath, "status", "-o", "json"},
 			goldenFile: "status.json",
 		},
 		{
 			name:       "node get",
-			args:       []string{"pvectl", "--config", cfgPath, "node", "get", "pve1", "-o", "json"},
+			args:       []string{"pve", "--config", cfgPath, "node", "get", "pve1", "-o", "json"},
 			goldenFile: "node_get.json",
 		},
 		{
 			name:       "storage usage",
-			args:       []string{"pvectl", "--config", cfgPath, "storage", "usage", "-o", "json"},
+			args:       []string{"pve", "--config", cfgPath, "storage", "usage", "-o", "json"},
 			goldenFile: "storage_usage.json",
 		},
 		{
 			name:       "check",
-			args:       []string{"pvectl", "--config", cfgPath, "check", "-o", "json"},
+			args:       []string{"pve", "--config", cfgPath, "check", "-o", "json"},
 			goldenFile: "check.json",
 		},
 		{
 			name:       "vm restore",
-			args:       []string{"pvectl", "--config", cfgPath, "vm", "restore", "backup:backup/vzdump-qemu-100-2026_06_06-00_00_00.vma.zst", "--node", "pve1", "--vmid", "101", "--storage", "local-lvm", "-o", "json"},
+			args:       []string{"pve", "--config", cfgPath, "vm", "restore", "backup:backup/vzdump-qemu-100-2026_06_06-00_00_00.vma.zst", "--node", "pve1", "--vmid", "101", "--storage", "local-lvm", "-o", "json"},
 			goldenFile: "vm_restore.json",
 		},
 		{
 			name:       "vm agent network",
-			args:       []string{"pvectl", "--config", cfgPath, "vm", "agent", "network", "100", "-o", "json"},
+			args:       []string{"pve", "--config", cfgPath, "vm", "agent", "network", "100", "-o", "json"},
 			goldenFile: "vm_agent_network.json",
 		},
 		{
 			name:       "vm cloud-init get",
-			args:       []string{"pvectl", "--config", cfgPath, "vm", "cloud-init", "get", "100", "-o", "json"},
+			args:       []string{"pve", "--config", cfgPath, "vm", "cloud-init", "get", "100", "-o", "json"},
 			goldenFile: "vm_cloudinit_get.json",
 		},
 		{
 			name:       "network ls",
-			args:       []string{"pvectl", "--config", cfgPath, "network", "ls", "-o", "json"},
+			args:       []string{"pve", "--config", cfgPath, "network", "ls", "-o", "json"},
 			goldenFile: "network_ls.json",
 		},
 		{
 			name:       "firewall status",
-			args:       []string{"pvectl", "--config", cfgPath, "firewall", "status", "--node", "pve1", "-o", "json"},
+			args:       []string{"pve", "--config", cfgPath, "firewall", "status", "--node", "pve1", "-o", "json"},
 			goldenFile: "firewall_status.json",
 		},
 		{
 			name:       "firewall ls",
-			args:       []string{"pvectl", "--config", cfgPath, "firewall", "ls", "--node", "pve1", "-o", "json"},
+			args:       []string{"pve", "--config", cfgPath, "firewall", "ls", "--node", "pve1", "-o", "json"},
 			goldenFile: "firewall_ls.json",
 		},
 	}
@@ -146,7 +146,7 @@ func TestCommandJSONGoldenOutputs(t *testing.T) {
 			}
 
 			got := stdout.String()
-			if os.Getenv("PVECTL_UPDATE_GOLDEN") == "1" {
+			if os.Getenv("PVE_UPDATE_GOLDEN") == "1" {
 				// Restore the placeholders so regenerated goldens stay stable
 				// across machines.
 				restore := strings.NewReplacer(
@@ -177,7 +177,7 @@ func TestAsyncJSONKeepsTaskProgressOnStderr(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	err := RunWithDependencies([]string{
-		"pvectl", "--config", cfgPath,
+		"pve", "--config", cfgPath,
 		"vm", "backup", "100",
 		"--storage", "backup",
 		"--wait",
@@ -208,7 +208,7 @@ func TestAsyncJSONKeepsTaskProgressOnStderr(t *testing.T) {
 func TestDoctorFailureJSONWritesRowsToStdout(t *testing.T) {
 	var stdout bytes.Buffer
 	err := RunWithDependencies([]string{
-		"pvectl",
+		"pve",
 		"--config", filepath.Join(t.TempDir(), "missing.yaml"),
 		"doctor", "--offline", "-o", "json",
 	}, "test", Dependencies{Stdout: &stdout, Stderr: &bytes.Buffer{}})

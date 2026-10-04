@@ -12,8 +12,8 @@ func TestSaveLoadAndUseProfile(t *testing.T) {
 
 	if err := cfg.SetProfile("home", Profile{
 		Endpoint:       "https://pve.lan:8006/api2/json",
-		TokenID:        "automation@pve!pvectl",
-		TokenSecretEnv: "PVECTL_HOME_TOKEN_SECRET",
+		TokenID:        "automation@pve!pve",
+		TokenSecretEnv: "PVE_HOME_TOKEN_SECRET",
 		Timeout:        "30s",
 		DefaultOutput:  "json",
 	}); err != nil {
@@ -35,7 +35,7 @@ func TestSaveLoadAndUseProfile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("select: %v", err)
 	}
-	if name != "home" || profile.TokenID != "automation@pve!pvectl" {
+	if name != "home" || profile.TokenID != "automation@pve!pve" {
 		t.Fatalf("selected %q/%q", name, profile.TokenID)
 	}
 
@@ -165,9 +165,9 @@ func TestInitProfileValidatesRequiredFields(t *testing.T) {
 }
 
 func TestResolveTokenSecret(t *testing.T) {
-	t.Setenv("PVECTL_TEST_TOKEN", "secret")
+	t.Setenv("PVE_TEST_TOKEN", "secret")
 
-	secret, err := ResolveTokenSecret(Profile{TokenSecretEnv: "PVECTL_TEST_TOKEN"})
+	secret, err := ResolveTokenSecret(Profile{TokenSecretEnv: "PVE_TEST_TOKEN"})
 	if err != nil {
 		t.Fatalf("resolve secret: %v", err)
 	}
@@ -175,8 +175,8 @@ func TestResolveTokenSecret(t *testing.T) {
 		t.Fatalf("secret = %q", secret)
 	}
 
-	os.Unsetenv("PVECTL_TEST_TOKEN")
-	if _, err := ResolveTokenSecret(Profile{TokenSecretEnv: "PVECTL_TEST_TOKEN"}); err == nil {
+	os.Unsetenv("PVE_TEST_TOKEN")
+	if _, err := ResolveTokenSecret(Profile{TokenSecretEnv: "PVE_TEST_TOKEN"}); err == nil {
 		t.Fatal("expected missing env error")
 	}
 }
@@ -184,8 +184,8 @@ func TestResolveTokenSecret(t *testing.T) {
 func testProfile() Profile {
 	return Profile{
 		Endpoint:       "https://pve.lan:8006/api2/json",
-		TokenID:        "automation@pve!pvectl",
-		TokenSecretEnv: "PVECTL_HOME_TOKEN_SECRET",
+		TokenID:        "automation@pve!pve",
+		TokenSecretEnv: "PVE_HOME_TOKEN_SECRET",
 		Timeout:        "30s",
 		DefaultOutput:  "table",
 	}

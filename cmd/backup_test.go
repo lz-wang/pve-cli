@@ -24,7 +24,7 @@ func TestBackupListCommandWritesJSONAndFiltersLatest(t *testing.T) {
 	var stdout bytes.Buffer
 
 	err := RunWithDependencies([]string{
-		"pvectl", "--config", cfgPath,
+		"pve", "--config", cfgPath,
 		"backup", "ls",
 		"--node", "pve1",
 		"--storage", "backup",
@@ -45,7 +45,7 @@ func TestBackupListCommandRejectsInvalidKind(t *testing.T) {
 	cfgPath := writeTestConfig(t, "table")
 
 	err := RunWithDependencies([]string{
-		"pvectl", "--config", cfgPath,
+		"pve", "--config", cfgPath,
 		"backup", "ls",
 		"--node", "pve1",
 		"--storage", "backup",
@@ -67,7 +67,7 @@ func TestVMBackupCommandWritesResultAndWaits(t *testing.T) {
 	var stdout bytes.Buffer
 
 	err := RunWithDependencies([]string{
-		"pvectl", "--config", cfgPath,
+		"pve", "--config", cfgPath,
 		"vm", "backup", "100",
 		"--storage", "backup",
 		"--mode", "stop",
@@ -103,7 +103,7 @@ func TestLXCBackupCommandWritesResult(t *testing.T) {
 	var stdout bytes.Buffer
 
 	err := RunWithDependencies([]string{
-		"pvectl", "--config", cfgPath,
+		"pve", "--config", cfgPath,
 		"lxc", "backup", "200",
 		"--node", "pve1",
 		"--storage", "backup",
@@ -124,7 +124,7 @@ func TestVMBackupCommandRejectsInvalidFlags(t *testing.T) {
 	cfgPath := writeTestConfig(t, "table")
 
 	err := RunWithDependencies([]string{
-		"pvectl", "--config", cfgPath,
+		"pve", "--config", cfgPath,
 		"vm", "backup", "100",
 		"--storage", "backup",
 		"--mode", "bad",
@@ -134,7 +134,7 @@ func TestVMBackupCommandRejectsInvalidFlags(t *testing.T) {
 	}
 
 	err = RunWithDependencies([]string{
-		"pvectl", "--config", cfgPath,
+		"pve", "--config", cfgPath,
 		"vm", "backup", "100",
 		"--storage", "backup",
 		"--compress", "bad",
@@ -144,7 +144,7 @@ func TestVMBackupCommandRejectsInvalidFlags(t *testing.T) {
 	}
 
 	err = RunWithDependencies([]string{
-		"pvectl", "--config", cfgPath,
+		"pve", "--config", cfgPath,
 		"vm", "backup", "100",
 		"--storage", "backup",
 		"--protected", "2",

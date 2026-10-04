@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Rename the CLI executable from `pvectl` to `pve`, including help, version
+  output, local build/install targets, release assets, archives, and the
+  Homebrew formula (`lz-wang/tap/pve`). No `pvectl` executable alias is provided.
+- Use `~/.config/pve/config.yaml` as the default config path without automatic
+  lookup or migration of the old config directory. Existing config files can
+  be moved to the new path or selected explicitly with `--config`.
+- Update CLI documentation and examples to use `pve` and `PVE_*` environment
+  variable names. Token-secret environment variable names remain user-defined.
+
 ## v1.1.0 - 2026-10-04
 
 ### Added

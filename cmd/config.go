@@ -13,7 +13,7 @@ import (
 func newConfigCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "config",
-		Usage: "Manage pvectl config",
+		Usage: "Manage pve config",
 		Subcommands: []*cli.Command{
 			{
 				Name:  "init",
@@ -21,7 +21,7 @@ func newConfigCommand() *cli.Command {
 				Flags: []cli.Flag{
 					&cli.StringFlag{Name: "name", Value: "home", Usage: "profile name"},
 					&cli.StringFlag{Name: "endpoint", Usage: "PVE API endpoint, for example https://pve.lan:8006/api2/json", Required: true},
-					&cli.StringFlag{Name: "token-id", Usage: "PVE API token id, for example automation@pve!pvectl", Required: true},
+					&cli.StringFlag{Name: "token-id", Usage: "PVE API token id, for example automation@pve!pve", Required: true},
 					&cli.StringFlag{Name: "token-secret-env", Usage: "environment variable containing the PVE API token secret", Required: true},
 					&cli.BoolFlag{Name: "insecure", Usage: "skip TLS certificate verification for this profile"},
 					&cli.StringFlag{Name: "timeout", Value: "30s", Usage: "PVE API request timeout for this profile"},
@@ -69,7 +69,7 @@ func newConfigCommand() *cli.Command {
 				ArgsUsage: "NAME",
 				Flags: []cli.Flag{
 					&cli.StringFlag{Name: "endpoint", Usage: "PVE API endpoint, for example https://pve.lan:8006/api2/json", Required: true},
-					&cli.StringFlag{Name: "token-id", Usage: "PVE API token id, for example automation@pve!pvectl", Required: true},
+					&cli.StringFlag{Name: "token-id", Usage: "PVE API token id, for example automation@pve!pve", Required: true},
 					&cli.StringFlag{Name: "token-secret-env", Usage: "environment variable containing the PVE API token secret", Required: true},
 					&cli.BoolFlag{Name: "insecure", Usage: "skip TLS certificate verification for this profile"},
 					&cli.StringFlag{Name: "timeout", Usage: "PVE API request timeout for this profile"},

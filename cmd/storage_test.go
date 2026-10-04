@@ -25,7 +25,7 @@ func TestStorageListCommandWritesJSONAndFilters(t *testing.T) {
 	var stdout bytes.Buffer
 
 	err := RunWithDependencies([]string{
-		"pvectl", "--config", cfgPath,
+		"pve", "--config", cfgPath,
 		"storage", "ls",
 		"--content", "backup",
 		"--type", "dir",
@@ -53,7 +53,7 @@ func TestStorageGetCommandWritesDetail(t *testing.T) {
 	var stdout bytes.Buffer
 
 	err := RunWithDependencies([]string{
-		"pvectl", "--config", cfgPath,
+		"pve", "--config", cfgPath,
 		"storage", "get", "local",
 		"--node", "pve1",
 	}, "test", testDeps(&stdout, backend))
@@ -83,7 +83,7 @@ func TestStorageContentListCommandWritesJSONAndFilters(t *testing.T) {
 	var stdout bytes.Buffer
 
 	err := RunWithDependencies([]string{
-		"pvectl", "--config", cfgPath,
+		"pve", "--config", cfgPath,
 		"storage", "content", "ls",
 		"--node", "pve1",
 		"--storage", "backup",
@@ -104,7 +104,7 @@ func TestStorageCommandsRejectMissingRequiredFlags(t *testing.T) {
 	cfgPath := writeTestConfig(t, "table")
 
 	err := RunWithDependencies([]string{
-		"pvectl", "--config", cfgPath,
+		"pve", "--config", cfgPath,
 		"storage", "get", "local",
 	}, "test", testDeps(&bytes.Buffer{}, &commandBackend{}))
 	if err == nil || !strings.Contains(err.Error(), `Required flag "node" not set`) {
@@ -112,7 +112,7 @@ func TestStorageCommandsRejectMissingRequiredFlags(t *testing.T) {
 	}
 
 	err = RunWithDependencies([]string{
-		"pvectl", "--config", cfgPath,
+		"pve", "--config", cfgPath,
 		"storage", "content", "ls",
 		"--node", "pve1",
 	}, "test", testDeps(&bytes.Buffer{}, &commandBackend{}))

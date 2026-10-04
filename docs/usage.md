@@ -1,25 +1,30 @@
-# pvectl Usage
+# pve Usage
 
-`pvectl` is a personal HomeLab Proxmox VE CLI for daily VM/QEMU and LXC
+`pve` is a personal HomeLab Proxmox VE CLI for daily VM/QEMU and LXC
 operations.
 
 ## Configuration
+
+The default config file is `~/.config/pve/config.yaml`. Use `--config PATH`
+to select another file. After the rename from `pvectl`, move an existing
+config file to the new path or select it explicitly; the old directory is
+not searched or migrated automatically.
 
 For a typical HomeLab setup, initialize one default profile and run a
 diagnostic check:
 
 ```bash
-export PVECTL_HOME_TOKEN_SECRET="your-token-secret"
+export PVE_HOME_TOKEN_SECRET="your-token-secret"
 
-pvectl config init \
+pve config init \
   --endpoint https://pve.lan:8006/api2/json \
-  --token-id automation@pve!pvectl \
-  --token-secret-env PVECTL_HOME_TOKEN_SECRET \
+  --token-id automation@pve!pve \
+  --token-secret-env PVE_HOME_TOKEN_SECRET \
   --insecure
 
-pvectl doctor
-pvectl config current-profile
-pvectl config view
+pve doctor
+pve config current-profile
+pve config view
 ```
 
 Config schema:
@@ -29,28 +34,30 @@ current_profile: home
 profiles:
   home:
     endpoint: https://pve.lan:8006/api2/json
-    token_id: automation@pve!pvectl
-    token_secret_env: PVECTL_HOME_TOKEN_SECRET
+    token_id: automation@pve!pve
+    token_secret_env: PVE_HOME_TOKEN_SECRET
     insecure_skip_verify: true
     timeout: 30s
     default_output: table
 ```
 
 The token secret is read from the named environment variable at runtime.
-`pvectl` does not write token secrets to disk.
+`pve` does not write token secrets to disk.
+Environment variable names are user-defined; `PVE_HOME_TOKEN_SECRET` is only
+an example and can be replaced with any name referenced by `token_secret_env`.
 
 Use `config set-profile` and `config use-profile` when you need to manage more
 than one profile:
 
 ```bash
-pvectl config set-profile lab \
+pve config set-profile lab \
   --endpoint https://pve-lab.lan:8006/api2/json \
-  --token-id automation@pve!pvectl \
-  --token-secret-env PVECTL_LAB_TOKEN_SECRET \
+  --token-id automation@pve!pve \
+  --token-secret-env PVE_LAB_TOKEN_SECRET \
   --timeout 30s \
   --default-output table
 
-pvectl config use-profile lab
+pve config use-profile lab
 ```
 
 `config init` defaults to profile name `home`, timeout `30s`, default output
@@ -60,10 +67,10 @@ pvectl config use-profile lab
 ## Diagnostics
 
 ```bash
-pvectl doctor
-pvectl doctor --offline
-pvectl doctor --node pve1
-pvectl doctor -o json
+pve doctor
+pve doctor --offline
+pve doctor --node pve1
+pve doctor -o json
 ```
 
 `doctor` checks the config path, config file, YAML parsing, selected profile,
@@ -78,13 +85,13 @@ the same `table`, `json`, and `yaml` output formats as resource commands.
 ## Version
 
 ```bash
-pvectl version
-pvectl version -o json
-pvectl --version
+pve version
+pve version -o json
+pve --version
 ```
 
-`pvectl version` writes build and runtime metadata. It does not read the config
-file or connect to Proxmox VE. `pvectl --version` keeps the compact CLI version
+`pve version` writes build and runtime metadata. It does not read the config
+file or connect to Proxmox VE. `pve --version` keeps the compact CLI version
 print from the underlying CLI framework.
 
 ## Daily Commands
@@ -96,8 +103,8 @@ It tolerates partial failures: sections that cannot be queried are reported in
 `issues` instead of failing the whole command.
 
 ```bash
-pvectl status
-pvectl status -o json
+pve status
+pve status -o json
 ```
 
 `check` reports HomeLab health with a per-check exit-code contract: `fail`
@@ -105,11 +112,11 @@ makes the command exit non-zero, `warn` does not. With `--strict`, warnings
 also fail. This makes it suitable for cron, systemd timers, and automation.
 
 ```bash
-pvectl check
-pvectl check --node pve1
-pvectl check --storage-warn 85 --storage-fail 95
-pvectl check --backup-tag backup --backup-max-age 36h
-pvectl check --strict
+pve check
+pve check --node pve1
+pve check --storage-warn 85 --storage-fail 95
+pve check --backup-tag backup --backup-max-age 36h
+pve check --strict
 ```
 
 The backup coverage check only runs when both `--backup-tag` and
@@ -118,15 +125,15 @@ unknown `--node` fails the check instead of reporting an empty green run, and
 backup storages that cannot be queried report `backup status unavailable`
 rather than `no backup found`.
 
-`doctor` stays separate: it checks whether `pvectl` itself works, not whether
+`doctor` stays separate: it checks whether `pve` itself works, not whether
 the HomeLab is healthy.
 
 ### Nodes
 
 ```bash
-pvectl node ls
-pvectl node get pve1
-pvectl node get pve1 -o json
+pve node ls
+pve node get pve1
+pve node get pve1 -o json
 ```
 
 `node get` adds PVE version, kernel, load average, and CPU details on top of
@@ -138,18 +145,18 @@ Tasks are first-class resources. Every mutating command prints its task ID on
 stderr; `task` commands let you inspect them afterwards.
 
 ```bash
-pvectl task ls
-pvectl task ls --node pve1
-pvectl task ls --type vzdump
-pvectl task ls --status running
-pvectl task ls --limit 20
+pve task ls
+pve task ls --node pve1
+pve task ls --type vzdump
+pve task ls --status running
+pve task ls --limit 20
 
-pvectl task get UPID:pve1:0000F2A3:00000000:6839F4A1:vzdump:100:root@pam:
+pve task get UPID:pve1:0000F2A3:00000000:6839F4A1:vzdump:100:root@pam:
 
-pvectl task log UPID:pve1:0000F2A3:00000000:6839F4A1:vzdump:100:root@pam:
-pvectl task log UPID:pve1:0000F2A3:00000000:6839F4A1:vzdump:100:root@pam: --tail 100
+pve task log UPID:pve1:0000F2A3:00000000:6839F4A1:vzdump:100:root@pam:
+pve task log UPID:pve1:0000F2A3:00000000:6839F4A1:vzdump:100:root@pam: --tail 100
 
-pvectl task wait UPID:pve1:0000F2A3:00000000:6839F4A1:vzdump:100:root@pam: --wait-timeout 20m
+pve task wait UPID:pve1:0000F2A3:00000000:6839F4A1:vzdump:100:root@pam: --wait-timeout 20m
 ```
 
 `task ls` without `--node` aggregates across all nodes and tolerates nodes
@@ -162,32 +169,32 @@ that fail to answer as long as one succeeds. Known status values are
 operations.
 
 ```bash
-pvectl guest ls
-pvectl guest ls --node pve1
-pvectl guest ls --type vm
-pvectl guest ls --type lxc
-pvectl guest ls --status running
-pvectl guest ls --tag infra
-pvectl guest ls --tag docker --tag production --tag-match all
-pvectl guest ls --tag docker --tag production --tag-match any
-pvectl guest get 100
-pvectl guest get 100 --type vm
-pvectl guest get 200 --type lxc
+pve guest ls
+pve guest ls --node pve1
+pve guest ls --type vm
+pve guest ls --type lxc
+pve guest ls --status running
+pve guest ls --tag infra
+pve guest ls --tag docker --tag production --tag-match all
+pve guest ls --tag docker --tag production --tag-match any
+pve guest get 100
+pve guest get 100 --type vm
+pve guest get 200 --type lxc
 ```
 
 Tag values are matched case-insensitively. `--tag` is repeatable; the default
 `--tag-match all` requires every listed tag, `any` requires at least one.
 Proxmox VE stores guest tags as one semicolon-separated string (for example
-`infra;production`); `pvectl` decodes that format before matching.
+`infra;production`); `pve` decodes that format before matching.
 
 #### Bulk Guest Operations
 
 ```bash
-pvectl guest start --tag lab --dry-run
-pvectl guest start --tag lab
-pvectl guest shutdown --tag infra
-pvectl guest reboot --node pve1 --status running
-pvectl guest stop --tag legacy --force
+pve guest start --tag lab --dry-run
+pve guest start --tag lab
+pve guest shutdown --tag infra
+pve guest reboot --node pve1 --status running
+pve guest stop --tag legacy --force
 ```
 
 Selection flags: `--node`, `--type all|vm|lxc`, `--status`, `--tag`,
@@ -215,33 +222,33 @@ same ID, specify `--type vm` or `--type lxc`.
 ### VM/QEMU
 
 ```bash
-pvectl vm ls
-pvectl vm ls --node pve1
-pvectl vm get 100
-pvectl vm get 100 --node pve1 -o json
-pvectl vm start 100 --wait
-pvectl vm shutdown 100 --wait
-pvectl vm reboot 100 --wait
-pvectl vm stop 100
+pve vm ls
+pve vm ls --node pve1
+pve vm get 100
+pve vm get 100 --node pve1 -o json
+pve vm start 100 --wait
+pve vm shutdown 100 --wait
+pve vm reboot 100 --wait
+pve vm stop 100
 ```
 
-When `--node` is omitted, `pvectl` traverses all nodes returned by the cluster
+When `--node` is omitted, `pve` traverses all nodes returned by the cluster
 and resolves the VMID automatically.
 
 ### LXC
 
 ```bash
-pvectl lxc ls
-pvectl lxc ls --node pve1
-pvectl lxc get 200
-pvectl lxc get 200 --node pve1 -o json
-pvectl lxc start 200 --wait
-pvectl lxc shutdown 200 --wait
-pvectl lxc reboot 200 --wait
-pvectl lxc stop 200
+pve lxc ls
+pve lxc ls --node pve1
+pve lxc get 200
+pve lxc get 200 --node pve1 -o json
+pve lxc start 200 --wait
+pve lxc shutdown 200 --wait
+pve lxc reboot 200 --wait
+pve lxc stop 200
 ```
 
-When `--node` is omitted, `pvectl` traverses all nodes returned by the cluster
+When `--node` is omitted, `pve` traverses all nodes returned by the cluster
 and resolves the CTID automatically.
 
 ## Backup Commands
@@ -252,12 +259,12 @@ specific node/storage and create one-off guest backups.
 ### List Backups
 
 ```bash
-pvectl backup ls --node pve1 --storage backup
-pvectl backup ls --node pve1 --storage backup --vmid 100
-pvectl backup ls --node pve1 --storage backup --kind vm
-pvectl backup ls --node pve1 --storage backup --kind lxc
-pvectl backup ls --node pve1 --storage backup --latest
-pvectl backup ls --node pve1 --storage backup -o json
+pve backup ls --node pve1 --storage backup
+pve backup ls --node pve1 --storage backup --vmid 100
+pve backup ls --node pve1 --storage backup --kind vm
+pve backup ls --node pve1 --storage backup --kind lxc
+pve backup ls --node pve1 --storage backup --latest
+pve backup ls --node pve1 --storage backup -o json
 ```
 
 `backup ls` requires both `--node` and `--storage`. Supported backup kinds are
@@ -267,14 +274,14 @@ guest.
 ### Create One-off Guest Backups
 
 ```bash
-pvectl vm backup 100 --storage backup --mode snapshot --wait
-pvectl lxc backup 200 --storage backup --mode snapshot --wait
+pve vm backup 100 --storage backup --mode snapshot --wait
+pve lxc backup 200 --storage backup --mode snapshot --wait
 ```
 
 Common options:
 
 ```bash
-pvectl vm backup 100 \
+pve vm backup 100 \
   --storage backup \
   --mode snapshot \
   --compress zstd \
@@ -287,7 +294,7 @@ pvectl vm backup 100 \
 Supported modes are `snapshot`, `suspend`, and `stop`. Supported compression
 values are `zstd`, `lzo`, `gzip`, and `none`.
 
-When `--node` is omitted, `pvectl` resolves the VMID/CTID automatically before
+When `--node` is omitted, `pve` resolves the VMID/CTID automatically before
 triggering the backup. Backup results are written to stdout and include the
 task ID; task IDs and wait progress are also written to stderr.
 
@@ -298,13 +305,13 @@ existing VMID is not supported; delete the guest first, then restore.
 ### Restore a Backup Archive
 
 ```bash
-pvectl vm restore backup:backup/vzdump-qemu-100-2026_06_06-00_00_00.vma.zst \
+pve vm restore backup:backup/vzdump-qemu-100-2026_06_06-00_00_00.vma.zst \
   --node pve1 \
   --vmid 101 \
   --storage local-lvm \
   --wait
 
-pvectl lxc restore backup:backup/vzdump-lxc-200-2026_06_06-00_00_00.tar.zst \
+pve lxc restore backup:backup/vzdump-lxc-200-2026_06_06-00_00_00.tar.zst \
   --node pve1 \
   --vmid 201 \
   --storage local-lvm \
@@ -320,7 +327,7 @@ fails during `--wait`, the result row is still written to stdout before the
 command exits non-zero. When the archive name encodes a vzdump kind (`vzdump-qemu-` or
 `vzdump-lxc-`), the kind must match the command.
 
-`pvectl` does not manage scheduled backup jobs, prune policies, backup
+`pve` does not manage scheduled backup jobs, prune policies, backup
 deletion, PBS datastores, or PBS verification.
 
 ## Storage Commands
@@ -331,16 +338,16 @@ storage content.
 ### List Storages
 
 ```bash
-pvectl storage ls
-pvectl storage ls --node pve1
-pvectl storage ls --content backup
-pvectl storage ls --type dir
-pvectl storage ls --active
-pvectl storage ls --enabled
-pvectl storage ls -o json
+pve storage ls
+pve storage ls --node pve1
+pve storage ls --content backup
+pve storage ls --type dir
+pve storage ls --active
+pve storage ls --enabled
+pve storage ls -o json
 ```
 
-When `--node` is omitted, `pvectl` traverses all nodes returned by the cluster
+When `--node` is omitted, `pve` traverses all nodes returned by the cluster
 and lists storage status on each node. Use `--content` for a single content
 capability such as `backup`, `iso`, `images`, or `vztmpl`. Use `--type` for a
 single storage type such as `dir`, `lvmthin`, `nfs`, or `pbs`.
@@ -348,9 +355,9 @@ single storage type such as `dir`, `lvmthin`, `nfs`, or `pbs`.
 ### Storage Usage
 
 ```bash
-pvectl storage usage
-pvectl storage usage --node pve1
-pvectl storage usage --content backup
+pve storage usage
+pve storage usage --node pve1
+pve storage usage --content backup
 ```
 
 `storage usage` is a compact daily-use view of the same data as `storage ls`;
@@ -359,8 +366,8 @@ structured output reuses the `StorageRow` schema.
 ### Show Storage Status
 
 ```bash
-pvectl storage get local --node pve1
-pvectl storage get backup --node pve1 -o json
+pve storage get local --node pve1
+pve storage get backup --node pve1 -o json
 ```
 
 `storage get` requires `--node` because the same storage name may be visible on
@@ -369,12 +376,12 @@ multiple nodes.
 ### List Storage Content
 
 ```bash
-pvectl storage content ls --node pve1 --storage local
-pvectl storage content ls --node pve1 --storage local --content iso
-pvectl storage content ls --node pve1 --storage backup --content backup
-pvectl storage content ls --node pve1 --storage local-lvm --content images
-pvectl storage content ls --node pve1 --storage backup --vmid 100
-pvectl storage content ls --node pve1 --storage local -o json
+pve storage content ls --node pve1 --storage local
+pve storage content ls --node pve1 --storage local --content iso
+pve storage content ls --node pve1 --storage backup --content backup
+pve storage content ls --node pve1 --storage local-lvm --content images
+pve storage content ls --node pve1 --storage backup --vmid 100
+pve storage content ls --node pve1 --storage local -o json
 ```
 
 `storage content ls` shows generic storage contents such as ISO images, LXC
@@ -382,7 +389,7 @@ templates, backup files, VM disks, and container root disks. If you only care
 about backup files, prefer `backup ls`; it uses backup-specific fields and
 supports `--kind` and `--latest`.
 
-`pvectl` does not create, update, delete, upload, download, prune, or otherwise
+`pve` does not create, update, delete, upload, download, prune, or otherwise
 mutate storages or storage content. It also does not manage PBS datastores.
 
 ## Maintenance Commands
@@ -390,11 +397,11 @@ mutate storages or storage content. It also does not manage PBS datastores.
 ### Clone
 
 ```bash
-pvectl vm clone 9000 --newid 101 --name app-vm --target pve1 --wait
-pvectl vm clone 9000 --name app-vm --target pve1 --storage local-lvm --full --wait
+pve vm clone 9000 --newid 101 --name app-vm --target pve1 --wait
+pve vm clone 9000 --name app-vm --target pve1 --storage local-lvm --full --wait
 
-pvectl lxc clone 900 --newid 201 --hostname app-lxc --target pve1 --wait
-pvectl lxc clone 900 --hostname app-lxc --target pve1 --storage local-lvm --full --wait
+pve lxc clone 900 --newid 201 --hostname app-lxc --target pve1 --wait
+pve lxc clone 900 --hostname app-lxc --target pve1 --storage local-lvm --full --wait
 ```
 
 Omit `--newid` to let Proxmox allocate the next available VMID/CTID. Clone
@@ -402,14 +409,14 @@ results are written to stdout and include `new_vmid`, so scripts can capture
 the allocated ID:
 
 ```bash
-pvectl vm clone 9000 --name app-vm --target pve1 -o json
+pve vm clone 9000 --name app-vm --target pve1 -o json
 ```
 
 ### Config
 
 ```bash
-pvectl vm config 101 --set memory=4096 --set cores=4 --wait
-pvectl lxc config 201 --set memory=2048 --set cores=2 --wait
+pve vm config 101 --set memory=4096 --set cores=4 --wait
+pve lxc config 201 --set memory=2048 --set cores=2 --wait
 ```
 
 `config` passes generic `key=value` options to the Proxmox guest config API.
@@ -417,27 +424,27 @@ pvectl lxc config 201 --set memory=2048 --set cores=2 --wait
 ### Resize
 
 ```bash
-pvectl vm resize 101 --disk scsi0 --size +20G --wait
-pvectl lxc resize 201 --disk rootfs --size +10G --wait
+pve vm resize 101 --disk scsi0 --size +20G --wait
+pve lxc resize 201 --disk rootfs --size +10G --wait
 ```
 
 ### Migrate
 
 ```bash
-pvectl vm migrate 101 --target pve2 --online --wait
-pvectl lxc migrate 201 --target pve2 --online --wait
+pve vm migrate 101 --target pve2 --online --wait
+pve lxc migrate 201 --target pve2 --online --wait
 ```
 
 ## Snapshot Commands
 
 ```bash
-pvectl vm snapshot ls 101
-pvectl vm snapshot create 101 before-upgrade --wait
-pvectl vm snapshot delete 101 before-upgrade --wait
+pve vm snapshot ls 101
+pve vm snapshot create 101 before-upgrade --wait
+pve vm snapshot delete 101 before-upgrade --wait
 
-pvectl lxc snapshot ls 201
-pvectl lxc snapshot create 201 before-upgrade --wait
-pvectl lxc snapshot delete 201 before-upgrade --wait
+pve lxc snapshot ls 201
+pve lxc snapshot create 201 before-upgrade --wait
+pve lxc snapshot delete 201 before-upgrade --wait
 ```
 
 Snapshot rollback and snapshot delete are dangerous operations and are
@@ -450,13 +457,13 @@ enabled. LXC containers do not expose the agent API. The first release
 intentionally limits itself to `ping`, `network`, and `exec`.
 
 ```bash
-pvectl vm agent ping 100 --node pve1
-pvectl vm agent network 100 -o json
-pvectl vm agent exec 100 --node pve1 -- /usr/bin/uname -a
+pve vm agent ping 100 --node pve1
+pve vm agent network 100 -o json
+pve vm agent exec 100 --node pve1 -- /usr/bin/uname -a
 ```
 
 Like other VMID-oriented commands, `--node` is optional here: when omitted,
-`pvectl` locates the VM across the cluster first.
+`pve` locates the VM across the cluster first.
 
 `vm agent network` answers "which IP did this cloned VM get?". `vm agent exec`
 takes `executable + argv` after `--` and never wraps the command in a shell
@@ -466,14 +473,14 @@ command exits non-zero when the guest command failed.
 
 ## VM Cloud-init Commands
 
-Cloud-init commands use PVE's native cloud-init configuration; `pvectl` never
+Cloud-init commands use PVE's native cloud-init configuration; `pve` never
 builds ISOs itself. As with the agent commands, `--node` is optional and an
 omitted node is resolved by locating the VM across the cluster.
 
 ```bash
-pvectl vm cloud-init get 100 -o json
+pve vm cloud-init get 100 -o json
 
-pvectl vm cloud-init set 100 \
+pve vm cloud-init set 100 \
   --user debian \
   --ssh-key-file ~/.ssh/id_ed25519.pub \
   --ipconfig0 ip=dhcp \
@@ -481,7 +488,7 @@ pvectl vm cloud-init set 100 \
   --searchdomain lan \
   --wait
 
-pvectl vm cloud-init update 100
+pve vm cloud-init update 100
 ```
 
 Passwords are never accepted as a command-line flag; pass the environment
@@ -490,7 +497,7 @@ lists:
 
 ```bash
 export VM_PASSWORD=...
-pvectl vm cloud-init set 100 --password-env VM_PASSWORD
+pve vm cloud-init set 100 --password-env VM_PASSWORD
 ```
 
 `cloud-init get` never echoes the password; it only reports
@@ -502,10 +509,10 @@ comment lines are skipped.
 ## Network Commands (read-only)
 
 ```bash
-pvectl network ls --node pve1
-pvectl network ls --type bridge
-pvectl network ls --active
-pvectl network get vmbr0 --node pve1
+pve network ls --node pve1
+pve network ls --type bridge
+pve network ls --active
+pve network get vmbr0 --node pve1
 ```
 
 Without `--node`, `network ls` aggregates across all nodes with the usual
@@ -515,13 +522,13 @@ non-goal because a remote mistake can take down the whole node.
 ## Firewall Commands (read-only)
 
 ```bash
-pvectl firewall status --node pve1
-pvectl firewall ls --node pve1
+pve firewall status --node pve1
+pve firewall ls --node pve1
 
-pvectl firewall status --node pve1 --type vm --vmid 100
-pvectl firewall ls --node pve1 --type vm --vmid 100
+pve firewall status --node pve1 --type vm --vmid 100
+pve firewall ls --node pve1 --type vm --vmid 100
 
-pvectl firewall ls --node pve1 --type lxc --vmid 200
+pve firewall ls --node pve1 --type lxc --vmid 200
 ```
 
 `--type node` is the default. `--vmid` is required when `--type` is `vm` or
@@ -534,8 +541,8 @@ pvectl firewall ls --node pve1 --type lxc --vmid 200
 Delete commands require a local confirmation prompt unless `--force` is passed:
 
 ```bash
-pvectl vm delete 101
-pvectl lxc delete 201
+pve vm delete 101
+pve lxc delete 201
 ```
 
 The prompt requires typing the exact VMID/CTID. The `--force` flag only skips
@@ -544,8 +551,8 @@ this local prompt; it is not passed to the Proxmox LXC delete API.
 Use `--wait` when scripts need completion status:
 
 ```bash
-pvectl vm delete 101 --force --wait
-pvectl lxc delete 201 --force --wait
+pve vm delete 101 --force --wait
+pve lxc delete 201 --force --wait
 ```
 
 ### Snapshot Rollback
@@ -554,16 +561,16 @@ Snapshot rollback commands require typing the exact snapshot name unless
 `--force` is passed:
 
 ```bash
-pvectl vm snapshot rollback 101 before-upgrade
-pvectl lxc snapshot rollback 201 before-upgrade
+pve vm snapshot rollback 101 before-upgrade
+pve lxc snapshot rollback 201 before-upgrade
 ```
 
 The `--force` flag only skips this local prompt. Rollback is an asynchronous
 PVE task, so use `--wait` when scripts need completion status:
 
 ```bash
-pvectl vm snapshot rollback 101 before-upgrade --force --wait
-pvectl lxc snapshot rollback 201 before-upgrade --force --wait
+pve vm snapshot rollback 101 before-upgrade --force --wait
+pve lxc snapshot rollback 201 before-upgrade --force --wait
 ```
 
 ### Snapshot Delete
@@ -572,8 +579,8 @@ Snapshot delete commands require typing the exact snapshot name unless
 `--force` is passed:
 
 ```bash
-pvectl vm snapshot delete 101 before-upgrade
-pvectl lxc snapshot delete 201 before-upgrade
+pve vm snapshot delete 101 before-upgrade
+pve lxc snapshot delete 201 before-upgrade
 ```
 
 Like rollback, delete is an asynchronous PVE task, so use `--wait` when scripts
@@ -584,10 +591,10 @@ need completion status.
 Supported output formats are `table`, `json`, and `yaml`.
 
 ```bash
-pvectl node ls -o table
-pvectl guest ls -o json
-pvectl vm get 100 -o json
-pvectl lxc get 200 -o yaml
+pve node ls -o table
+pve guest ls -o json
+pve vm get 100 -o json
+pve lxc get 200 -o yaml
 ```
 
 Use `table` for interactive use, `json` for scripts and agents, and `yaml` as
@@ -603,8 +610,8 @@ is intended for humans and should not be parsed by scripts. See
 Global flags:
 
 ```bash
-pvectl \
-  --config ~/.config/pvectl/config.yaml \
+pve \
+  --config ~/.config/pve/config.yaml \
   --profile home \
   -o json \
   --timeout 30s \
@@ -616,7 +623,7 @@ pvectl \
 Async guest operations support:
 
 ```bash
-pvectl vm reboot 100 --wait --wait-timeout 5m
+pve vm reboot 100 --wait --wait-timeout 5m
 ```
 
 Task IDs and wait progress are written to stderr. Command results are written

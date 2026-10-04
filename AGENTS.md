@@ -4,7 +4,7 @@ Guidance for agents and automation working in this repository.
 
 ## Project Positioning
 
-`pvectl` is a personal HomeLab Proxmox VE CLI. It wraps the Proxmox VE API
+`pve` is a personal HomeLab Proxmox VE CLI. It wraps the Proxmox VE API
 through `go-proxmox` and exposes resource-oriented commands for daily VM/QEMU
 and LXC operations.
 

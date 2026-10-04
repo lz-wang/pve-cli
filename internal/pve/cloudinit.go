@@ -18,7 +18,7 @@ import (
 const maxCloudInitDevices = 32
 
 // CloudInitBackend covers PVE-native cloud-init configuration for VMs.
-// It depends on PVE's own cloud-init plumbing; pvectl never builds ISOs.
+// It depends on PVE's own cloud-init plumbing; pve never builds ISOs.
 type CloudInitBackend interface {
 	GuestBackend
 	VirtualMachineCloudInit(ctx context.Context, node string, vmid int) (output.CloudInitConfig, error)
@@ -112,7 +112,7 @@ func parseCloudInitCustom(raw string) []output.CloudInitCustom {
 }
 
 // CloudInitSetOptions describes one `vm cloud-init set` request. The password
-// travels through an environment variable; pvectl never takes it as a flag.
+// travels through an environment variable; pve never takes it as a flag.
 type CloudInitSetOptions struct {
 	User         string
 	PasswordEnv  string
