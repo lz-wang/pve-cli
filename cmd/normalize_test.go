@@ -1,8 +1,11 @@
 package cmd
 
 import (
+	"fmt"
 	"reflect"
 	"testing"
+
+	"github.com/urfave/cli/v2"
 )
 
 func TestNormalizeArgsMovesLeafFlagsBeforePositionals(t *testing.T) {
@@ -101,5 +104,83 @@ func TestNormalizeArgsMovesStorageContentFlags(t *testing.T) {
 
 	if got := normalizeArgs(args); !reflect.DeepEqual(got, want) {
 		t.Fatalf("normalize = %#v, want %#v", got, want)
+	}
+}
+
+func TestNormalizeArgsKeepsBulkValueFlagsAttached(t *testing.T) {
+	args := []string{"pvectl", "guest", "shutdown", "--node", "pve1", "--status", "running", "--tag", "infra", "--jobs", "4", "--dry-run"}
+	want := append([]string{}, args...)
+
+	if got := normalizeArgs(args); !reflect.DeepEqual(got, want) {
+		t.Fatalf("normalize = %#v, want %#v", got, want)
+	}
+}
+
+func TestNormalizeArgsKeepsCheckValueFlagsAttached(t *testing.T) {
+	args := []string{"pvectl", "check", "--node", "pve1", "--storage-warn", "80", "--storage-fail", "95", "--backup-tag", "backup", "--backup-max-age", "36h"}
+	want := append([]string{}, args...)
+
+	if got := normalizeArgs(args); !reflect.DeepEqual(got, want) {
+		t.Fatalf("normalize = %#v, want %#v", got, want)
+	}
+}
+
+func TestNormalizeArgsMovesValueFlagBeforePositional(t *testing.T) {
+	args := []string{"pvectl", "guest", "get", "100", "--status", "running"}
+	want := []string{"pvectl", "guest", "get", "--status", "running", "100"}
+
+	if got := normalizeArgs(args); !reflect.DeepEqual(got, want) {
+		t.Fatalf("normalize = %#v, want %#v", got, want)
+	}
+}
+
+// TestFlagsWithValuesCoversAllValueFlags guards against normalize.go and the
+// urfave/cli flag definitions drifting apart: every value-taking flag in the
+// command tree must be listed in flagsWithValues, or its value would be
+// reordered as a positional argument.
+func TestFlagsWithValuesCoversAllValueFlags(t *testing.T) {
+	app := NewAppWithDependencies("test", Dependencies{})
+
+	var missing []string
+	var walkFlags func(path string, flags []cli.Flag)
+	walkFlags = func(path string, flags []cli.Flag) {
+		for _, flag := range flags {
+			if !flagTakesValue(flag) {
+				continue
+			}
+			for _, name := range flag.Names() {
+				if flagsWithValues["--"+name] || flagsWithValues["-"+name] {
+					continue
+				}
+				missing = append(missing, fmt.Sprintf("%s%s", path, name))
+			}
+		}
+	}
+	var walkCommands func(path string, commands []*cli.Command)
+	walkCommands = func(path string, commands []*cli.Command) {
+		for _, command := range commands {
+			child := path + command.Name + " "
+			walkFlags(child, command.Flags)
+			walkCommands(child, command.Subcommands)
+		}
+	}
+
+	walkFlags("pvectl ", app.Flags)
+	walkCommands("", app.Commands)
+
+	if len(missing) > 0 {
+		t.Fatalf("value flags missing from flagsWithValues: %v", missing)
+	}
+}
+
+// flagTakesValue reports whether a flag consumes the following CLI token.
+// Unknown flag types are treated as value-taking so future flag kinds fail
+// the meta-test instead of silently skipping normalization.
+func flagTakesValue(flag cli.Flag) bool {
+	switch flag.(type) {
+	case *cli.BoolFlag:
+		return false
+	default:
+		return true
 	}
 }
