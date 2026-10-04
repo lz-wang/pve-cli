@@ -90,10 +90,7 @@ func (s *StatusService) collectStorages(ctx context.Context, nodes []string) ([]
 func (s *StatusService) collectBackups(ctx context.Context, storages []output.StorageRow) ([]output.BackupRow, []output.StatusIssue) {
 	var rows []output.BackupRow
 	var issues []output.StatusIssue
-	for _, storage := range storages {
-		if !storageHasContent(storage.Content, "backup") {
-			continue
-		}
+	for _, storage := range backupSources(storages) {
 		backupRows, err := s.backend.Backups(ctx, storage.Node, storage.Storage)
 		if err != nil {
 			issues = append(issues, output.StatusIssue{
@@ -105,6 +102,29 @@ func (s *StatusService) collectBackups(ctx context.Context, storages []output.St
 		rows = append(rows, backupRows...)
 	}
 	return rows, issues
+}
+
+// backupSources returns the storages whose backups should be listed. Shared
+// storages expose identical content from every node, so each shared storage
+// name is queried on exactly one node; local storages are kept per node.
+func backupSources(storages []output.StorageRow) []output.StorageRow {
+	seen := make(map[string]bool)
+	sources := make([]output.StorageRow, 0, len(storages))
+	for _, storage := range storages {
+		if !storageHasContent(storage.Content, "backup") {
+			continue
+		}
+		key := storage.Node + "/" + storage.Storage
+		if storage.Shared {
+			key = storage.Storage
+		}
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		sources = append(sources, storage)
+	}
+	return sources
 }
 
 func summarizeNodes(rows []output.NodeRow) output.NodeSummary {

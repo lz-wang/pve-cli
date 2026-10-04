@@ -443,6 +443,7 @@ type fakeBackend struct {
 	vmListCalls      map[string]int
 	lxcListCalls     map[string]int
 	backupCalls      int
+	backupListCalls  map[string]int
 	storageCalls     map[string]int
 }
 
@@ -497,6 +498,10 @@ func (b *fakeBackend) LXC(_ context.Context, node string, vmid int) (Guest, erro
 }
 
 func (b *fakeBackend) Backups(_ context.Context, node, storage string) ([]output.BackupRow, error) {
+	if b.backupListCalls == nil {
+		b.backupListCalls = make(map[string]int)
+	}
+	b.backupListCalls[node+"/"+storage]++
 	if err := b.backupErrs[node+"/"+storage]; err != nil {
 		return nil, err
 	}

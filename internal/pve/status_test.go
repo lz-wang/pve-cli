@@ -65,6 +65,55 @@ func TestStatusServiceReportSummaries(t *testing.T) {
 	}
 }
 
+func TestStatusServiceDeduplicatesSharedBackupStorages(t *testing.T) {
+	backend := &fakeBackend{
+		nodes: []output.NodeRow{
+			{Name: "pve1", Status: "online"},
+			{Name: "pve2", Status: "online"},
+		},
+		storageRows: map[string][]output.StorageRow{
+			"pve1": {
+				{Node: "pve1", Storage: "backup", Type: "nfs", Active: true, Shared: true, Content: "backup"},
+				{Node: "pve1", Storage: "local-vm", Type: "dir", Active: true, Content: "backup"},
+			},
+			"pve2": {
+				{Node: "pve2", Storage: "backup", Type: "nfs", Active: true, Shared: true, Content: "backup"},
+				{Node: "pve2", Storage: "local-vm", Type: "dir", Active: true, Content: "backup"},
+			},
+		},
+		backupRows: map[string]map[string][]output.BackupRow{
+			"pve1": {
+				"backup":   {{Node: "pve1", Storage: "backup", Kind: "vm", VMID: 100, CTime: 100}},
+				"local-vm": {{Node: "pve1", Storage: "local-vm", Kind: "vm", VMID: 110, CTime: 110}},
+			},
+			"pve2": {
+				// The same shared storage seen from pve2 must not be
+				// queried again; local-vm stays per node.
+				"backup":   {{Node: "pve2", Storage: "backup", Kind: "vm", VMID: 100, CTime: 100}},
+				"local-vm": {{Node: "pve2", Storage: "local-vm", Kind: "vm", VMID: 120, CTime: 120}},
+			},
+		},
+	}
+	svc := NewStatusService(backend)
+
+	report, err := svc.Report(context.Background())
+	if err != nil {
+		t.Fatalf("report: %v", err)
+	}
+	if report.Backups.Count != 3 {
+		t.Fatalf("backups = %#v, want 3 (shared once + two local)", report.Backups)
+	}
+	if backend.backupListCalls["pve2/backup"] != 0 {
+		t.Fatalf("shared storage must be queried once, calls = %#v", backend.backupListCalls)
+	}
+	if backend.backupListCalls["pve1/backup"] != 1 || backend.backupListCalls["pve1/local-vm"] != 1 || backend.backupListCalls["pve2/local-vm"] != 1 {
+		t.Fatalf("calls = %#v", backend.backupListCalls)
+	}
+	if len(report.Issues) != 0 {
+		t.Fatalf("issues = %#v", report.Issues)
+	}
+}
+
 func TestStatusServiceReportPartialFailures(t *testing.T) {
 	backend := &fakeBackend{
 		nodes: []output.NodeRow{

@@ -217,7 +217,7 @@ func (s *CheckService) checkBackupCoverage(ctx context.Context, nodes []string, 
 	}
 	// When every backup source failed, "no backup found" would misreport a
 	// query outage as a coverage gap; keep the two diagnoses apart.
-	unavailable := len(backupErrs) > 0 && len(backupErrs) >= countBackupSources(storages)
+	unavailable := len(backupErrs) > 0 && len(backupErrs) >= len(backupSources(storages))
 	now := uint64(time.Now().Unix())
 	cutoff := now - uint64(options.BackupMaxAge.Seconds())
 	for _, guest := range guests {
@@ -285,14 +285,12 @@ func (s *CheckService) collectTaggedGuests(ctx context.Context, nodes []string, 
 }
 
 // collectLatestBackups returns the newest backup per guest plus one error per
-// backup-capable storage that could not be queried.
+// backup-capable storage that could not be queried. Shared storages are only
+// queried on one node, matching the status backup summary.
 func (s *CheckService) collectLatestBackups(ctx context.Context, storages []output.StorageRow) (map[string]uint64, map[string]error) {
 	latest := make(map[string]uint64)
 	errs := make(map[string]error)
-	for _, storage := range storages {
-		if !storageHasContent(storage.Content, "backup") {
-			continue
-		}
+	for _, storage := range backupSources(storages) {
 		rows, err := s.backend.Backups(ctx, storage.Node, storage.Storage)
 		if err != nil {
 			errs[storage.Node+"/"+storage.Storage] = err
@@ -306,16 +304,6 @@ func (s *CheckService) collectLatestBackups(ctx context.Context, storages []outp
 		}
 	}
 	return latest, errs
-}
-
-func countBackupSources(storages []output.StorageRow) int {
-	count := 0
-	for _, storage := range storages {
-		if storageHasContent(storage.Content, "backup") {
-			count++
-		}
-	}
-	return count
 }
 
 func backupGuestKey(kind string, vmid uint64) string {

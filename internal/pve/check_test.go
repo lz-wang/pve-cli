@@ -184,6 +184,50 @@ func TestCheckServiceBackupCoverage(t *testing.T) {
 	}
 }
 
+func TestCheckServiceBackupCoverageDeduplicatesSharedStorage(t *testing.T) {
+	now := uint64(time.Now().Unix())
+	backend := &fakeBackend{
+		nodes: []output.NodeRow{
+			{Name: "pve1", Status: "online"},
+			{Name: "pve2", Status: "online"},
+		},
+		vmRows: map[string][]output.GuestRow{
+			"pve1": {{Kind: "vm", VMID: 100, Node: "pve1", Tags: "backup"}},
+		},
+		lxcs:    map[string]map[int]*fakeGuest{},
+		lxcRows: map[string][]output.GuestRow{},
+		storageRows: map[string][]output.StorageRow{
+			"pve1": {{Node: "pve1", Storage: "backup", Type: "nfs", Active: true, Enabled: true, Shared: true, Content: "backup"}},
+			"pve2": {{Node: "pve2", Storage: "backup", Type: "nfs", Active: true, Enabled: true, Shared: true, Content: "backup"}},
+		},
+		backupRows: map[string]map[string][]output.BackupRow{
+			"pve1": {
+				"backup": {{Node: "pve1", Storage: "backup", Kind: "vm", VMID: 100, CTime: now - 3600}},
+			},
+		},
+	}
+	svc := NewCheckService(backend)
+
+	result, err := svc.Run(context.Background(), CheckOptions{
+		BackupTag:    "backup",
+		BackupMaxAge: 36 * time.Hour,
+	})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if len(backend.backupListCalls) != 1 {
+		t.Fatalf("shared storage must be queried once, calls = %#v", backend.backupListCalls)
+	}
+	if backend.backupListCalls["pve1/backup"] != 1 {
+		t.Fatalf("calls = %#v", backend.backupListCalls)
+	}
+	for _, row := range result.Rows {
+		if row.Check == "backup-coverage" && row.Resource == "vm 100" && row.Status != output.DoctorStatusOK {
+			t.Fatalf("vm 100 row = %#v", row)
+		}
+	}
+}
+
 func TestCheckServiceBackupCoverageSkippedWithoutOptions(t *testing.T) {
 	backend := &fakeBackend{
 		nodes: []output.NodeRow{{Name: "pve1", Status: "online"}},
