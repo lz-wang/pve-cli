@@ -14,8 +14,9 @@
   使用表格。
 - 通过 `--profile` 支持选择 profile。
 - 通过 `--config` 支持指定配置文件路径。
-- 通过 `--timeout` 支持覆盖 API 请求超时。
-- 对异步操作支持 `--wait` 和 `--wait-timeout`。
+- 通过全局 `--api-timeout` 支持覆盖 API 请求超时；`vm agent exec` 的
+  `--timeout` 专指 guest 内命令的等待上限。
+- 异步操作命令支持 `--wait` 和 `--wait-timeout`。
 - 通过 `--insecure` 支持覆盖 TLS 校验行为。
 - 命令结果输出到 stdout。
 - task ID、等待进度和日志输出到 stderr。

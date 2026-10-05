@@ -22,6 +22,7 @@ var flagsWithValues = map[string]bool{
 	"--profile":          true,
 	"--output":           true,
 	"-o":                 true,
+	"--api-timeout":      true,
 	"--timeout":          true,
 	"--wait-timeout":     true,
 	"--node":             true,

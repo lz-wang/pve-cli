@@ -17,6 +17,11 @@
 
 ### Changed
 
+- Rename the global API request timeout flag from `--timeout` to
+  `--api-timeout` so it no longer collides with the `--timeout` flag of
+  `vm agent exec`, which bounds the guest command instead.
+- Remove the global `--wait` and `--wait-timeout` flags; async operation
+  commands keep their own `--wait` and `--wait-timeout` flags.
 - Order help commands by HomeLab role and typical use, with daily inspection
   and lifecycle commands first, local setup tools later, and guest deletion
   and snapshot rollback at the end of their command lists.

@@ -162,7 +162,7 @@ func (p *configPrompter) addProfile(c *cli.Context, path string, cfg *config.Con
 		return err
 	}
 	profile.InsecureSkipVerify = configAnswerYes(answer)
-	if timeout := durationFlag(c, "timeout"); timeout > 0 {
+	if timeout := durationFlag(c, "api-timeout"); timeout > 0 {
 		profile.Timeout = timeout.String()
 	}
 	profile.DefaultOutput = output.NormalizeFormat(stringFlag(c, "output"))

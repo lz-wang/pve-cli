@@ -35,7 +35,7 @@ func TestConfigAddProfile(t *testing.T) {
 			}
 			var stdout, stderr bytes.Buffer
 			input := "\nhttps://lab.example:8006/api2/json\nautomation@pve!lab\ntoken\nfake-add-token\nno\n" + tc.input
-			err := RunWithDependencies([]string{"pve", "--config", path, "--profile", "lab", "--timeout", "1m", "--output", "json", "config", "add"}, "test", Dependencies{
+			err := RunWithDependencies([]string{"pve", "--config", path, "--profile", "lab", "--api-timeout", "1m", "--output", "json", "config", "add"}, "test", Dependencies{
 				Stdin: strings.NewReader(input), Stdout: &stdout, Stderr: &stderr,
 			})
 			if err != nil {

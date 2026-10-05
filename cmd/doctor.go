@@ -39,7 +39,7 @@ func newDoctorCommand(deps Dependencies) *cli.Command {
 				ProfileName: c.String("profile"),
 				Offline:     c.Bool("offline"),
 				Node:        c.String("node"),
-				Timeout:     durationFlag(c, "timeout"),
+				Timeout:     durationFlag(c, "api-timeout"),
 				Insecure:    boolFlag(c, "insecure"),
 				Output:      outputFormat,
 				OutputSet:   outputSet,

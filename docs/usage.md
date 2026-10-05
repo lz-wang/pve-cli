@@ -86,7 +86,7 @@ Config file: /home/user/.config/pve/config.yaml
 token or environment variable reference, and whether to skip TLS verification.
 Plaintext token input is hidden in the terminal. The default timeout is `30s`,
 the default output is `table`, and TLS verification is enabled. Global
-`--timeout`, `--output`, and `--insecure` supply defaults when provided.
+`--api-timeout`, `--output`, and `--insecure` supply defaults when provided.
 
 The profile name defaults to global `--profile` or `home`. The wizard asks whether to
 make the added profile current. The default answer is yes when no current
@@ -717,12 +717,15 @@ Global flags:
 pve \
   --config ~/.config/pve/config.yaml \
   --profile home \
-  -o json \
-  --timeout 30s \
+  --api-timeout 30s \
   --insecure \
   --verbose \
   <resource> <action>
 ```
+
+Timeouts keep separate roles: global `--api-timeout` bounds PVE API requests,
+`--timeout` on `vm agent exec` bounds the guest command, and `--wait-timeout`
+bounds async task waits.
 
 Async guest operations support:
 

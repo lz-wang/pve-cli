@@ -15,8 +15,10 @@ daily VM/QEMU and LXC workflows.
   local config inspection uses tables.
 - Supports profile selection with `--profile`.
 - Supports custom config paths with `--config`.
-- Supports API timeout override with `--timeout`.
-- Supports task waiting with `--wait` and `--wait-timeout` on async operations.
+- Supports API timeout override with global `--api-timeout`; `--timeout` on
+  `vm agent exec` bounds the guest command instead.
+- Supports task waiting with `--wait` and `--wait-timeout` on async operation
+  commands.
 - Supports TLS verification override with `--insecure`.
 - Keeps command results on stdout.
 - Keeps task IDs, wait progress, and logs on stderr.

@@ -93,16 +93,8 @@ func NewAppWithBuildInfoAndDependencies(info BuildInfo, deps Dependencies) *cli.
 				Usage:   "output format: table,json,yaml",
 			},
 			&cli.DurationFlag{
-				Name:  "timeout",
+				Name:  "api-timeout",
 				Usage: "PVE API request timeout",
-			},
-			&cli.BoolFlag{
-				Name:  "wait",
-				Usage: "wait for async task completion",
-			},
-			&cli.DurationFlag{
-				Name:  "wait-timeout",
-				Usage: "task wait timeout",
 			},
 			&cli.BoolFlag{
 				Name:  "insecure",
@@ -238,7 +230,7 @@ func buildRuntime(c *cli.Context, deps Dependencies) (*runtime, error) {
 }
 
 func resolveAPIRequestTimeout(c *cli.Context, profile config.Profile) (time.Duration, error) {
-	if timeout := durationFlag(c, "timeout"); timeout > 0 {
+	if timeout := durationFlag(c, "api-timeout"); timeout > 0 {
 		return timeout, nil
 	}
 	if profile.Timeout != "" {
