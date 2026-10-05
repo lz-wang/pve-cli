@@ -3,7 +3,7 @@ package cmd
 import (
 	"github.com/urfave/cli/v2"
 
-	"github.com/lz-wang/pvectl/internal/pve"
+	"github.com/lz-wang/pve-cli/v2/internal/pve"
 )
 
 func newVMCommand(deps Dependencies) *cli.Command {

@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lz-wang/pvectl/internal/output"
-	"github.com/lz-wang/pvectl/internal/pve"
+	"github.com/lz-wang/pve-cli/v2/internal/output"
+	"github.com/lz-wang/pve-cli/v2/internal/pve"
 )
 
 const testUPID = "UPID:pve1:0001:0000:6839F4A1:vzdump:100:root@pam"

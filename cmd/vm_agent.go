@@ -6,8 +6,8 @@ import (
 
 	"github.com/urfave/cli/v2"
 
-	"github.com/lz-wang/pvectl/internal/output"
-	"github.com/lz-wang/pvectl/internal/pve"
+	"github.com/lz-wang/pve-cli/v2/internal/output"
+	"github.com/lz-wang/pve-cli/v2/internal/pve"
 )
 
 // newVMAgentCommand exposes read-mostly QEMU guest agent operations. Only VMs

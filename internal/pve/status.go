@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/lz-wang/pvectl/internal/output"
+	"github.com/lz-wang/pve-cli/v2/internal/output"
 )
 
 // StatusService aggregates a HomeLab health snapshot. Every section tolerates

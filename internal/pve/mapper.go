@@ -5,7 +5,7 @@ import (
 
 	proxmox "github.com/luthermonson/go-proxmox"
 
-	"github.com/lz-wang/pvectl/internal/output"
+	"github.com/lz-wang/pve-cli/v2/internal/output"
 )
 
 // nodeDetail maps /nodes/{node}/status onto the stable NodeDetail contract.

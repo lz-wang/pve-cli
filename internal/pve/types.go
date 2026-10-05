@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/lz-wang/pvectl/internal/output"
+	"github.com/lz-wang/pve-cli/v2/internal/output"
 )
 
 var ErrNotFound = errors.New("not found")

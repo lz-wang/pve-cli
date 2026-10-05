@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lz-wang/pvectl/internal/config"
-	"github.com/lz-wang/pvectl/internal/pve"
+	"github.com/lz-wang/pve-cli/v2/internal/config"
+	"github.com/lz-wang/pve-cli/v2/internal/pve"
 )
 
 func TestVersionCommandFormatsWithoutConfigOrBackend(t *testing.T) {

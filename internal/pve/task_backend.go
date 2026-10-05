@@ -9,7 +9,7 @@ import (
 
 	proxmox "github.com/luthermonson/go-proxmox"
 
-	"github.com/lz-wang/pvectl/internal/output"
+	"github.com/lz-wang/pve-cli/v2/internal/output"
 )
 
 // Task status values used in TaskRow.Status.

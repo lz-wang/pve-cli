@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/lz-wang/pvectl/cmd"
+	"github.com/lz-wang/pve-cli/v2/cmd"
 )
 
 var (

@@ -1,4 +1,4 @@
-module github.com/lz-wang/pvectl
+module github.com/lz-wang/pve-cli/v2
 
 go 1.26
 

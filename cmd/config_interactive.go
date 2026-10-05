@@ -13,8 +13,8 @@ import (
 	"github.com/urfave/cli/v2"
 	"golang.org/x/term"
 
-	"github.com/lz-wang/pvectl/internal/config"
-	"github.com/lz-wang/pvectl/internal/output"
+	"github.com/lz-wang/pve-cli/v2/internal/config"
+	"github.com/lz-wang/pve-cli/v2/internal/output"
 )
 
 func newConfigAddCommand(deps Dependencies) *cli.Command {

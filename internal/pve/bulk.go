@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/lz-wang/pvectl/internal/output"
+	"github.com/lz-wang/pve-cli/v2/internal/output"
 )
 
 // Bulk lifecycle action names.
