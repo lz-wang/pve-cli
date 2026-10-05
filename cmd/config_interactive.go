@@ -165,10 +165,6 @@ func (p *configPrompter) addProfile(c *cli.Context, path string, cfg *config.Con
 	if timeout := durationFlag(c, "api-timeout"); timeout > 0 {
 		profile.Timeout = timeout.String()
 	}
-	profile.DefaultOutput = output.NormalizeFormat(stringFlag(c, "output"))
-	if err := output.ValidateFormat(profile.DefaultOutput); err != nil {
-		return err
-	}
 	use := true
 	if askCurrent {
 		useDefault := "no"

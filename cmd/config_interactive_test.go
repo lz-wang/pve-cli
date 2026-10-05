@@ -31,8 +31,8 @@ func TestConfigShowGuidedInitialization(t *testing.T) {
 		},
 		{
 			name: "environment and global defaults", input: "yes\n\nhttps://pve.example:8006/api2/json\nautomation@pve!test\nenv\nPVE_INTERACTIVE_TOKEN\n\n",
-			flags:   []string{"--profile", "lab", "--api-timeout", "1m", "--output", "yaml", "--insecure"},
-			profile: "lab", env: "PVE_INTERACTIVE_TOKEN", insecure: true, timeout: "1m0s", output: "yaml",
+			flags:   []string{"--profile", "lab", "--api-timeout", "1m", "--insecure"},
+			profile: "lab", env: "PVE_INTERACTIVE_TOKEN", insecure: true, timeout: "1m0s", output: "table",
 		},
 		{
 			name: "invalid responses are retried", input: "maybe\ny\ncustom\n\nftp://pve.example\nhttps://pve.example:8006/api2/json\n\nautomation@pve!test\nwrong\ntoken\n\nfake-retry-token\nwrong\nyes\n",

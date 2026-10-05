@@ -113,7 +113,6 @@ func TestConfigShowSelectsProfiles(t *testing.T) {
 		{name: "current", selected: "home"},
 		{name: "named", selected: "lab", args: []string{"lab"}},
 		{name: "global selector", selected: "lab", global: []string{"--profile", "lab"}},
-		{name: "table despite output flag", selected: "home", global: []string{"--output", "json"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var stdout bytes.Buffer

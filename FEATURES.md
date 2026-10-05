@@ -11,8 +11,8 @@ daily VM/QEMU and LXC workflows.
   and lifecycle commands first, with guest deletion and snapshot rollback last.
 - Uses the `pve` executable for local builds, installs, and release packages;
   Homebrew installs it with `brew install lz-wang/tap/pve`.
-- Supports `table`, `json`, and `yaml` resource output via `--output` or `-o`;
-  local config inspection uses tables.
+- Supports `table`, `json`, and `yaml` resource output via the per-command
+  `--output` or `-o` flag; local config inspection uses tables.
 - Supports profile selection with `--profile`.
 - Supports custom config paths with `--config`.
 - Supports API timeout override with global `--api-timeout`; `--timeout` on
@@ -40,8 +40,8 @@ are user-defined; documentation uses `PVE_*` examples.
   Token secret env, Skip TLS verify, Timeout, and Default output. The final line
   gives `Config file: /absolute/path/config.yaml`.
 - `config add` interactively adds a profile, with hidden plaintext token input,
-  optional environment references, and defaults from global `--timeout`,
-  `--output`, and `--insecure`. It asks whether to make the profile current,
+  optional environment references, and defaults from global `--api-timeout` and
+  `--insecure`. It asks whether to make the profile current,
   defaulting to yes when no current profile is configured and no otherwise.
   Existing names are never overwritten; cancellation writes no changes.
 - `config update NAME` noninteractively creates or updates a profile. Connection

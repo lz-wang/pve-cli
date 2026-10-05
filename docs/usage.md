@@ -86,7 +86,7 @@ Config file: /home/user/.config/pve/config.yaml
 token or environment variable reference, and whether to skip TLS verification.
 Plaintext token input is hidden in the terminal. The default timeout is `30s`,
 the default output is `table`, and TLS verification is enabled. Global
-`--api-timeout`, `--output`, and `--insecure` supply defaults when provided.
+`--api-timeout` and `--insecure` supply defaults when provided.
 
 The profile name defaults to global `--profile` or `home`. The wizard asks whether to
 make the added profile current. The default answer is yes when no current
@@ -692,7 +692,9 @@ need completion status.
 
 ## Output Formats
 
-Supported output formats are `table`, `json`, and `yaml`.
+Supported output formats are `table`, `json`, and `yaml`. `-o`/`--output` is a
+per-command flag on commands that produce structured output; local `config`
+commands always print tables.
 
 ```bash
 pve node ls -o table
@@ -711,7 +713,7 @@ is intended for humans and should not be parsed by scripts. See
 
 ## Scripting Notes
 
-Global flags:
+Global flags only control the connection context:
 
 ```bash
 pve \
@@ -722,6 +724,10 @@ pve \
   --verbose \
   <resource> <action>
 ```
+
+Behavior flags belong to the command itself: `-o`/`--output` is only accepted
+by commands with structured output, and `--wait`/`--wait-timeout` only by
+async operation commands.
 
 Timeouts keep separate roles: global `--api-timeout` bounds PVE API requests,
 `--timeout` on `vm agent exec` bounds the guest command, and `--wait-timeout`

@@ -35,7 +35,7 @@ func TestConfigAddProfile(t *testing.T) {
 			}
 			var stdout, stderr bytes.Buffer
 			input := "\nhttps://lab.example:8006/api2/json\nautomation@pve!lab\ntoken\nfake-add-token\nno\n" + tc.input
-			err := RunWithDependencies([]string{"pve", "--config", path, "--profile", "lab", "--api-timeout", "1m", "--output", "json", "config", "add"}, "test", Dependencies{
+			err := RunWithDependencies([]string{"pve", "--config", path, "--profile", "lab", "--api-timeout", "1m", "config", "add"}, "test", Dependencies{
 				Stdin: strings.NewReader(input), Stdout: &stdout, Stderr: &stderr,
 			})
 			if err != nil {
@@ -46,7 +46,7 @@ func TestConfigAddProfile(t *testing.T) {
 				t.Fatal(err)
 			}
 			profile := cfg.Profiles["lab"]
-			if cfg.CurrentProfile != tc.wantCurrent || profile.Endpoint != "https://lab.example:8006/api2/json" || profile.TokenID != "automation@pve!lab" || profile.TokenSecret != "fake-add-token" || profile.Timeout != "1m0s" || profile.DefaultOutput != "json" {
+			if cfg.CurrentProfile != tc.wantCurrent || profile.Endpoint != "https://lab.example:8006/api2/json" || profile.TokenID != "automation@pve!lab" || profile.TokenSecret != "fake-add-token" || profile.Timeout != "1m0s" || profile.DefaultOutput != "table" {
 				t.Fatal("add did not save the requested profile options and current selection")
 			}
 			if tc.existing && cfg.Profiles["home"] != original {

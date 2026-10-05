@@ -87,11 +87,6 @@ func NewAppWithBuildInfoAndDependencies(info BuildInfo, deps Dependencies) *cli.
 				Name:  "profile",
 				Usage: "profile name",
 			},
-			&cli.StringFlag{
-				Name:    "output",
-				Aliases: []string{"o"},
-				Usage:   "output format: table,json,yaml",
-			},
 			&cli.DurationFlag{
 				Name:  "api-timeout",
 				Usage: "PVE API request timeout",

@@ -10,8 +10,8 @@
   回滚放在相应列表末尾。
 - 本地构建、安装和发布包统一使用 `pve` 二进制名称；Homebrew 通过
   `brew install lz-wang/tap/pve` 安装。
-- 通过 `--output` 或 `-o` 支持资源的 `table`、`json`、`yaml` 输出；本地配置查询
-  使用表格。
+- 通过命令级的 `--output` 或 `-o` 支持资源的 `table`、`json`、`yaml` 输出；本地
+  配置查询使用表格。
 - 通过 `--profile` 支持选择 profile。
 - 通过 `--config` 支持指定配置文件路径。
 - 通过全局 `--api-timeout` 支持覆盖 API 请求超时；`vm agent exec` 的
@@ -36,7 +36,7 @@
   Endpoint、Token ID、Token secret、Token secret env、Skip TLS verify、Timeout 和
   Default output。最后一行显示 `Config file: /absolute/path/config.yaml`。
 - `config add` 交互式添加 profile，明文 token 输入隐藏回显，也可选择环境变量
-  引用。全局 `--timeout`、`--output` 和 `--insecure` 提供默认设置；向导会询问
+  引用。全局 `--api-timeout` 和 `--insecure` 提供默认设置；向导会询问
   是否设为当前 profile，未配置当前 profile 时默认是，否则默认否。同名 profile 不会被
   覆盖，取消时不写入任何变更。
 - `config update NAME` 非交互式创建或更新 profile。写入连接设置时必须提供
