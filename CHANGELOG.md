@@ -1,6 +1,6 @@
 # Changelog
 
-## v2.0.0 (Unreleased)
+## v2.0.0 - 2026-10-05
 
 The breaking changes in this section supersede the v1.x stability promise;
 see `docs/compatibility.md` for the v1 to v2 migration summary. No v1
