@@ -27,12 +27,9 @@ func vmCloudInitRegenerateCommand(deps Dependencies) *cli.Command {
 		Name:      "regenerate",
 		Usage:     "Regenerate the cloud-init image so the next boot picks up pending changes",
 		ArgsUsage: "VMID",
-		Flags: append(
-			[]cli.Flag{
-				&cli.StringFlag{Name: "node", Usage: "PVE node name"},
-			},
-			commonOutputFlags()...,
-		),
+		Flags: []cli.Flag{
+			&cli.StringFlag{Name: "node", Usage: "PVE node name"},
+		},
 		Action: func(c *cli.Context) error {
 			if err := requireNoExtraArgs(c, 1); err != nil {
 				return err
@@ -100,7 +97,6 @@ func vmCloudInitSetCommand(deps Dependencies) *cli.Command {
 		},
 		cloudInitIPConfigFlags()...,
 	)
-	flags = append(flags, commonOutputFlags()...)
 
 	return &cli.Command{
 		Name:      "set",

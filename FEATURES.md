@@ -394,6 +394,8 @@ Cloud-init commands use PVE-native cloud-init configuration.
   `--password-env`, never as a flag value
 - `vm cloud-init regenerate VMID` regenerates the cloud-init image so the next
   boot picks up pending changes
+- only `vm cloud-init get` accepts `-o`; `set` and `regenerate` write plain
+  confirmation text, not structured output
 
 ## Network Inventory (read-only)
 

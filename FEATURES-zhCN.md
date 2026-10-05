@@ -371,6 +371,8 @@ Cloud-init 命令使用 PVE 原生 cloud-init 配置。
   `--nameserver`、`--searchdomain` 和 `--password-env`
 - 密码只接受通过 `--password-env` 指定的环境变量名，绝不接受 flag 值
 - `vm cloud-init regenerate VMID` 重新生成 cloud-init 镜像，让下次启动生效
+- 只有 `vm cloud-init get` 支持 `-o`；`set` 和 `regenerate` 输出纯文本确认，
+  不产生结构化输出
 
 ## 网络清单（只读）
 

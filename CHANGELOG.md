@@ -21,6 +21,9 @@ compatibility aliases or hidden stubs are provided.
 
 ### Changed
 
+- Remove the ineffective `-o`/`--output` flag from `vm cloud-init set` and
+  `vm cloud-init regenerate`; both write fixed plain-text confirmations instead
+  of structured output, so only `vm cloud-init get` keeps the flag.
 - Make `--node` optional for `firewall status`/`firewall ls` with vm/lxc
   scopes: when omitted, the guest is located across the cluster like other
   VMID-oriented commands. The node scope still requires `--node`.
