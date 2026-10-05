@@ -9,14 +9,14 @@ compatibility aliases or hidden stubs are provided.
 ### Added
 
 - Support plaintext `token_secret` in YAML profiles, hidden token input in
-  `pve config add`, and `--token-secret` for `pve config update`. A non-empty
+  `pve config add`, and `--token-secret` for `pve config set`. A non-empty
   plaintext value takes precedence over `token_secret_env`; connection writes
   require at least one token source.
 - Add doctor diagnostics for plaintext tokens without printing their values,
   and redact token values from backend error messages.
 - Guide interactive initialization from `pve config ls` and `pve config show`
   when the config file is missing, with hidden token input, optional environment
-  references, clean cancellation, nonterminal add/update setup hints, and no
+  references, clean cancellation, nonterminal add/set setup hints, and no
   overwrite of existing files.
 
 ### Changed

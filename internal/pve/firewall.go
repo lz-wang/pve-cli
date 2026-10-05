@@ -56,7 +56,7 @@ func ParseFirewallScope(node, kind string, vmid int) (FirewallScope, error) {
 	}
 }
 
-// ParseFirewallScopeKind validates the --type value alone.
+// ParseFirewallScopeKind validates the --scope value alone.
 func ParseFirewallScopeKind(value string) (string, error) {
 	switch strings.ToLower(strings.TrimSpace(value)) {
 	case "", FirewallScopeNode:
