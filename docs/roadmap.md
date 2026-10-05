@@ -15,13 +15,13 @@
 - one-off VM/LXC backup trigger
 - one-off VM/LXC backup restore into a new, non-existing VMID
 - VM QEMU guest agent: ping, network, exec
-- VM cloud-init: get, set, update (PVE-native)
+- VM cloud-init: get, set, regenerate (PVE-native)
 - read-only network inventory
 - read-only firewall inventory (node/VM/LXC)
 - node detail inspection
 - storage read-only inventory and usage view
 - stable JSON/YAML output contracts
-- v1.x compatibility policy
+- v2.x compatibility policy
 
 ## Candidate future features
 

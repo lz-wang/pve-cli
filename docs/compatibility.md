@@ -1,20 +1,40 @@
 # Compatibility Policy
 
-`pve` v1.x is intended to be stable for personal HomeLab scripts and
-automation. This policy applies to documented behavior.
+Development on `main` is the v2 line. The next release will be **v2.0.0**, not
+v1.2.0: the changes collected under v2.0.0 remove and rename documented v1
+commands, flags, and defaults, which this policy defines as breaking. v2.0.0
+supersedes the v1.x stability promise instead of restoring compatibility
+stubs for it.
 
-## Executable Rename
+Within v2.x, this tool is intended to be stable for personal HomeLab scripts
+and automation. This policy applies to documented behavior.
 
-The executable is now `pve`, and the Homebrew formula is `lz-wang/tap/pve`.
-This is an intentional exception to the v1.x compatibility policy: no
-`pvectl` executable alias is provided. Update scripts to invoke `pve`.
+## v1 to v2 Migration
 
-The default config path is now `~/.config/pve/config.yaml`. Move an existing
-config file there or select its location with `--config`; the old directory
-is not searched or migrated automatically. Token-secret environment variable
-names remain user-defined.
+v2.0.0 intentionally breaks the documented v1 CLI surface. The main changes:
 
-## Stable Within v1.x
+- The executable is `pve` and the Homebrew formula is `lz-wang/tap/pve`; no
+  `pvectl` executable alias is provided.
+- The default config path is `~/.config/pve/config.yaml`; the old directory is
+  not searched or migrated automatically. Existing config files can be moved
+  there or selected with `--config`. Token-secret environment variable names
+  remain user-defined.
+- Global `--timeout` is renamed to `--api-timeout` so it no longer collides
+  with the guest-command `--timeout` of `vm agent exec`.
+- Global `--output`, `--wait`, and `--wait-timeout` are removed; they are
+  per-command flags on the commands that use them.
+- `config update` is replaced by `config set` and `config use`, and the
+  historical `view`, `init`, `set-profile`, `use-profile`, `current-profile`,
+  `set-context`, `use-context`, and `current-context` subcommands are removed.
+- `firewall --type` is renamed to `--scope`, `backup ls --kind` to `--type`,
+  and `vm cloud-init update` to `vm cloud-init regenerate`.
+- `vm/lxc backup --protected` is a boolean flag instead of a literal `0` or
+  `1` value.
+
+See `CHANGELOG.md` for the complete list. There are no hidden aliases or
+compatibility stubs for removed v1 names; update scripts to the new surface.
+
+## Stable Within v2.x
 
 - Command names and documented subcommand structure.
 - Positional argument order and meaning.
@@ -53,14 +73,14 @@ These require a new major version:
 
 ## Table Output
 
-Table output is for humans and may be adjusted for readability in v1.x. Scripts
-should use `-o json` or `-o yaml`.
+Table output is for humans and may be adjusted for readability within a major
+version. Scripts should use `-o json` or `-o yaml`.
 
 ## In Scope
 
 One-off VM/LXC backup restore is supported. Restoring a vzdump archive into a
-new, non-existing VMID is a supported disaster-recovery workflow. Overwriting an
-existing VMID during restore is a non-goal; delete the guest first, then
+new, non-existing VMID is a supported disaster-recovery workflow. Overwriting
+an existing VMID during restore is a non-goal; delete the guest first, then
 restore.
 
 ## Non-goals

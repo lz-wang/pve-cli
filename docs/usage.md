@@ -706,7 +706,7 @@ pve lxc get 200 -o yaml
 Use `table` for interactive use, `json` for scripts and agents, and `yaml` as
 an optional human-readable structured format.
 
-JSON and YAML field names and field types are stable within v1.x. Table output
+JSON and YAML field names and field types are stable within v2.x. Table output
 is intended for humans and should not be parsed by scripts. See
 [`output-schema.md`](output-schema.md) and
 [`compatibility.md`](compatibility.md).

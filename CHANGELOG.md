@@ -1,6 +1,10 @@
 # Changelog
 
-## Unreleased
+## v2.0.0 (Unreleased)
+
+The breaking changes in this section supersede the v1.x stability promise;
+see `docs/compatibility.md` for the v1 to v2 migration summary. No v1
+compatibility aliases or hidden stubs are provided.
 
 ### Added
 

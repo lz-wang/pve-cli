@@ -1,6 +1,6 @@
 # Output Schema
 
-JSON and YAML output are script-facing and stable within v1.x. New fields may be
+JSON and YAML output are script-facing and stable within v2.x. New fields may be
 added in minor releases, but existing field names and types will not be removed,
 renamed, or changed without a new major version. Table output is for humans and
 should not be parsed by scripts.

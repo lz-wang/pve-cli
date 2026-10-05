@@ -121,7 +121,7 @@ Default output is `table` for humans. Use `-o json` for scripts:
 pve guest get 100 -o json
 ```
 
-JSON and YAML fields are stable within v1.x. See [docs/usage.md](docs/usage.md)
+JSON and YAML fields are stable within v2.x. See [docs/usage.md](docs/usage.md)
 for clone, config, resize, migrate, snapshot, delete, output formats, and
 scripting details. See [docs/output-schema.md](docs/output-schema.md) and
 [docs/compatibility.md](docs/compatibility.md) for the structured output and
