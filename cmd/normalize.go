@@ -1,154 +1,142 @@
 package cmd
 
-import "strings"
+import (
+	"strings"
 
-var commandRoots = map[string]bool{
-	"config":   true,
-	"status":   true,
-	"check":    true,
-	"node":     true,
-	"guest":    true,
-	"task":     true,
-	"backup":   true,
-	"storage":  true,
-	"network":  true,
-	"firewall": true,
-	"vm":       true,
-	"lxc":      true,
-}
+	"github.com/urfave/cli/v2"
+)
 
-var flagsWithValues = map[string]bool{
-	"--config":           true,
-	"--profile":          true,
-	"--output":           true,
-	"-o":                 true,
-	"--api-timeout":      true,
-	"--timeout":          true,
-	"--wait-timeout":     true,
-	"--node":             true,
-	"--content":          true,
-	"--type":             true,
-	"--kind":             true,
-	"--vmid":             true,
-	"--newid":            true,
-	"--name":             true,
-	"--hostname":         true,
-	"--target":           true,
-	"--storage":          true,
-	"--mode":             true,
-	"--compress":         true,
-	"--notes-template":   true,
-	"--bwlimit":          true,
-	"--protected":        true,
-	"--pool":             true,
-	"--snapname":         true,
-	"--description":      true,
-	"--format":           true,
-	"--set":              true,
-	"--disk":             true,
-	"--size":             true,
-	"--tail":             true,
-	"--limit":            true,
-	"--tag":              true,
-	"--tag-match":        true,
-	"--status":           true,
-	"--jobs":             true,
-	"--storage-warn":     true,
-	"--storage-fail":     true,
-	"--backup-tag":       true,
-	"--backup-max-age":   true,
-	"--user":             true,
-	"--password-env":     true,
-	"--ssh-key-file":     true,
-	"--nameserver":       true,
-	"--searchdomain":     true,
-	"--ipconfig0":        true,
-	"--ipconfig1":        true,
-	"--ipconfig2":        true,
-	"--ipconfig3":        true,
-	"--input":            true,
-	"--endpoint":         true,
-	"--token-id":         true,
-	"--token-secret":     true,
-	"--token-secret-env": true,
-	"--default-output":   true,
-}
-
-func normalizeArgs(args []string) []string {
+// normalizeArgs lets users write resource IDs before flags, for example
+// `pve vm start 100 --wait`. It resolves the command path by walking the real
+// command tree, then reorders the remaining tokens so every flag precedes the
+// positional arguments, which is what urfave/cli expects. The command tree is
+// the single source of truth: which flags consume a value is derived from the
+// cli.Flag definitions along the resolved path instead of a hand-maintained
+// list.
+func normalizeArgs(app *cli.App, args []string) []string {
 	if len(args) < 3 {
 		return args
 	}
 
-	resourceIndex := findResourceIndex(args)
-	if resourceIndex == -1 || resourceIndex+1 >= len(args) {
+	globalValues := valueFlagTokens(app.Flags)
+
+	// Skip global flags to find the root command token.
+	i := 1
+	for ; i < len(args); i++ {
+		token := args[i]
+		if token == "--" {
+			return args
+		}
+		if !strings.HasPrefix(token, "-") || token == "-" {
+			break
+		}
+		if strings.Contains(token, "=") {
+			continue
+		}
+		if globalValues[token] && i+1 < len(args) {
+			i++ // skip the flag's value
+		}
+	}
+	if i >= len(args) {
 		return args
 	}
-	leafIndex := resourceIndex + 1
-	if leafIndex < len(args) && (args[leafIndex] == "snapshot" || args[leafIndex] == "content" || args[leafIndex] == "agent" || args[leafIndex] == "cloud-init") && leafIndex+1 < len(args) {
-		leafIndex++
+	root := findCommand(app.Commands, args[i])
+	if root == nil {
+		return args
 	}
-	if strings.HasPrefix(args[leafIndex], "-") {
+	path := []*cli.Command{root}
+	pathEnd := i
+	i++
+
+	// Extend the path while consecutive tokens keep naming nested commands.
+	for i < len(args) {
+		token := args[i]
+		if token != "-" && strings.HasPrefix(token, "-") {
+			break
+		}
+		sub := findCommand(path[len(path)-1].Subcommands, token)
+		if sub == nil {
+			break
+		}
+		path = append(path, sub)
+		pathEnd = i
+		i++
+	}
+	if pathEnd+1 >= len(args) {
 		return args
 	}
 
-	prefix := append([]string{}, args[:leafIndex+1]...)
-	rest := args[leafIndex+1:]
-	if len(rest) == 0 {
-		return args
+	// Reorder the tail: flags (with their values) first, then positionals.
+	values := globalValues
+	for _, command := range path {
+		for token, takesValue := range valueFlagTokens(command.Flags) {
+			values[token] = takesValue
+		}
 	}
-
+	rest := args[pathEnd+1:]
 	flags := make([]string, 0, len(rest))
 	positionals := make([]string, 0, len(rest))
-	for i := 0; i < len(rest); i++ {
-		token := rest[i]
+	for j := 0; j < len(rest); j++ {
+		token := rest[j]
 		// Everything after "--" belongs to the command verbatim (for example
 		// `vm agent exec 100 -- /usr/bin/uname -a`); stop reordering there.
 		if token == "--" {
-			positionals = append(positionals, rest[i:]...)
+			positionals = append(positionals, rest[j:]...)
 			break
 		}
 		if !strings.HasPrefix(token, "-") || token == "-" {
 			positionals = append(positionals, token)
 			continue
 		}
-
 		flags = append(flags, token)
-		name := token
-		if idx := strings.IndexRune(token, '='); idx >= 0 {
-			name = token[:idx]
+		if strings.Contains(token, "=") {
+			continue
 		}
-		if flagsWithValues[name] && !strings.Contains(token, "=") && i+1 < len(rest) {
-			i++
-			flags = append(flags, rest[i])
+		if values[token] && j+1 < len(rest) {
+			j++
+			flags = append(flags, rest[j])
 		}
 	}
 
 	normalized := make([]string, 0, len(args))
-	normalized = append(normalized, prefix...)
+	normalized = append(normalized, args[:pathEnd+1]...)
 	normalized = append(normalized, flags...)
 	normalized = append(normalized, positionals...)
 	return normalized
 }
 
-func findResourceIndex(args []string) int {
-	for i := 1; i < len(args); i++ {
-		token := args[i]
-		if token == "--" {
-			return -1
-		}
-		if commandRoots[token] {
-			return i
-		}
-		if !strings.HasPrefix(token, "-") {
-			continue
-		}
-		name := token
-		if idx := strings.IndexRune(token, '='); idx >= 0 {
-			name = token[:idx]
-		}
-		if flagsWithValues[name] && !strings.Contains(token, "=") {
-			i++
+// findCommand returns the command with the given name or alias.
+func findCommand(commands []*cli.Command, name string) *cli.Command {
+	for _, command := range commands {
+		for _, candidate := range command.Names() {
+			if candidate == name {
+				return command
+			}
 		}
 	}
-	return -1
+	return nil
+}
+
+// valueFlagTokens maps flag tokens (--name, or -n for one-letter names) to
+// whether the flag consumes the following token. Bool flags do not take a
+// value; unknown flag kinds are treated as value-taking so new flag types
+// reorder conservatively instead of silently eating a positional.
+func valueFlagTokens(flags []cli.Flag) map[string]bool {
+	values := make(map[string]bool, len(flags))
+	for _, flag := range flags {
+		takesValue := flagTakesValue(flag)
+		for _, name := range flag.Names() {
+			token := "--" + name
+			if len(name) == 1 {
+				token = "-" + name
+			}
+			values[token] = takesValue
+		}
+	}
+	return values
+}
+
+func flagTakesValue(flag cli.Flag) bool {
+	_, isBool := flag.(*cli.BoolFlag)
+	return !isBool
 }

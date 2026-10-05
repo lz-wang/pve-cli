@@ -59,7 +59,7 @@ func RunWithBuildInfo(args []string, info BuildInfo) error {
 func RunWithBuildInfoAndDependencies(args []string, info BuildInfo, deps Dependencies) error {
 	info = info.withDefaults()
 	app := NewAppWithBuildInfoAndDependencies(info, deps)
-	return app.Run(normalizeArgs(args))
+	return app.Run(normalizeArgs(app, args))
 }
 
 func NewAppWithDependencies(version string, deps Dependencies) *cli.App {

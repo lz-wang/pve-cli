@@ -17,6 +17,9 @@
 
 ### Changed
 
+- Derive argument normalization from the CLI command tree itself instead of a
+  parallel hand-maintained flag list, so new commands and flags reorder
+  resource IDs and flags correctly without updating normalizer metadata.
 - Rename the global API request timeout flag from `--timeout` to
   `--api-timeout` so it no longer collides with the `--timeout` flag of
   `vm agent exec`, which bounds the guest command instead.
