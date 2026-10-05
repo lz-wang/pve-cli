@@ -363,13 +363,13 @@ specific node/storage and create one-off guest backups.
 ```bash
 pve backup ls --node pve1 --storage backup
 pve backup ls --node pve1 --storage backup --vmid 100
-pve backup ls --node pve1 --storage backup --kind vm
-pve backup ls --node pve1 --storage backup --kind lxc
+pve backup ls --node pve1 --storage backup --type vm
+pve backup ls --node pve1 --storage backup --type lxc
 pve backup ls --node pve1 --storage backup --latest
 pve backup ls --node pve1 --storage backup -o json
 ```
 
-`backup ls` requires both `--node` and `--storage`. Supported backup kinds are
+`backup ls` requires both `--node` and `--storage`. Supported backup types are
 `all`, `vm`, and `lxc`. Use `--latest` to keep only the newest backup per
 guest.
 
@@ -389,7 +389,7 @@ pve vm backup 100 \
   --compress zstd \
   --notes-template "{{guestname}}" \
   --bwlimit 102400 \
-  --protected 1 \
+  --protected \
   --wait
 ```
 
@@ -489,7 +489,7 @@ pve storage content ls --node pve1 --storage local -o json
 `storage content ls` shows generic storage contents such as ISO images, LXC
 templates, backup files, VM disks, and container root disks. If you only care
 about backup files, prefer `backup ls`; it uses backup-specific fields and
-supports `--kind` and `--latest`.
+supports `--type` and `--latest`.
 
 `pve` does not create, update, delete, upload, download, prune, or otherwise
 mutate storages or storage content. It also does not manage PBS datastores.
@@ -590,7 +590,7 @@ pve vm cloud-init set 100 \
   --searchdomain lan \
   --wait
 
-pve vm cloud-init update 100
+pve vm cloud-init regenerate 100
 ```
 
 Passwords are never accepted as a command-line flag; pass the environment
@@ -603,10 +603,10 @@ pve vm cloud-init set 100 --password-env VM_PASSWORD
 ```
 
 `cloud-init get` never echoes the password; it only reports
-`password_configured`. `cloud-init update` regenerates the cloud-init image so
-the next boot picks up pending changes. `--ssh-key-file` expects one full
-OpenSSH public key per line; each line is preserved as-is, and empty or `#`
-comment lines are skipped.
+`password_configured`. `cloud-init regenerate` regenerates the cloud-init
+image so the next boot picks up pending changes. `--ssh-key-file` expects one
+full OpenSSH public key per line; each line is preserved as-is, and empty or
+`#` comment lines are skipped.
 
 ## Network Commands (read-only)
 
@@ -627,13 +627,13 @@ non-goal because a remote mistake can take down the whole node.
 pve firewall status --node pve1
 pve firewall ls --node pve1
 
-pve firewall status --node pve1 --type vm --vmid 100
-pve firewall ls --node pve1 --type vm --vmid 100
+pve firewall status --node pve1 --scope vm --vmid 100
+pve firewall ls --node pve1 --scope vm --vmid 100
 
-pve firewall ls --node pve1 --type lxc --vmid 200
+pve firewall ls --node pve1 --scope lxc --vmid 200
 ```
 
-`--type node` is the default. `--vmid` is required when `--type` is `vm` or
+`--scope node` is the default. `--vmid` is required when `--scope` is `vm` or
 `lxc`. Firewall rule mutation is a non-goal.
 
 ## Dangerous Operations

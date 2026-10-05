@@ -28,7 +28,7 @@ func TestBackupListCommandWritesJSONAndFiltersLatest(t *testing.T) {
 		"backup", "ls",
 		"--node", "pve1",
 		"--storage", "backup",
-		"--kind", "vm",
+		"--type", "vm",
 		"--latest",
 		"-o", "json",
 	}, "test", testDeps(&stdout, backend))
@@ -49,9 +49,9 @@ func TestBackupListCommandRejectsInvalidKind(t *testing.T) {
 		"backup", "ls",
 		"--node", "pve1",
 		"--storage", "backup",
-		"--kind", "bad",
+		"--type", "bad",
 	}, "test", testDeps(&bytes.Buffer{}, &commandBackend{}))
-	if err == nil || err.Error() != `invalid backup kind "bad", expected all, vm, or lxc` {
+	if err == nil || err.Error() != `invalid backup type "bad", expected all, vm, or lxc` {
 		t.Fatalf("error = %v", err)
 	}
 }
@@ -74,7 +74,7 @@ func TestVMBackupCommandWritesResultAndWaits(t *testing.T) {
 		"--compress", "none",
 		"--notes-template", "{{guestname}}",
 		"--bwlimit", "2048",
-		"--protected", "1",
+		"--protected",
 		"--wait",
 	}, "test", testDeps(&stdout, backend))
 	if err != nil {
@@ -149,7 +149,7 @@ func TestVMBackupCommandRejectsInvalidFlags(t *testing.T) {
 		"--storage", "backup",
 		"--protected", "2",
 	}, "test", testDeps(&bytes.Buffer{}, &commandBackend{}))
-	if err == nil || err.Error() != `invalid protected value "2", expected 0 or 1` {
-		t.Fatalf("protected error = %v", err)
+	if err == nil {
+		t.Fatal("expected --protected with a stray value to be rejected")
 	}
 }

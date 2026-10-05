@@ -24,15 +24,15 @@ func firewallScopeFlags() []cli.Flag {
 	return append(
 		[]cli.Flag{
 			&cli.StringFlag{Name: "node", Usage: "PVE node name", Required: true},
-			&cli.StringFlag{Name: "type", Value: pve.FirewallScopeNode, Usage: "firewall scope: node,vm,lxc"},
-			&cli.IntFlag{Name: "vmid", Usage: "VMID/CTID; required when --type is vm or lxc"},
+			&cli.StringFlag{Name: "scope", Value: pve.FirewallScopeNode, Usage: "firewall scope: node,vm,lxc"},
+			&cli.IntFlag{Name: "vmid", Usage: "VMID/CTID; required when --scope is vm or lxc"},
 		},
 		commonOutputFlags()...,
 	)
 }
 
 func parseFirewallScopeFromFlags(c *cli.Context) (pve.FirewallScope, error) {
-	kind, err := pve.ParseFirewallScopeKind(c.String("type"))
+	kind, err := pve.ParseFirewallScopeKind(c.String("scope"))
 	if err != nil {
 		return pve.FirewallScope{}, err
 	}

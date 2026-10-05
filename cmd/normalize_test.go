@@ -77,8 +77,8 @@ func TestNormalizeArgsMovesNestedSnapshotFlags(t *testing.T) {
 }
 
 func TestNormalizeArgsMovesBackupListFlags(t *testing.T) {
-	args := []string{"pve", "backup", "ls", "--node", "pve1", "--storage", "backup", "--kind", "vm", "--latest"}
-	want := []string{"pve", "backup", "ls", "--node", "pve1", "--storage", "backup", "--kind", "vm", "--latest"}
+	args := []string{"pve", "backup", "ls", "--node", "pve1", "--storage", "backup", "--type", "vm", "--latest"}
+	want := []string{"pve", "backup", "ls", "--node", "pve1", "--storage", "backup", "--type", "vm", "--latest"}
 
 	if got := testNormalize(t, args); !reflect.DeepEqual(got, want) {
 		t.Fatalf("normalize = %#v, want %#v", got, want)
@@ -86,8 +86,8 @@ func TestNormalizeArgsMovesBackupListFlags(t *testing.T) {
 }
 
 func TestNormalizeArgsMovesGuestBackupFlags(t *testing.T) {
-	args := []string{"pve", "vm", "backup", "100", "--storage", "backup", "--mode", "stop", "--compress", "none", "--protected", "1", "--wait"}
-	want := []string{"pve", "vm", "backup", "--storage", "backup", "--mode", "stop", "--compress", "none", "--protected", "1", "--wait", "100"}
+	args := []string{"pve", "vm", "backup", "100", "--storage", "backup", "--mode", "stop", "--compress", "none", "--protected", "--wait"}
+	want := []string{"pve", "vm", "backup", "--storage", "backup", "--mode", "stop", "--compress", "none", "--protected", "--wait", "100"}
 
 	if got := testNormalize(t, args); !reflect.DeepEqual(got, want) {
 		t.Fatalf("normalize = %#v, want %#v", got, want)

@@ -337,8 +337,8 @@ Backup support is intentionally lightweight.
 
 - `backup ls --node NODE --storage STORAGE`
 - `backup ls --node NODE --storage STORAGE --vmid VMID`
-- `backup ls --node NODE --storage STORAGE --kind vm`
-- `backup ls --node NODE --storage STORAGE --kind lxc`
+- `backup ls --node NODE --storage STORAGE --type vm`
+- `backup ls --node NODE --storage STORAGE --type lxc`
 - `backup ls --node NODE --storage STORAGE --latest`
 
 `vm backup` and `lxc backup` create one-off guest backups:
@@ -348,7 +348,7 @@ Backup support is intentionally lightweight.
 - `--compress` supports `zstd`, `lzo`, `gzip`, and `none`.
 - `--notes-template` sets backup notes.
 - `--bwlimit` sets bandwidth limit in KiB/s.
-- `--protected` accepts `0` or `1`.
+- `--protected` (a boolean) protects the backup from pruning.
 - `--wait` waits for completion.
 
 `vm restore` and `lxc restore` recover a vzdump backup archive into a new,
@@ -392,7 +392,7 @@ Cloud-init commands use PVE-native cloud-init configuration.
   `--ipconfig0..3`, `--nameserver`, `--searchdomain`, and `--password-env`
 - passwords are only accepted through an environment variable named by
   `--password-env`, never as a flag value
-- `vm cloud-init update VMID` regenerates the cloud-init image so the next
+- `vm cloud-init regenerate VMID` regenerates the cloud-init image so the next
   boot picks up pending changes
 
 ## Network Inventory (read-only)
@@ -413,11 +413,11 @@ Network mutation (create/update/delete/apply/reload) is a non-goal.
 
 - `firewall status --node NODE`
 - `firewall ls --node NODE`
-- `firewall status --node NODE --type vm --vmid VMID`
-- `firewall ls --node NODE --type vm --vmid VMID`
-- `firewall ls --node NODE --type lxc --vmid CTID`
+- `firewall status --node NODE --scope vm --vmid VMID`
+- `firewall ls --node NODE --scope vm --vmid VMID`
+- `firewall ls --node NODE --scope lxc --vmid CTID`
 
-`--type node` is the default. Firewall rule mutation is a non-goal.
+`--scope node` is the default. Firewall rule mutation is a non-goal.
 
 ## Storage Inventory
 

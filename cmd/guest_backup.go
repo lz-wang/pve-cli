@@ -19,7 +19,7 @@ func guestBackupCommand(kind string, deps Dependencies) *cli.Command {
 			&cli.StringFlag{Name: "compress", Value: pve.BackupCompressZstd, Usage: "compression: zstd,lzo,gzip,none"},
 			&cli.StringFlag{Name: "notes-template", Usage: "backup notes template"},
 			&cli.UintFlag{Name: "bwlimit", Usage: "bandwidth limit in KiB/s"},
-			&cli.StringFlag{Name: "protected", Usage: "set backup protection: 0 or 1"},
+			&cli.BoolFlag{Name: "protected", Usage: "protect the backup from pruning"},
 			&cli.BoolFlag{Name: "wait", Usage: "wait for async task completion"},
 			&cli.DurationFlag{Name: "wait-timeout", Usage: "task wait timeout"},
 			&cli.StringFlag{Name: "output", Aliases: []string{"o"}, Usage: "output format: table,json,yaml"},
@@ -40,9 +40,13 @@ func guestBackupCommand(kind string, deps Dependencies) *cli.Command {
 			if err != nil {
 				return err
 			}
-			protected, err := pve.ParseBackupProtected(c.String("protected"))
-			if err != nil {
-				return err
+			// The API takes a 0/1 value; an unset flag means "leave default".
+			protected := ""
+			if c.IsSet("protected") {
+				protected = "0"
+				if c.Bool("protected") {
+					protected = "1"
+				}
 			}
 
 			rt, err := buildRuntime(c, deps)

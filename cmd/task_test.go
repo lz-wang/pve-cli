@@ -451,7 +451,7 @@ func TestVMCloudInitSetCommandUpdatesConfig(t *testing.T) {
 	}
 }
 
-func TestVMCloudInitUpdateCommandRegenerates(t *testing.T) {
+func TestVMCloudInitRegenerateCommandRegenerates(t *testing.T) {
 	cfgPath := writeTestConfig(t, "table")
 	backend := &commandBackend{
 		nodes: []output.NodeRow{{Name: "pve1"}},
@@ -463,7 +463,7 @@ func TestVMCloudInitUpdateCommandRegenerates(t *testing.T) {
 
 	err := RunWithDependencies([]string{
 		"pve", "--config", cfgPath,
-		"vm", "cloud-init", "update", "100",
+		"vm", "cloud-init", "regenerate", "100",
 	}, "test", testDeps(&stdout, backend))
 	if err != nil {
 		t.Fatalf("run: %v", err)
@@ -565,7 +565,7 @@ func TestFirewallListCommandVMRequiresVMID(t *testing.T) {
 		"pve", "--config", cfgPath,
 		"firewall", "ls",
 		"--node", "pve1",
-		"--type", "vm",
+		"--scope", "vm",
 		"--vmid", "100",
 	}, "test", testDeps(&stdout, backend))
 	if err != nil {
@@ -579,7 +579,7 @@ func TestFirewallListCommandVMRequiresVMID(t *testing.T) {
 		"pve", "--config", cfgPath,
 		"firewall", "ls",
 		"--node", "pve1",
-		"--type", "vm",
+		"--scope", "vm",
 	}, "test", testDeps(&bytes.Buffer{}, backend))
 	if err == nil {
 		t.Fatal("expected missing vmid error")

@@ -17,6 +17,11 @@
 
 ### Changed
 
+- Rename firewall `--type` to `--scope`, `backup ls --kind` to `--type`, and
+  `vm cloud-init update` to `vm cloud-init regenerate` so each name keeps one
+  stable meaning across commands.
+- Turn `vm/lxc backup --protected` into a boolean flag instead of requiring a
+  literal `0` or `1` value.
 - Group top-level help commands into Dashboard, Guests, Infrastructure, and
   Local categories rendered as real help sections, and tighten usage wording:
   `guest` now reads "Inspect and operate on ...", `node` reads "Inspect PVE

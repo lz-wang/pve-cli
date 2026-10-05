@@ -318,8 +318,8 @@ Rollback 和 delete 被视为危险操作，除非传入 `--force`，否则需�
 
 - `backup ls --node NODE --storage STORAGE`
 - `backup ls --node NODE --storage STORAGE --vmid VMID`
-- `backup ls --node NODE --storage STORAGE --kind vm`
-- `backup ls --node NODE --storage STORAGE --kind lxc`
+- `backup ls --node NODE --storage STORAGE --type vm`
+- `backup ls --node NODE --storage STORAGE --type lxc`
 - `backup ls --node NODE --storage STORAGE --latest`
 
 `vm backup` 和 `lxc backup` 创建一次性 guest 备份：
@@ -329,7 +329,7 @@ Rollback 和 delete 被视为危险操作，除非传入 `--force`，否则需�
 - `--compress` 支持 `zstd`、`lzo`、`gzip`、`none`。
 - `--notes-template` 设置备份备注模板。
 - `--bwlimit` 设置带宽限制，单位 KiB/s。
-- `--protected` 接受 `0` 或 `1`。
+- `--protected`（布尔值）保护备份不被清理。
 - `--wait` 等待完成。
 
 `vm restore` 和 `lxc restore` 将 vzdump 备份归档恢复到新的、尚不存在的
@@ -370,7 +370,7 @@ Cloud-init 命令使用 PVE 原生 cloud-init 配置。
 - `vm cloud-init set VMID` 更新 `--user`、`--ssh-key-file`、`--ipconfig0..3`、
   `--nameserver`、`--searchdomain` 和 `--password-env`
 - 密码只接受通过 `--password-env` 指定的环境变量名，绝不接受 flag 值
-- `vm cloud-init update VMID` 重新生成 cloud-init 镜像，让下次启动生效
+- `vm cloud-init regenerate VMID` 重新生成 cloud-init 镜像，让下次启动生效
 
 ## 网络清单（只读）
 
@@ -390,11 +390,11 @@ Cloud-init 命令使用 PVE 原生 cloud-init 配置。
 
 - `firewall status --node NODE`
 - `firewall ls --node NODE`
-- `firewall status --node NODE --type vm --vmid VMID`
-- `firewall ls --node NODE --type vm --vmid VMID`
-- `firewall ls --node NODE --type lxc --vmid CTID`
+- `firewall status --node NODE --scope vm --vmid VMID`
+- `firewall ls --node NODE --scope vm --vmid VMID`
+- `firewall ls --node NODE --scope lxc --vmid CTID`
 
-`--type node` 是默认值。防火墙规则变更是非目标。
+`--scope node` 是默认值。防火墙规则变更是非目标。
 
 ## 存储清单
 

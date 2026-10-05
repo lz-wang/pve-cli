@@ -43,7 +43,7 @@ func ParseFirewallScope(node, kind string, vmid int) (FirewallScope, error) {
 		return FirewallScope{Node: node, Type: FirewallScopeNode}, nil
 	case FirewallScopeVM, FirewallScopeLXC:
 		if vmid <= 0 {
-			return FirewallScope{}, fmt.Errorf("--vmid is required for --type %s", kind)
+			return FirewallScope{}, fmt.Errorf("--vmid is required for --scope %s", kind)
 		}
 		return FirewallScope{Node: node, Type: strings.ToLower(strings.TrimSpace(kind)), VMID: vmid}, nil
 	default:

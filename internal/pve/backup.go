@@ -170,7 +170,7 @@ func ParseBackupKind(value string) (string, error) {
 	case BackupKindLXC:
 		return BackupKindLXC, nil
 	default:
-		return "", fmt.Errorf("invalid backup kind %q, expected all, vm, or lxc", value)
+		return "", fmt.Errorf("invalid backup type %q, expected all, vm, or lxc", value)
 	}
 }
 

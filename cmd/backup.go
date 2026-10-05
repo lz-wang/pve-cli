@@ -26,7 +26,7 @@ func backupListCommand(deps Dependencies) *cli.Command {
 				&cli.StringFlag{Name: "node", Usage: "PVE node name", Required: true},
 				&cli.StringFlag{Name: "storage", Usage: "backup storage name", Required: true},
 				&cli.IntFlag{Name: "vmid", Usage: "filter by VMID/CTID"},
-				&cli.StringFlag{Name: "kind", Value: pve.BackupKindAll, Usage: "backup kind: all,vm,lxc"},
+				&cli.StringFlag{Name: "type", Value: pve.BackupKindAll, Usage: "backup type: all,vm,lxc"},
 				&cli.BoolFlag{Name: "latest", Usage: "show only latest backup per guest"},
 			},
 			commonOutputFlags()...,
@@ -35,7 +35,7 @@ func backupListCommand(deps Dependencies) *cli.Command {
 			if err := requireNoExtraArgs(c, 0); err != nil {
 				return err
 			}
-			kind, err := pve.ParseBackupKind(c.String("kind"))
+			kind, err := pve.ParseBackupKind(c.String("type"))
 			if err != nil {
 				return err
 			}

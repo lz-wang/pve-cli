@@ -13,18 +13,18 @@ import (
 func newVMCloudInitCommand(deps Dependencies) *cli.Command {
 	return &cli.Command{
 		Name:  "cloud-init",
-		Usage: "Inspect and update PVE cloud-init settings",
+		Usage: "Inspect and manage PVE cloud-init settings",
 		Subcommands: []*cli.Command{
 			vmCloudInitGetCommand(deps),
 			vmCloudInitSetCommand(deps),
-			vmCloudInitUpdateCommand(deps),
+			vmCloudInitRegenerateCommand(deps),
 		},
 	}
 }
 
-func vmCloudInitUpdateCommand(deps Dependencies) *cli.Command {
+func vmCloudInitRegenerateCommand(deps Dependencies) *cli.Command {
 	return &cli.Command{
-		Name:      "update",
+		Name:      "regenerate",
 		Usage:     "Regenerate the cloud-init image so the next boot picks up pending changes",
 		ArgsUsage: "VMID",
 		Flags: append(
