@@ -153,3 +153,42 @@ func TestVMBackupCommandRejectsInvalidFlags(t *testing.T) {
 		t.Fatal("expected --protected with a stray value to be rejected")
 	}
 }
+
+// TestVMBackupCommandProtectedIsTriState locks the boolean --protected
+// contract: the API takes "1", "0", or unset for "leave default", so an
+// explicit --protected=false must reach the backend as "0" and an omitted flag
+// must stay empty.
+func TestVMBackupCommandProtectedIsTriState(t *testing.T) {
+	cfgPath := writeTestConfig(t, "table")
+	backend := &commandBackend{
+		vmGuests:   map[string]map[int]*commandGuest{"pve1": {100: {row: output.GuestRow{Kind: "vm", VMID: 100, Node: "pve1"}}}},
+		backupTask: &commandTask{upid: "UPID:pve1:backup"},
+	}
+
+	err := RunWithDependencies([]string{
+		"pve", "--config", cfgPath,
+		"vm", "backup", "100",
+		"--node", "pve1",
+		"--storage", "backup",
+	}, "test", testDeps(&bytes.Buffer{}, backend))
+	if err != nil {
+		t.Fatalf("run without --protected: %v", err)
+	}
+	if backend.backupOptions.Protected != "" {
+		t.Fatalf("unset --protected = %q, want empty", backend.backupOptions.Protected)
+	}
+
+	err = RunWithDependencies([]string{
+		"pve", "--config", cfgPath,
+		"vm", "backup", "100",
+		"--node", "pve1",
+		"--storage", "backup",
+		"--protected=false",
+	}, "test", testDeps(&bytes.Buffer{}, backend))
+	if err != nil {
+		t.Fatalf("run with --protected=false: %v", err)
+	}
+	if backend.backupOptions.Protected != "0" {
+		t.Fatalf("--protected=false = %q, want \"0\"", backend.backupOptions.Protected)
+	}
+}

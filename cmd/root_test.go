@@ -5,6 +5,8 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"reflect"
+	"sort"
 	"strings"
 	"testing"
 
@@ -1244,5 +1246,53 @@ func testDeps(stdout *bytes.Buffer, backend pve.Backend) Dependencies {
 		BackendFactory: func(config.Profile, pve.ClientOptions) (pve.Backend, error) {
 			return backend, nil
 		},
+	}
+}
+
+// TestTopLevelHelpCategories locks the grouped help layout: the four category
+// sections must render in `pve --help` in daily-use order, and every top-level
+// command must live in its expected section.
+func TestTopLevelHelpCategories(t *testing.T) {
+	var stdout bytes.Buffer
+	app := NewAppWithDependencies("test", Dependencies{Stdout: &stdout, Stderr: &bytes.Buffer{}})
+
+	if err := app.Run([]string{"pve", "--help"}); err != nil {
+		t.Fatalf("run --help: %v", err)
+	}
+	help := stdout.String()
+
+	headers := []string{"Dashboard:", "Guests:", "Infrastructure:", "Local:"}
+	last := -1
+	for _, header := range headers {
+		idx := strings.Index(help, header)
+		if idx < 0 {
+			t.Fatalf("help is missing category section %q:\n%s", header, help)
+		}
+		if idx < last {
+			t.Fatalf("category section %q rendered out of daily-use order:\n%s", header, help)
+		}
+		last = idx
+	}
+
+	// Assert the tree on a fresh app: Run injects framework commands such as
+	// `help` into Commands, which are not part of the categorization contract.
+	want := map[string][]string{
+		"Dashboard":      {"check", "doctor", "status"},
+		"Guests":         {"guest", "lxc", "vm"},
+		"Infrastructure": {"backup", "firewall", "network", "node", "storage", "task"},
+		"Local":          {"config", "version"},
+	}
+	got := make(map[string][]string)
+	for _, command := range NewAppWithDependencies("test", Dependencies{}).Commands {
+		got[command.Category] = append(got[command.Category], command.Name)
+	}
+	if len(got) != len(want) {
+		t.Fatalf("top-level categories = %v, want exactly %v", got, want)
+	}
+	for category, names := range want {
+		sort.Strings(got[category])
+		if !reflect.DeepEqual(got[category], names) {
+			t.Fatalf("%s commands = %v, want %v", category, got[category], names)
+		}
 	}
 }
