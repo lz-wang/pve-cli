@@ -102,26 +102,35 @@ func NewAppWithBuildInfoAndDependencies(info BuildInfo, deps Dependencies) *cli.
 		},
 		Commands: []*cli.Command{
 			// HomeLab overview and health checks.
-			newStatusCommand(deps),
-			newCheckCommand(deps),
+			categorize("Dashboard", newStatusCommand(deps)),
+			categorize("Dashboard", newCheckCommand(deps)),
 			// Daily guest inspection and lifecycle operations.
-			newGuestAggregateCommand(deps),
-			newVMCommand(deps),
-			newLXCCommand(deps),
+			categorize("Guests", newGuestAggregateCommand(deps)),
+			categorize("Guests", newVMCommand(deps)),
+			categorize("Guests", newLXCCommand(deps)),
 			// Infrastructure and task inventory.
-			newNodeCommand(deps),
-			newTaskCommand(deps),
-			newStorageCommand(deps),
-			newBackupCommand(deps),
-			newNetworkCommand(deps),
-			newFirewallCommand(deps),
+			categorize("Infrastructure", newNodeCommand(deps)),
+			categorize("Infrastructure", newTaskCommand(deps)),
+			categorize("Infrastructure", newStorageCommand(deps)),
+			categorize("Infrastructure", newBackupCommand(deps)),
+			categorize("Infrastructure", newNetworkCommand(deps)),
+			categorize("Infrastructure", newFirewallCommand(deps)),
 			// Local setup and troubleshooting tools.
-			newConfigCommand(deps),
-			newDoctorCommand(deps),
-			newVersionCommand(info),
+			categorize("Local", newConfigCommand(deps)),
+			categorize("Dashboard", newDoctorCommand(deps)),
+			categorize("Local", newVersionCommand(info)),
 		},
 	}
 	return app
+}
+
+// categorize assigns the help category of a top-level command. The CLI
+// framework sorts categories lexicographically, so the category names are
+// chosen to also read in daily-use order: Dashboard, Guests, Infrastructure,
+// Local.
+func categorize(category string, command *cli.Command) *cli.Command {
+	command.Category = category
+	return command
 }
 
 func (info BuildInfo) withDefaults() BuildInfo {

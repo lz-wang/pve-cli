@@ -17,6 +17,10 @@
 
 ### Changed
 
+- Group top-level help commands into Dashboard, Guests, Infrastructure, and
+  Local categories rendered as real help sections, and tighten usage wording:
+  `guest` now reads "Inspect and operate on ...", `node` reads "Inspect PVE
+  nodes", and `vm ls`/`lxc ls` list virtual machines/containers explicitly.
 - Derive argument normalization from the CLI command tree itself instead of a
   parallel hand-maintained flag list, so new commands and flags reorder
   resource IDs and flags correctly without updating normalizer metadata.

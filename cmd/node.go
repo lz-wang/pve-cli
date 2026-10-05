@@ -10,7 +10,7 @@ import (
 func newNodeCommand(deps Dependencies) *cli.Command {
 	return &cli.Command{
 		Name:  "node",
-		Usage: "Manage PVE nodes",
+		Usage: "Inspect PVE nodes",
 		Subcommands: []*cli.Command{
 			{
 				Name:  "ls",

@@ -5,17 +5,17 @@ operations.
 
 ## Help Command Order
 
-`pve --help` groups commands by their role and places daily HomeLab workflows
-before local setup tools. The command list follows this order:
+`pve --help` groups commands into categories that follow daily HomeLab use,
+from overview and health checks to local tools:
 
-| Role | Commands, in display order |
+| Category | Commands, in display order |
 | --- | --- |
-| Overview and health | `status`, `check` |
-| Daily guest management | `guest`, `vm`, `lxc` |
-| Infrastructure and task inventory | `node`, `task`, `storage`, `backup`, `network`, `firewall` |
-| Local setup and troubleshooting | `config`, `doctor`, `version` |
+| Dashboard | `status`, `check`, `doctor` |
+| Guests | `guest`, `vm`, `lxc` |
+| Infrastructure | `node`, `task`, `storage`, `backup`, `network`, `firewall` |
+| Local | `config`, `version` |
 
-Nested help follows the same approach: list/detail queries first, then lifecycle
+Nested help keeps list/detail queries first, then lifecycle
 operations, configuration and maintenance, backup/recovery, and destructive
 operations. VM/LXC lifecycle commands use `start`, `shutdown`, `reboot`, `stop`
 in that order. VM guest-agent tools follow lifecycle commands, and cloud-init

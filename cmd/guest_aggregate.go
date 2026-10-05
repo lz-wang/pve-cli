@@ -10,7 +10,7 @@ import (
 func newGuestAggregateCommand(deps Dependencies) *cli.Command {
 	return &cli.Command{
 		Name:  "guest",
-		Usage: "List and inspect VM/QEMU and LXC guests",
+		Usage: "Inspect and operate on VM/QEMU and LXC guests",
 		Subcommands: []*cli.Command{
 			guestAggregateListCommand(deps),
 			guestAggregateGetCommand(deps),

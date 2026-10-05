@@ -5,9 +5,9 @@
 
 ## 全局 CLI 能力
 
-- 帮助中的命令按类型和常用程度排列：总览与健康、日常 guest 操作、资源与
-  task 查询、配置与工具。下级帮助优先显示查询和启停，guest 删除和 snapshot
-  回滚放在相应列表末尾。
+- 帮助命令按 Dashboard、Guests、Infrastructure、Local 四个类别分组，
+  总览与健康检查在前、本地工具在后，符合日常 HomeLab 使用顺序。下级帮助
+  优先显示查询和启停，guest 删除和 snapshot 回滚放在相应列表末尾。
 - 本地构建、安装和发布包统一使用 `pve` 二进制名称；Homebrew 通过
   `brew install lz-wang/tap/pve` 安装。
 - 通过命令级的 `--output` 或 `-o` 支持资源的 `table`、`json`、`yaml` 输出；本地

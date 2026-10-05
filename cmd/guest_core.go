@@ -9,7 +9,7 @@ import (
 func guestListCommand(kind string, deps Dependencies) *cli.Command {
 	return &cli.Command{
 		Name:  "ls",
-		Usage: "List guests",
+		Usage: guestListUsage(kind),
 		Flags: append(commonNodeFlag(), commonOutputFlags()...),
 		Action: func(c *cli.Context) error {
 			if err := requireNoExtraArgs(c, 0); err != nil {
@@ -27,6 +27,14 @@ func guestListCommand(kind string, deps Dependencies) *cli.Command {
 			return output.WriteGuestRows(rt.stdout, rt.format, rows)
 		},
 	}
+}
+
+// guestListUsage names the guest kind in `vm ls` and `lxc ls` help output.
+func guestListUsage(kind string) string {
+	if kind == "vm" {
+		return "List virtual machines"
+	}
+	return "List containers"
 }
 
 func guestGetCommand(kind string, deps Dependencies) *cli.Command {
