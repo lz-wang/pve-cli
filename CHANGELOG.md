@@ -1,5 +1,23 @@
 # Changelog
 
+## v2.0.1 - 2026-10-06
+
+### Fixed
+
+- Align the Go module path with the renamed `lz-wang/pve-cli` repository and
+  Go v2 semantic import versioning (`github.com/lz-wang/pve-cli/v2`).
+- Use canonical `pve-cli` repository URLs in the Homebrew formula generator
+  and release documentation.
+
+### Notes
+
+- The executable and Homebrew formula remain `pve`; config paths, `PVE_*`
+  environment variables, release asset names, CLI commands, and structured
+  output contracts are unchanged.
+- Historical v1 `pvectl` documentation and the legacy Homebrew formula remain
+  available. Keep the old repository name reserved so historical links can
+  continue to redirect.
+
 ## v2.0.0 - 2026-10-05
 
 The breaking changes in this section supersede the v1.x stability promise;
