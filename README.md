@@ -131,7 +131,7 @@ compatibility contracts.
 
 Tag releases publish GitHub Release assets and then update
 `lz-wang/homebrew-tap`. Configure the `HOMEBREW_TAP_TOKEN` repository secret in
-`lz-wang/pvectl` with permission to push to the tap repository.
+`lz-wang/pve-cli` with permission to push to the tap repository.
 
 To regenerate `Formula/pve.rb` locally, set `PVE_RELEASE_TAG` to a release tag
 that publishes `pve-*` assets and run:

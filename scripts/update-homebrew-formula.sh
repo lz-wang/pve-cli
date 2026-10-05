@@ -10,7 +10,7 @@ tag="$1"
 tap_dir="${2:-/Users/lzwang/projects/homebrew-tap}"
 formula_dir="${tap_dir}/Formula"
 formula_path="${formula_dir}/pve.rb"
-release_base_url="https://github.com/lz-wang/pvectl/releases/download/${tag}"
+release_base_url="https://github.com/lz-wang/pve-cli/releases/download/${tag}"
 
 if ! command -v curl >/dev/null 2>&1; then
   echo "curl is required" >&2
@@ -43,7 +43,7 @@ mkdir -p "$formula_dir"
 cat >"$formula_path" <<EOF
 class Pve < Formula
   desc "Personal HomeLab Proxmox VE CLI"
-  homepage "https://github.com/lz-wang/pvectl"
+  homepage "https://github.com/lz-wang/pve-cli"
   license "MIT"
   version "${tag#v}"
 
