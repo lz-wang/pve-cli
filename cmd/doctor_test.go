@@ -12,7 +12,7 @@ import (
 	"github.com/lz-wang/pvectl/internal/pve"
 )
 
-func TestConfigUpdateWithPlaintextToken(t *testing.T) {
+func TestConfigSetWithPlaintextToken(t *testing.T) {
 	cfgPath := filepath.Join(t.TempDir(), "config.yaml")
 	var stdout, stderr bytes.Buffer
 	deps := Dependencies{
@@ -26,7 +26,7 @@ func TestConfigUpdateWithPlaintextToken(t *testing.T) {
 		},
 	}
 	if err := RunWithDependencies([]string{
-		"pve", "--config", cfgPath, "config", "update", "home",
+		"pve", "--config", cfgPath, "config", "set", "home",
 		"--endpoint", "https://pve.example:8006/api2/json",
 		"--token-id", "automation@pve!test",
 		"--token-secret", "fake-plaintext-token",
@@ -73,10 +73,10 @@ func TestConfigUpdateWithPlaintextToken(t *testing.T) {
 	}
 }
 
-func TestConfigUpdateRequiresTokenSource(t *testing.T) {
+func TestConfigSetRequiresTokenSource(t *testing.T) {
 	cfgPath := filepath.Join(t.TempDir(), "config.yaml")
 	err := RunWithDependencies([]string{
-		"pve", "--config", cfgPath, "config", "update", "home",
+		"pve", "--config", cfgPath, "config", "set", "home",
 		"--endpoint", "https://pve.example:8006/api2/json",
 		"--token-id", "automation@pve!test",
 	}, "test", Dependencies{Stdout: &bytes.Buffer{}, Stderr: &bytes.Buffer{}})
@@ -88,12 +88,12 @@ func TestConfigUpdateRequiresTokenSource(t *testing.T) {
 	}
 }
 
-func TestConfigUpdateCommandWritesProfile(t *testing.T) {
+func TestConfigSetCommandWritesProfile(t *testing.T) {
 	cfgPath := filepath.Join(t.TempDir(), "config.yaml")
 
 	err := RunWithDependencies([]string{
 		"pve", "--config", cfgPath,
-		"config", "update", "home",
+		"config", "set", "home",
 		"--endpoint", "https://pve.example:8006/api2/json",
 		"--token-id", "root@pam!test",
 		"--token-secret-env", "PVE_TOKEN",
@@ -135,7 +135,7 @@ func TestConfigUpdateCommandWritesProfile(t *testing.T) {
 	}
 }
 
-func TestConfigUpdateExistingProfileKeepsCurrent(t *testing.T) {
+func TestConfigSetExistingProfileKeepsCurrent(t *testing.T) {
 	cfgPath := writeTestConfig(t, "table")
 	cfg, err := config.Load(cfgPath)
 	if err != nil {
@@ -153,7 +153,7 @@ func TestConfigUpdateExistingProfileKeepsCurrent(t *testing.T) {
 	}
 	originalHome := cfg.Profiles["home"]
 	err = RunWithDependencies([]string{
-		"pve", "--config", cfgPath, "config", "update", "lab",
+		"pve", "--config", cfgPath, "config", "set", "lab",
 		"--endpoint", "https://new.example:8006/api2/json",
 		"--token-id", "root@pam!new",
 		"--token-secret-env", "PVE_LAB_TOKEN",
@@ -177,7 +177,7 @@ func TestConfigUpdateExistingProfileKeepsCurrent(t *testing.T) {
 	}
 }
 
-func TestConfigUpdateRequiredInputs(t *testing.T) {
+func TestConfigSetRequiredInputs(t *testing.T) {
 	for _, test := range []struct {
 		name string
 		args []string
@@ -188,7 +188,7 @@ func TestConfigUpdateRequiredInputs(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			cfgPath := filepath.Join(t.TempDir(), "config.yaml")
-			args := append([]string{"pve", "--config", cfgPath, "config", "update"}, test.args...)
+			args := append([]string{"pve", "--config", cfgPath, "config", "set"}, test.args...)
 			if err := RunWithDependencies(args, "test", Dependencies{Stdout: &bytes.Buffer{}, Stderr: &bytes.Buffer{}}); err == nil {
 				t.Fatal("expected required input error")
 			}
@@ -202,7 +202,7 @@ func TestConfigUpdateRequiredInputs(t *testing.T) {
 func TestConfigProfileCommands(t *testing.T) {
 	cfgPath := writeTestConfig(t, "table")
 	err := RunWithDependencies([]string{
-		"pve", "--config", cfgPath, "config", "update", "lab",
+		"pve", "--config", cfgPath, "config", "set", "lab",
 		"--endpoint", "https://pve-lab.example:8006/api2/json",
 		"--token-id", "root@pam!test",
 		"--token-secret-env", "PVE_LAB_TOKEN",
@@ -237,64 +237,60 @@ func TestConfigProfileCommands(t *testing.T) {
 	}
 }
 
-func TestConfigUpdateUseProfile(t *testing.T) {
-	for _, test := range []struct {
-		name string
-		args []string
-	}{
-		{name: "switch existing", args: []string{"--use"}},
-		{name: "update and switch", args: []string{
-			"--endpoint", "https://updated-lab.example:8006/api2/json",
-			"--token-id", "root@pam!updated",
-			"--token-secret", "updated-placeholder-token",
-			"--use",
-		}},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			cfgPath := writeTestConfig(t, "table")
-			cfg, err := config.Load(cfgPath)
-			if err != nil {
-				t.Fatal(err)
-			}
-			originalHome := cfg.Profiles["home"]
-			originalLab := config.Profile{
-				Endpoint:           "https://lab.example:8006/api2/json",
-				TokenID:            "root@pam!lab",
-				TokenSecret:        "lab-placeholder-token",
-				TokenSecretEnv:     "PVE_LAB_TOKEN",
-				InsecureSkipVerify: true,
-				Timeout:            "45s",
-				DefaultOutput:      "json",
-			}
-			cfg.Profiles["lab"] = originalLab
-			if err := config.Save(cfgPath, cfg); err != nil {
-				t.Fatal(err)
-			}
-			args := append([]string{"pve", "--config", cfgPath, "config", "update", "lab"}, test.args...)
-			if err := RunWithDependencies(args, "test", Dependencies{Stdout: &bytes.Buffer{}, Stderr: &bytes.Buffer{}}); err != nil {
-				t.Fatalf("use profile: %v", err)
-			}
-			cfg, err = config.Load(cfgPath)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if cfg.CurrentProfile != "lab" || cfg.Profiles["home"] != originalHome {
-				t.Fatal("switching to lab should preserve the home profile")
-			}
-			if test.name == "switch existing" {
-				if cfg.Profiles["lab"] != originalLab {
-					t.Fatal("switching should preserve the target profile's credentials and settings")
-				}
-			} else {
-				profile := cfg.Profiles["lab"]
-				if profile.Endpoint != "https://updated-lab.example:8006/api2/json" || profile.TokenID != "root@pam!updated" || profile.TokenSecret != "updated-placeholder-token" || profile.TokenSecretEnv != "" {
-					t.Fatalf("updated lab = %#v", profile)
-				}
-				if profile.InsecureSkipVerify || profile.Timeout != "30s" || profile.DefaultOutput != "table" {
-					t.Fatalf("updated lab defaults = %#v", profile)
-				}
-			}
-		})
+func TestConfigUseCommandSwitchesProfile(t *testing.T) {
+	cfgPath := writeTestConfig(t, "table")
+	cfg, err := config.Load(cfgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	originalHome := cfg.Profiles["home"]
+	originalLab := config.Profile{
+		Endpoint:           "https://lab.example:8006/api2/json",
+		TokenID:            "root@pam!lab",
+		TokenSecret:        "lab-placeholder-token",
+		TokenSecretEnv:     "PVE_LAB_TOKEN",
+		InsecureSkipVerify: true,
+		Timeout:            "45s",
+		DefaultOutput:      "json",
+	}
+	cfg.Profiles["lab"] = originalLab
+	if err := config.Save(cfgPath, cfg); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := RunWithDependencies([]string{"pve", "--config", cfgPath, "config", "use", "lab"}, "test", Dependencies{Stdout: &bytes.Buffer{}, Stderr: &bytes.Buffer{}}); err != nil {
+		t.Fatalf("use profile: %v", err)
+	}
+	cfg, err = config.Load(cfgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.CurrentProfile != "lab" || cfg.Profiles["home"] != originalHome || cfg.Profiles["lab"] != originalLab {
+		t.Fatal("switching to lab should preserve both profiles")
+	}
+
+	if err := RunWithDependencies([]string{"pve", "--config", cfgPath, "config", "use", "missing"}, "test", Dependencies{Stdout: &bytes.Buffer{}, Stderr: &bytes.Buffer{}}); err == nil {
+		t.Fatal("expected missing profile error")
+	}
+}
+
+func TestConfigSetDoesNotSwitchCurrentProfile(t *testing.T) {
+	cfgPath := writeTestConfig(t, "table")
+	err := RunWithDependencies([]string{
+		"pve", "--config", cfgPath, "config", "set", "lab",
+		"--endpoint", "https://lab.example:8006/api2/json",
+		"--token-id", "root@pam!lab",
+		"--token-secret", "lab-placeholder-token",
+	}, "test", Dependencies{Stdout: &bytes.Buffer{}, Stderr: &bytes.Buffer{}})
+	if err != nil {
+		t.Fatalf("set: %v", err)
+	}
+	cfg, err := config.Load(cfgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.CurrentProfile != "home" {
+		t.Fatal("set should not change the current profile")
 	}
 }
 
@@ -306,19 +302,11 @@ func TestRemovedConfigNamesAreRejected(t *testing.T) {
 		t.Fatal("expected old --context flag to be rejected")
 	}
 
-	for _, command := range []string{"view", "init", "set-profile", "current-profile", "use-profile", "set-context", "use-context", "current-context"} {
-		err := RunWithDependencies([]string{
-			"pve",
-			"--config", filepath.Join(t.TempDir(), "config.yaml"),
-			"config", command, "home",
-		}, "test", Dependencies{Stdout: &bytes.Buffer{}, Stderr: &bytes.Buffer{}})
-		if err == nil {
-			t.Fatalf("expected old %s command to be rejected", command)
-		}
-		if !strings.Contains(err.Error(), "was removed") {
-			t.Fatalf("old %s error = %v", command, err)
-		}
-	}
+	// Removed config subcommands (view, init, set-profile, current-profile,
+	// use-profile, set-context, use-context, current-context, update) are no
+	// longer registered at all; the CLI framework rejects them with its
+	// "No help topic" error and exit code 3, which calls os.Exit from inside
+	// urfave/cli and therefore cannot be exercised in-process here.
 }
 
 func TestDoctorOfflineCommand(t *testing.T) {

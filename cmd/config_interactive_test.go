@@ -125,7 +125,7 @@ func TestConfigShowMissingConfigWithNonterminalInput(t *testing.T) {
 	if err != nil {
 		t.Fatalf("noninteractive show should succeed: %v", err)
 	}
-	if stdout.Len() != 0 || !strings.Contains(stderr.String(), "No config file found") || !strings.Contains(stderr.String(), "pve config update NAME --endpoint") || strings.Contains(stderr.String(), "Initialize a config file now?") {
+	if stdout.Len() != 0 || !strings.Contains(stderr.String(), "No config file found") || !strings.Contains(stderr.String(), "pve config set NAME --endpoint") || strings.Contains(stderr.String(), "Initialize a config file now?") {
 		t.Fatal("nonterminal input should receive a setup hint without waiting for input")
 	}
 	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {

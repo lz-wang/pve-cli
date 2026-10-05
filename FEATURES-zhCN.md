@@ -39,13 +39,14 @@
   引用。全局 `--api-timeout` 和 `--insecure` 提供默认设置；向导会询问
   是否设为当前 profile，未配置当前 profile 时默认是，否则默认否。同名 profile 不会被
   覆盖，取消时不写入任何变更。
-- `config update NAME` 非交互式创建或更新 profile。写入连接设置时必须提供
+- `config set NAME` 非交互式创建或替换 profile。写入连接设置时必须提供
   endpoint、token ID 和至少一种 token 来源，默认 timeout 为 `30s`、输出为
-  `table`。可用 `--use` 将写入的 profile 设为当前；单独执行
-  `config update NAME --use` 仅切换至已有 profile，不修改连接设置，也不要求
-  提供 token 参数。
-- `config help` 说明可用命令，顺序为 `ls`、`show`、`add`、`update`、`help`。
-  原有 config 子命令已移除。
+  `table`。空配置写入的第一个 profile 自动成为当前 profile，之后写入不会
+  改变当前 profile。
+- `config use NAME` 仅切换当前 profile。要求 profile 已存在，且不修改其
+  连接设置。
+- `config help` 说明可用命令，顺序为 `ls`、`show`、`add`、`set`、`use`、
+  `help`。原有 config 子命令已移除。
 
 `config show` 将超过六个 Unicode 字符的 token 显示为摘要：保留前三个和后三个
 字符，中间显示 `*****`；六个字符及以内仅显示 `*****`。环境变量名称正常
@@ -53,7 +54,7 @@
 环境变量后的绝对路径，文件名中的换行会转义，确保路径显示在一行中。
 
 文件不存在时，`config ls` 和 `config show` 在终端中交互式引导初始化。拒绝或
-结束输入不会创建文件；非终端输入显示 add/update 初始化命令提示，不等待
+结束输入不会创建文件；非终端输入显示 add/set 初始化命令提示，不等待
 输入。这些情况均正常退出。初始化提示输出到 stderr，且不会覆盖已有文件。
 
 配置文件保存 Proxmox endpoint、token ID、TLS 行为、timeout 和默认输出格式。

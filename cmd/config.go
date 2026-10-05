@@ -24,15 +24,8 @@ func newConfigCommand(deps Dependencies) *cli.Command {
 			newConfigListCommand(deps),
 			newConfigShowCommand(deps),
 			newConfigAddCommand(deps),
-			newConfigUpdateCommand(),
-			removedConfigCommand("view", "show --all"),
-			removedConfigCommand("init", "add"),
-			removedConfigCommand("set-profile", "update"),
-			removedConfigCommand("use-profile", "update NAME --use"),
-			removedConfigCommand("current-profile", "show"),
-			removedConfigCommand("set-context", "update"),
-			removedConfigCommand("use-context", "update NAME --use"),
-			removedConfigCommand("current-context", "show"),
+			newConfigSetCommand(),
+			newConfigUseCommand(),
 		},
 	}
 }
@@ -122,10 +115,10 @@ func newConfigShowCommand(deps Dependencies) *cli.Command {
 	}
 }
 
-func newConfigUpdateCommand() *cli.Command {
+func newConfigSetCommand() *cli.Command {
 	return &cli.Command{
-		Name:      "update",
-		Usage:     "Create or replace a profile, or select an existing profile with --use",
+		Name:      "set",
+		Usage:     "Create or replace a profile",
 		ArgsUsage: "NAME",
 		Flags: []cli.Flag{
 			&cli.StringFlag{Name: "endpoint", Usage: "PVE API endpoint, for example https://pve.lan:8006/api2/json"},
@@ -135,21 +128,10 @@ func newConfigUpdateCommand() *cli.Command {
 			&cli.BoolFlag{Name: "insecure", Usage: "skip TLS certificate verification for this profile"},
 			&cli.StringFlag{Name: "timeout", Value: "30s", Usage: "PVE API request timeout for this profile"},
 			&cli.StringFlag{Name: "default-output", Value: output.FormatTable, Usage: "default output format: table,json,yaml"},
-			&cli.BoolFlag{Name: "use", Usage: "set this profile as current; used alone to select an existing profile"},
 		},
 		Action: func(c *cli.Context) error {
 			if err := requireNoExtraArgs(c, 1); err != nil {
 				return err
-			}
-			if c.Bool("use") && !configUpdateHasValues(c) {
-				cfg, err := config.Load(c.String("config"))
-				if err != nil {
-					return fmt.Errorf("config error: %w", err)
-				}
-				if err := cfg.UseProfile(c.Args().First()); err != nil {
-					return fmt.Errorf("config error: %w", err)
-				}
-				return config.Save(c.String("config"), cfg)
 			}
 			defaultOutput := output.NormalizeFormat(c.String("default-output"))
 			if err := output.ValidateFormat(defaultOutput); err != nil {
@@ -169,23 +151,30 @@ func newConfigUpdateCommand() *cli.Command {
 			}); err != nil {
 				return fmt.Errorf("config error: %w", err)
 			}
-			if c.Bool("use") {
-				if err := cfg.UseProfile(c.Args().First()); err != nil {
-					return err
-				}
-			}
 			return config.Save(c.String("config"), cfg)
 		},
 	}
 }
 
-func configUpdateHasValues(c *cli.Context) bool {
-	for _, name := range []string{"endpoint", "token-id", "token-secret", "token-secret-env", "insecure", "timeout", "default-output"} {
-		if c.IsSet(name) {
-			return true
-		}
+func newConfigUseCommand() *cli.Command {
+	return &cli.Command{
+		Name:      "use",
+		Usage:     "Select the current profile",
+		ArgsUsage: "NAME",
+		Action: func(c *cli.Context) error {
+			if err := requireNoExtraArgs(c, 1); err != nil {
+				return err
+			}
+			cfg, err := config.Load(c.String("config"))
+			if err != nil {
+				return fmt.Errorf("config error: %w", err)
+			}
+			if err := cfg.UseProfile(c.Args().First()); err != nil {
+				return fmt.Errorf("config error: %w", err)
+			}
+			return config.Save(c.String("config"), cfg)
+		},
 	}
-	return false
 }
 
 func configProfileNames(cfg *config.Config) []string {
@@ -215,14 +204,4 @@ func writeConfigPath(w io.Writer, path string) error {
 	).Replace(path)
 	_, err := fmt.Fprintf(w, "Config file: %s\n", displayPath)
 	return err
-}
-
-func removedConfigCommand(name, replacement string) *cli.Command {
-	return &cli.Command{
-		Name:   name,
-		Hidden: true,
-		Action: func(*cli.Context) error {
-			return fmt.Errorf("config %s was removed; use config %s", name, replacement)
-		},
-	}
 }

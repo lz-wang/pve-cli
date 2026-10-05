@@ -48,8 +48,8 @@ The wizard can store the token directly as plaintext `token_secret` in
 `token_secret` takes precedence when both are configured. `config ls` lists
 profile names and endpoints; `config show` displays details with token summaries
 and the config-file path. Both offer guided setup when the file is missing.
-Use `config add` for another profile or `config update NAME` for noninteractive
-configuration. Switch the current profile with `config update NAME --use`.
+Use `config add` for another profile or `config set NAME` for noninteractive
+configuration. Switch the current profile with `config use NAME`.
 See [docs/usage.md](docs/usage.md) for flags and examples.
 
 ## Daily Usage

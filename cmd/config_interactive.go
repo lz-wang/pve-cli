@@ -38,7 +38,7 @@ func newConfigAddCommand(deps Dependencies) *cli.Command {
 			}
 			prompt, interactive := newConfigPrompter(c, deps)
 			if !interactive {
-				return errors.New("config add requires a terminal; use pve config update NAME --endpoint URL --token-id USER@REALM!TOKEN --token-secret SECRET for noninteractive setup (with the same --config path)")
+				return errors.New("config add requires a terminal; use pve config set NAME --endpoint URL --token-id USER@REALM!TOKEN --token-secret SECRET for noninteractive setup (with the same --config path)")
 			}
 			if err := prompt.addProfile(c, path, cfg, missing, true); errors.Is(err, io.EOF) {
 				_, err = fmt.Fprintln(c.App.ErrWriter, "\nProfile addition cancelled; no config file was changed.")
@@ -60,7 +60,7 @@ func guideConfigInit(c *cli.Context, deps Dependencies) error {
 	}
 	prompt, interactive := newConfigPrompter(c, deps)
 	if !interactive {
-		_, err := fmt.Fprintln(c.App.ErrWriter, "Run pve config add in a terminal for guided setup, or use pve config update NAME --endpoint URL --token-id USER@REALM!TOKEN --token-secret SECRET (with the same --config path).")
+		_, err := fmt.Fprintln(c.App.ErrWriter, "Run pve config add in a terminal for guided setup, or use pve config set NAME --endpoint URL --token-id USER@REALM!TOKEN --token-secret SECRET (with the same --config path).")
 		return err
 	}
 	if err := prompt.initialize(c, path); errors.Is(err, io.EOF) {

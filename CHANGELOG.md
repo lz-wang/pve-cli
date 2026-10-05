@@ -37,13 +37,14 @@
 - Update CLI documentation and examples to use `pve` and `PVE_*` environment
   variable names. Token-secret environment variable names remain user-defined.
 - Save config files with permissions `0600` on Unix, including existing files.
-- Replace the config subcommands with `ls`, `show`, `add`, `update`, and `help`.
+- Replace the config subcommands with `ls`, `show`, `add`, `set`, and `use`.
   List names and endpoints in name order; show one selected profile or all
   profiles in detail tables. Add profiles interactively without overwriting
-  existing names, and create or update profiles noninteractively with `update`.
-  Use `update NAME --use` to switch the current profile or select a profile
-  after writing it. Remove `view`, `init`, `set-profile`, `current-profile`, and
-  `use-profile`.
+  existing names. Create or replace profiles noninteractively with
+  `set NAME`; it never changes the current profile. Switch the current profile
+  with `use NAME`. Remove `view`, `init`, `set-profile`, `current-profile`,
+  `use-profile`, `set-context`, `use-context`, `current-context`, and the
+  short-lived `update` without a compatibility layer.
 - Mask stored plaintext `token_secret` in `pve config show` output, retaining
   the first and last three Unicode characters for values longer than six
   characters and using only `*****` for values of six characters or fewer.

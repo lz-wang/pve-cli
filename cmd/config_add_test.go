@@ -202,7 +202,7 @@ func TestConfigAddRequiresTerminal(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.yaml")
 	var stdout, stderr bytes.Buffer
 	err = RunWithDependencies([]string{"pve", "--config", path, "config", "add"}, "test", Dependencies{Stdin: input, Stdout: &stdout, Stderr: &stderr})
-	if err == nil || !strings.Contains(err.Error(), "config add requires a terminal") || !strings.Contains(err.Error(), "pve config update NAME --endpoint") {
+	if err == nil || !strings.Contains(err.Error(), "config add requires a terminal") || !strings.Contains(err.Error(), "pve config set NAME --endpoint") {
 		t.Fatal("nonterminal add must return a clear noninteractive setup hint")
 	}
 	if stdout.Len() != 0 || stderr.Len() != 0 {

@@ -44,13 +44,15 @@ are user-defined; documentation uses `PVE_*` examples.
   `--insecure`. It asks whether to make the profile current,
   defaulting to yes when no current profile is configured and no otherwise.
   Existing names are never overwritten; cancellation writes no changes.
-- `config update NAME` noninteractively creates or updates a profile. Connection
+- `config set NAME` noninteractively creates or replaces a profile. Connection
   writes require an endpoint, token ID, and at least one token source. Defaults
-  are timeout `30s` and output `table`. `--use` makes the written profile current;
-  `config update NAME --use` alone switches to an existing profile without
-  changing its connection settings or requiring token flags.
+  are timeout `30s` and output `table`; the first profile in an empty config
+  becomes current automatically, and later writes never change the current
+  profile.
+- `config use NAME` selects the current profile. It requires the profile to
+  exist and never rewrites its connection settings.
 - `config help` documents the available commands in the order `ls`, `show`,
-  `add`, `update`, `help`. Earlier config commands have been removed.
+  `add`, `set`, `use`, `help`. Earlier config commands have been removed.
 
 `config show` masks tokens longer than six Unicode characters by retaining the
 first and last three characters around `*****`; tokens of six characters or
@@ -61,7 +63,7 @@ escaped to keep it on one line.
 
 When the file is missing, `config ls` and `config show` offer guided initialization
 in a terminal. Declining or ending input leaves the file uncreated; nonterminal
-input receives an add/update setup hint without waiting. These cases exit
+input receives an add/set setup hint without waiting. These cases exit
 successfully. Setup messages go to stderr and never overwrite an existing file.
 
 Config stores the Proxmox endpoint, token ID, TLS behavior, timeout, and default

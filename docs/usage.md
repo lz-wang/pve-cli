@@ -22,9 +22,9 @@ in that order. VM guest-agent tools follow lifecycle commands, and cloud-init
 is next to `config`. `delete` is the last VM/LXC operation; snapshot help lists
 `ls`, `create`, `delete`, `rollback`, placing rollback last.
 
-Config help lists `ls`, `show`, `add`, `update`, `help` to prioritize inspection
-before configuration changes. The built-in `help` command remains last at each
-level.
+Config help lists `ls`, `show`, `add`, `set`, `use`, `help` to prioritize
+inspection before configuration changes. The built-in `help` command remains
+last at each level.
 
 ## Configuration
 
@@ -96,43 +96,41 @@ and setup results go to stderr.
 
 If the file is missing, `config ls` and `config show` report that it does not
 exist and offer the same guided initialization in a terminal. With nonterminal
-stdin, they display a `config add` / `config update` setup hint and exit
+stdin, they display a `config add` / `config set` setup hint and exit
 successfully without waiting for input. Declining or ending input also exits
 successfully. Stdout stays empty during setup; run `config ls` or `config show`
 again after creation. Initialization never overwrites a file that appeared while
 entering the values. Invalid YAML and file-access failures still produce errors.
 
-### Update Profiles Noninteractively
+### Set Profiles Noninteractively
 
-`config update NAME` creates or updates a named profile using flags. Connection
+`config set NAME` creates or replaces a named profile using flags. Connection
 writes require `--endpoint`, `--token-id`, and at least one of `--token-secret`
 or `--token-secret-env`:
 
 ```bash
-pve config update lab \
+pve config set lab \
   --endpoint https://pve-lab.lan:8006/api2/json \
   --token-id 'automation@pve!pve' \
   --token-secret-env PVE_LAB_TOKEN_SECRET \
   --timeout 30s \
-  --default-output table \
-  --use
+  --default-output table
 ```
 
-Normal updates default to timeout `30s` and output `table`. Add `--use` to make
-the created or updated profile current. To switch to an existing profile without
-rewriting its connection settings, use `--use` alone:
+Profiles default to timeout `30s` and output `table`. `config set` never
+changes which profile is current; the first profile written into an empty
+config becomes current automatically.
+
+### Switch Profiles
 
 ```bash
-pve config update home --use
+pve config use home
 ```
 
-This switch requires the named profile to exist but does not require endpoint
-or token flags. When `--use` is combined with connection-writing flags, the
-endpoint, token ID, and token-source requirements still apply.
+`config use NAME` only selects the current profile. It requires the named
+profile to exist and never rewrites its connection settings.
 
-`config` exposes only `ls`, `show`, `add`, `update`, and `help`; the earlier
-`view`, `init`, `set-profile`, `current-profile`, and `use-profile` commands are
-removed.
+`config` exposes only `ls`, `show`, `add`, `set`, and `use`.
 
 ### Stored Configuration
 
@@ -152,7 +150,7 @@ profiles:
 
 `token_secret` stores the token value directly in plaintext. It can be set by
 editing the YAML file, entering it in `config add`, or passing `--token-secret`
-to `config update NAME`.
+to `config set NAME`.
 
 For environment-based configuration, replace `token_secret` with
 `token_secret_env: PVE_HOME_TOKEN_SECRET` in YAML, or pass
