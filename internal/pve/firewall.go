@@ -3,6 +3,7 @@ package pve
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	proxmox "github.com/luthermonson/go-proxmox"
@@ -18,9 +19,11 @@ const (
 )
 
 // FirewallBackend covers read-only firewall inventory for nodes, VMs, and
-// LXC containers. Rule mutation is out of scope.
+// LXC containers. Guest queries are included so vm/lxc scopes can locate a
+// guest across the cluster when --node is omitted. Rule mutation is out of
+// scope.
 type FirewallBackend interface {
-	NodeBackend
+	GuestBackend
 	FirewallStatus(ctx context.Context, scope FirewallScope) (output.FirewallStatusRow, error)
 	FirewallRules(ctx context.Context, scope FirewallScope) ([]output.FirewallRuleRow, error)
 }
@@ -32,14 +35,16 @@ type FirewallScope struct {
 	VMID int
 }
 
-// ParseFirewallScope validates flags into a scope.
+// ParseFirewallScope validates flags into a scope. The node is required for
+// the node scope; vm/lxc scopes may leave it empty so the guest is located
+// across the cluster instead.
 func ParseFirewallScope(node, kind string, vmid int) (FirewallScope, error) {
 	node = strings.TrimSpace(node)
-	if node == "" {
-		return FirewallScope{}, fmt.Errorf("node is required")
-	}
 	switch strings.ToLower(strings.TrimSpace(kind)) {
 	case FirewallScopeNode, "":
+		if node == "" {
+			return FirewallScope{}, fmt.Errorf("node is required for --scope node")
+		}
 		return FirewallScope{Node: node, Type: FirewallScopeNode}, nil
 	case FirewallScopeVM, FirewallScopeLXC:
 		if vmid <= 0 {
@@ -61,6 +66,55 @@ func ParseFirewallScopeKind(value string) (string, error) {
 	default:
 		return "", fmt.Errorf("invalid firewall scope %q, expected node, vm, or lxc", value)
 	}
+}
+
+// FirewallService exposes read-only firewall inventory with the same node
+// semantics as every other VMID-oriented command: --node is optional for
+// vm/lxc scopes, and an omitted node is located by traversing the cluster.
+type FirewallService struct {
+	backend FirewallBackend
+	logger  *slog.Logger
+	verbose bool
+}
+
+func NewFirewallService(backend FirewallBackend, logger *slog.Logger, verbose bool) *FirewallService {
+	return &FirewallService{backend: backend, logger: logger, verbose: verbose}
+}
+
+// Status reports whether the firewall is enabled for the scope.
+func (s *FirewallService) Status(ctx context.Context, scope FirewallScope) (output.FirewallStatusRow, error) {
+	scope, err := s.resolveScope(ctx, scope)
+	if err != nil {
+		return output.FirewallStatusRow{}, err
+	}
+	return s.backend.FirewallStatus(ctx, scope)
+}
+
+// Rules lists firewall rules for the scope in positional order.
+func (s *FirewallService) Rules(ctx context.Context, scope FirewallScope) ([]output.FirewallRuleRow, error) {
+	scope, err := s.resolveScope(ctx, scope)
+	if err != nil {
+		return nil, err
+	}
+	return s.backend.FirewallRules(ctx, scope)
+}
+
+// resolveScope locates the guest across the cluster when a vm/lxc scope is
+// used without --node, matching `vm get` and the agent commands.
+func (s *FirewallService) resolveScope(ctx context.Context, scope FirewallScope) (FirewallScope, error) {
+	if scope.Node != "" || scope.Type == FirewallScopeNode {
+		return scope, nil
+	}
+	svc := NewVMService(s.backend, TaskRunner{}, s.logger, s.verbose)
+	if scope.Type == FirewallScopeLXC {
+		svc = NewLXCService(s.backend, TaskRunner{}, s.logger, s.verbose)
+	}
+	row, err := svc.Get(ctx, scope.VMID, "")
+	if err != nil {
+		return FirewallScope{}, err
+	}
+	scope.Node = row.Node
+	return scope, nil
 }
 
 // FirewallStatus reports whether the firewall is enabled for the scope.

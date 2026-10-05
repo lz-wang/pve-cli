@@ -51,6 +51,15 @@ func TestParseFirewallScope(t *testing.T) {
 	if _, err := ParseFirewallScope("pve1", "bogus", 0); err == nil {
 		t.Fatal("expected invalid scope error")
 	}
+
+	// vm/lxc scopes keep the node empty so the service locates the guest.
+	scope, err = ParseFirewallScope("", "vm", 100)
+	if err != nil {
+		t.Fatalf("scope without node: %v", err)
+	}
+	if scope.Node != "" || scope.VMID != 100 {
+		t.Fatalf("scope = %#v", scope)
+	}
 }
 
 func TestFirewallBackendStatusAndRules(t *testing.T) {
@@ -70,5 +79,23 @@ func TestFirewallBackendStatusAndRules(t *testing.T) {
 	}
 	if len(rules) != 1 || rules[0].VMID != 100 || rules[0].Scope != "vm" {
 		t.Fatalf("rules = %#v", rules)
+	}
+}
+
+func TestFirewallServiceLocatesGuestNode(t *testing.T) {
+	backend := firewallTestBackend()
+	backend.nodes = []output.NodeRow{{Name: "pve1"}, {Name: "pve2"}}
+	backend.vms = map[string]map[int]*fakeGuest{
+		"pve2": {100: {row: output.GuestRow{Kind: "vm", VMID: 100, Node: "pve2"}}},
+	}
+	backend.firewallStatus["vm/pve2/100"] = output.FirewallStatusRow{Scope: "vm", Node: "pve2", VMID: 100, Enabled: true}
+
+	svc := NewFirewallService(backend, nil, false)
+	status, err := svc.Status(context.Background(), FirewallScope{Type: FirewallScopeVM, VMID: 100})
+	if err != nil {
+		t.Fatalf("status: %v", err)
+	}
+	if status.Node != "pve2" || status.VMID != 100 || !status.Enabled {
+		t.Fatalf("status = %#v", status)
 	}
 }

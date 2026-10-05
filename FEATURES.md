@@ -415,9 +415,11 @@ Network mutation (create/update/delete/apply/reload) is a non-goal.
 - `firewall ls --node NODE`
 - `firewall status --node NODE --scope vm --vmid VMID`
 - `firewall ls --node NODE --scope vm --vmid VMID`
-- `firewall ls --node NODE --scope lxc --vmid CTID`
+- `firewall ls --scope lxc --vmid CTID` locates the guest when `--node` is
+  omitted, matching other VMID-oriented commands
 
-`--scope node` is the default. Firewall rule mutation is a non-goal.
+`--scope node` is the default and requires `--node`. Firewall rule mutation is
+a non-goal.
 
 ## Storage Inventory
 

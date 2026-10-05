@@ -392,9 +392,10 @@ Cloud-init 命令使用 PVE 原生 cloud-init 配置。
 - `firewall ls --node NODE`
 - `firewall status --node NODE --scope vm --vmid VMID`
 - `firewall ls --node NODE --scope vm --vmid VMID`
-- `firewall ls --node NODE --scope lxc --vmid CTID`
+- `firewall ls --scope lxc --vmid CTID` 省略 `--node` 时跨集群定位
+  guest，与其他面向 VMID 的命令一致
 
-`--scope node` 是默认值。防火墙规则变更是非目标。
+`--scope node` 是默认值且必须提供 `--node`。防火墙规则变更是非目标。
 
 ## 存储清单
 

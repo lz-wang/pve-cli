@@ -17,6 +17,9 @@
 
 ### Changed
 
+- Make `--node` optional for `firewall status`/`firewall ls` with vm/lxc
+  scopes: when omitted, the guest is located across the cluster like other
+  VMID-oriented commands. The node scope still requires `--node`.
 - Rename firewall `--type` to `--scope`, `backup ls --kind` to `--type`, and
   `vm cloud-init update` to `vm cloud-init regenerate` so each name keeps one
   stable meaning across commands.

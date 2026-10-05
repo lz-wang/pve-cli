@@ -585,3 +585,42 @@ func TestFirewallListCommandVMRequiresVMID(t *testing.T) {
 		t.Fatal("expected missing vmid error")
 	}
 }
+
+func TestFirewallListCommandVMLocatesNode(t *testing.T) {
+	cfgPath := writeTestConfig(t, "json")
+	backend := &commandBackend{
+		nodes: []output.NodeRow{{Name: "pve1"}, {Name: "pve2"}},
+		vmGuests: map[string]map[int]*commandGuest{
+			"pve2": {100: {row: output.GuestRow{Kind: "vm", VMID: 100, Node: "pve2"}}},
+		},
+		firewallRules: map[string][]output.FirewallRuleRow{
+			"vm": {{Scope: "vm", Node: "pve2", VMID: 100, Position: 1, Enabled: true, Direction: "in", Action: "ACCEPT"}},
+		},
+	}
+	var stdout bytes.Buffer
+
+	err := RunWithDependencies([]string{
+		"pve", "--config", cfgPath,
+		"firewall", "ls",
+		"--scope", "vm",
+		"--vmid", "100",
+	}, "test", testDeps(&stdout, backend))
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if !strings.Contains(stdout.String(), `"node": "pve2"`) || !strings.Contains(stdout.String(), `"vmid": 100`) {
+		t.Fatalf("stdout = %s", stdout.String())
+	}
+}
+
+func TestFirewallNodeScopeRequiresNode(t *testing.T) {
+	cfgPath := writeTestConfig(t, "table")
+
+	err := RunWithDependencies([]string{
+		"pve", "--config", cfgPath,
+		"firewall", "status",
+	}, "test", testDeps(&bytes.Buffer{}, &commandBackend{}))
+	if err == nil || !strings.Contains(err.Error(), "node is required") {
+		t.Fatalf("expected missing node error, got %v", err)
+	}
+}

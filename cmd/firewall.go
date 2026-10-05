@@ -23,7 +23,7 @@ func newFirewallCommand(deps Dependencies) *cli.Command {
 func firewallScopeFlags() []cli.Flag {
 	return append(
 		[]cli.Flag{
-			&cli.StringFlag{Name: "node", Usage: "PVE node name", Required: true},
+			&cli.StringFlag{Name: "node", Usage: "PVE node name; required for --scope node, located automatically for vm and lxc"},
 			&cli.StringFlag{Name: "scope", Value: pve.FirewallScopeNode, Usage: "firewall scope: node,vm,lxc"},
 			&cli.IntFlag{Name: "vmid", Usage: "VMID/CTID; required when --scope is vm or lxc"},
 		},
@@ -56,7 +56,7 @@ func firewallStatusCommand(deps Dependencies) *cli.Command {
 			if err != nil {
 				return err
 			}
-			row, err := rt.backend.FirewallStatus(c.Context, scope)
+			row, err := pve.NewFirewallService(rt.backend, rt.logger, rt.verbose).Status(c.Context, scope)
 			if err != nil {
 				return err
 			}
@@ -82,7 +82,7 @@ func firewallListCommand(deps Dependencies) *cli.Command {
 			if err != nil {
 				return err
 			}
-			rows, err := rt.backend.FirewallRules(c.Context, scope)
+			rows, err := pve.NewFirewallService(rt.backend, rt.logger, rt.verbose).Rules(c.Context, scope)
 			if err != nil {
 				return err
 			}

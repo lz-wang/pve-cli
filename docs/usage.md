@@ -633,8 +633,10 @@ pve firewall ls --node pve1 --scope vm --vmid 100
 pve firewall ls --node pve1 --scope lxc --vmid 200
 ```
 
-`--scope node` is the default. `--vmid` is required when `--scope` is `vm` or
-`lxc`. Firewall rule mutation is a non-goal.
+`--scope node` is the default and requires `--node`. For `vm` and `lxc`
+scopes, `--vmid` is required and `--node` is optional: when omitted, `pve`
+locates the guest across the cluster like other VMID-oriented commands.
+Firewall rule mutation is a non-goal.
 
 ## Dangerous Operations
 
