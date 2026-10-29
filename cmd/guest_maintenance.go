@@ -22,7 +22,7 @@ func guestMigrateCommand(kind string, deps Dependencies) *cli.Command {
 			if err := requireNoExtraArgs(c, 1); err != nil {
 				return err
 			}
-			vmid, err := parseVMID(c.Args().First())
+			vmid, err := resolveGuestID(c, kind, deps, c.Args().First())
 			if err != nil {
 				return err
 			}
@@ -54,7 +54,7 @@ func guestResizeCommand(kind string, deps Dependencies) *cli.Command {
 			if err := requireNoExtraArgs(c, 1); err != nil {
 				return err
 			}
-			vmid, err := parseVMID(c.Args().First())
+			vmid, err := resolveGuestID(c, kind, deps, c.Args().First())
 			if err != nil {
 				return err
 			}

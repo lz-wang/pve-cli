@@ -26,7 +26,7 @@ func parseVMID(value string) (int, error) {
 }
 
 func requireNoExtraArgs(c *cli.Context, want int) error {
-	if c.NArg() == want {
+	if c.NArg() == want || (want == 1 && c.NArg() == 0 && c.String("name") != "") {
 		return nil
 	}
 	return fmt.Errorf("expected %d argument(s), got %d", want, c.NArg())

@@ -747,3 +747,12 @@ to stdout.
 `pve task cancel UPID [--yes] [-o json]` checks that the task is running,
 requires confirmation, and returns `cancel_requested`. It never claims that
 the remote task has already stopped. Noninteractive use requires `--yes`.
+
+### Guest query options (v3)
+
+VM/LXC `ls` supports `--name` (case-insensitive substring), `--status`,
+`--sort vmid|name|node|status|memory|cpu`, and `--desc`. Missing metrics sort
+last. `get` and lifecycle commands accept exact names; ambiguous names fail
+with candidate node/VMID pairs. Numeric positionals always mean VMIDs;
+`get --name 123` selects a numeric name. Clone's `--name` names the new VM;
+its source can be an ID or nonnumeric exact name.

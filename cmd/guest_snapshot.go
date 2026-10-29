@@ -20,7 +20,7 @@ func guestSnapshotCommand(kind string, deps Dependencies) *cli.Command {
 					if err := requireNoExtraArgs(c, 1); err != nil {
 						return err
 					}
-					vmid, err := parseVMID(c.Args().First())
+					vmid, err := resolveGuestID(c, kind, deps, c.Args().First())
 					if err != nil {
 						return err
 					}
@@ -48,7 +48,7 @@ func guestSnapshotCommand(kind string, deps Dependencies) *cli.Command {
 					if err := requireNoExtraArgs(c, 2); err != nil {
 						return err
 					}
-					vmid, err := parseVMID(c.Args().Get(0))
+					vmid, err := resolveGuestID(c, kind, deps, c.Args().Get(0))
 					if err != nil {
 						return err
 					}
@@ -77,7 +77,7 @@ func guestSnapshotCommand(kind string, deps Dependencies) *cli.Command {
 					if err := requireNoExtraArgs(c, 2); err != nil {
 						return err
 					}
-					vmid, err := parseVMID(c.Args().Get(0))
+					vmid, err := resolveGuestID(c, kind, deps, c.Args().Get(0))
 					if err != nil {
 						return err
 					}
@@ -116,7 +116,7 @@ func guestSnapshotCommand(kind string, deps Dependencies) *cli.Command {
 					if err := requireNoExtraArgs(c, 2); err != nil {
 						return err
 					}
-					vmid, err := parseVMID(c.Args().Get(0))
+					vmid, err := resolveGuestID(c, kind, deps, c.Args().Get(0))
 					if err != nil {
 						return err
 					}

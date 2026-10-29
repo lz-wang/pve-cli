@@ -4,13 +4,14 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.com/lz-wang/pve-cli/v3/internal/output"
+	"github.com/lz-wang/pve-cli/v3/internal/pve"
 )
 
 func guestListCommand(kind string, deps Dependencies) *cli.Command {
 	return &cli.Command{
 		Name:  "ls",
 		Usage: guestListUsage(kind),
-		Flags: append(commonNodeFlag(), commonOutputFlags()...),
+		Flags: append(append(commonNodeFlag(), guestQueryFlags()...), commonOutputFlags()...),
 		Action: func(c *cli.Context) error {
 			if err := requireNoExtraArgs(c, 0); err != nil {
 				return err
@@ -21,6 +22,10 @@ func guestListCommand(kind string, deps Dependencies) *cli.Command {
 			}
 			svc := guestService(kind, rt)
 			rows, err := svc.List(c.Context, c.String("node"))
+			if err != nil {
+				return err
+			}
+			rows, err = pve.QueryGuests(rows, c.String("name"), c.String("status"), c.String("sort"), c.Bool("desc"))
 			if err != nil {
 				return err
 			}
@@ -47,7 +52,7 @@ func guestGetCommand(kind string, deps Dependencies) *cli.Command {
 			if err := requireNoExtraArgs(c, 1); err != nil {
 				return err
 			}
-			vmid, err := parseVMID(c.Args().First())
+			vmid, err := resolveGuestID(c, kind, deps, c.Args().First())
 			if err != nil {
 				return err
 			}
@@ -75,7 +80,7 @@ func guestControlCommand(kind, name, usage string, deps Dependencies) *cli.Comma
 			if err := requireNoExtraArgs(c, 1); err != nil {
 				return err
 			}
-			vmid, err := parseVMID(c.Args().First())
+			vmid, err := resolveGuestID(c, kind, deps, c.Args().First())
 			if err != nil {
 				return err
 			}

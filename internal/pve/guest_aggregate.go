@@ -258,3 +258,38 @@ func (s *GuestAggregateService) debug(msg string, args ...any) {
 		s.logger.Debug(msg, args...)
 	}
 }
+
+// GetNamed resolves a unique name across the requested guest kinds.
+func (s *GuestAggregateService) GetNamed(ctx context.Context, name string, options GuestGetOptions) (output.GuestRow, error) {
+	kinds := []string{"vm", "lxc"}
+	if options.Type == GuestTypeVM {
+		kinds = []string{"vm"}
+	}
+	if options.Type == GuestTypeLXC {
+		kinds = []string{"lxc"}
+	}
+	var result output.GuestRow
+	found := false
+	for _, kind := range kinds {
+		svc := &GuestService{kind: kind, backend: s.backend}
+		ref, err := svc.Resolve(ctx, name, options.Node, true)
+		if errors.Is(err, ErrNotFound) {
+			continue
+		}
+		if err != nil {
+			return output.GuestRow{}, err
+		}
+		if found {
+			return output.GuestRow{}, fmt.Errorf("%w: name %s exists as VM and LXC", ErrAmbiguous, name)
+		}
+		result, err = svc.Get(ctx, ref.VMID, ref.Node)
+		if err != nil {
+			return output.GuestRow{}, err
+		}
+		found = true
+	}
+	if !found {
+		return output.GuestRow{}, fmt.Errorf("%w: guest %s", ErrNotFound, name)
+	}
+	return result, nil
+}

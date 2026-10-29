@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"github.com/urfave/cli/v2"
+	"strconv"
 
 	"github.com/lz-wang/pve-cli/v3/internal/output"
 	"github.com/lz-wang/pve-cli/v3/internal/pve"
@@ -28,6 +29,9 @@ func guestAggregateListCommand(deps Dependencies) *cli.Command {
 		Usage: "List VM/QEMU and LXC guests",
 		Flags: append(
 			[]cli.Flag{
+				&cli.StringFlag{Name: "name", Usage: "name substring"},
+				&cli.StringFlag{Name: "sort", Value: "vmid", Usage: "vmid,name,node,status,memory,cpu"},
+				&cli.BoolFlag{Name: "desc"},
 				&cli.StringFlag{Name: "node", Usage: "PVE node name"},
 				&cli.StringFlag{Name: "type", Value: "all", Usage: "guest type: all,vm,lxc"},
 				&cli.StringFlag{Name: "status", Usage: "guest status filter, for example running or stopped"},
@@ -66,6 +70,10 @@ func guestAggregateListCommand(deps Dependencies) *cli.Command {
 			if err != nil {
 				return err
 			}
+			rows, err = pve.QueryGuests(rows, c.String("name"), c.String("status"), c.String("sort"), c.Bool("desc"))
+			if err != nil {
+				return err
+			}
 			return output.WriteGuestRowsWithKind(rt.stdout, rt.format, rows)
 		},
 	}
@@ -78,6 +86,7 @@ func guestAggregateGetCommand(deps Dependencies) *cli.Command {
 		ArgsUsage: "VMID",
 		Flags: append(
 			[]cli.Flag{
+				&cli.StringFlag{Name: "name", Usage: "exact name, including numeric names"},
 				&cli.StringFlag{Name: "node", Usage: "PVE node name"},
 				&cli.StringFlag{Name: "type", Value: "auto", Usage: "guest type: auto,vm,lxc"},
 			},
@@ -88,10 +97,7 @@ func guestAggregateGetCommand(deps Dependencies) *cli.Command {
 				return err
 			}
 
-			vmid, err := parseVMID(c.Args().First())
-			if err != nil {
-				return err
-			}
+			vmid, parseErr := strconv.Atoi(c.Args().First())
 			guestType, err := pve.ParseGuestGetType(c.String("type"))
 			if err != nil {
 				return err
@@ -103,10 +109,17 @@ func guestAggregateGetCommand(deps Dependencies) *cli.Command {
 			}
 
 			svc := pve.NewGuestAggregateService(rt.backend, rt.logger, rt.verbose)
-			row, err := svc.Get(c.Context, vmid, pve.GuestGetOptions{
-				Node: c.String("node"),
-				Type: guestType,
-			})
+			var row output.GuestRow
+			options := pve.GuestGetOptions{Node: c.String("node"), Type: guestType}
+			if parseErr != nil || c.String("name") != "" {
+				name := c.Args().First()
+				if c.String("name") != "" {
+					name = c.String("name")
+				}
+				row, err = svc.GetNamed(c.Context, name, options)
+			} else {
+				row, err = svc.Get(c.Context, vmid, options)
+			}
 			if err != nil {
 				return err
 			}

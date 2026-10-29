@@ -39,6 +39,19 @@ func newGuestCommand(kind, usage string, deps Dependencies) *cli.Command {
 		guestRestoreCommand(kind, deps),
 		guestDeleteCommand(kind, deps),
 	)
+	var addName func([]*cli.Command)
+	addName = func(items []*cli.Command) {
+		for _, item := range items {
+			if len(item.Subcommands) > 0 {
+				addName(item.Subcommands)
+				continue
+			}
+			if item.ArgsUsage == "VMID" || item.ArgsUsage == "VMID SNAPSHOT" {
+				item.Flags = append(item.Flags, &cli.StringFlag{Name: "name", Usage: "exact guest name (including numeric names)"})
+			}
+		}
+	}
+	addName(commands)
 	return &cli.Command{
 		Name:        kind,
 		Usage:       usage,
