@@ -1,8 +1,10 @@
 package config
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -20,7 +22,7 @@ type Config struct {
 type Profile struct {
 	Endpoint           string `yaml:"endpoint,omitempty"`
 	TokenID            string `yaml:"token_id,omitempty"`
-	TokenSecret        string `yaml:"token_secret,omitempty"`
+	TokenSecretFile    string `yaml:"token_secret_file,omitempty"`
 	TokenSecretEnv     string `yaml:"token_secret_env,omitempty"`
 	InsecureSkipVerify bool   `yaml:"insecure_skip_verify,omitempty"`
 	Timeout            string `yaml:"timeout,omitempty"`
@@ -53,8 +55,13 @@ func Load(path string) (*Config, error) {
 	if len(data) == 0 {
 		return cfg, nil
 	}
-	if err := yaml.Unmarshal(data, cfg); err != nil {
+	decoder := yaml.NewDecoder(bytes.NewReader(data))
+	decoder.KnownFields(true)
+	if err := decoder.Decode(cfg); err != nil {
 		return nil, fmt.Errorf("parse config %s: %w", resolved, err)
+	}
+	if err := decoder.Decode(new(any)); err != io.EOF {
+		return nil, fmt.Errorf("config must contain one YAML document")
 	}
 	cfg.ensure()
 	return cfg, nil
@@ -89,11 +96,8 @@ func Save(path string, cfg *Config) error {
 	if err := os.MkdirAll(filepath.Dir(resolved), 0o700); err != nil {
 		return fmt.Errorf("create config dir: %w", err)
 	}
-	if err := os.Chmod(resolved, 0o600); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("set config permissions %s: %w", resolved, err)
-	}
-	if err := os.WriteFile(resolved, data, 0o600); err != nil {
-		return fmt.Errorf("write config %s: %w", resolved, err)
+	if err := atomicWrite(resolved, data); err != nil {
+		return fmt.Errorf("write config: %w", err)
 	}
 	return nil
 }
@@ -164,6 +168,9 @@ func (c *Config) SetProfile(name string, profile Profile) error {
 	if err := validateProfile(profile); err != nil {
 		return err
 	}
+	if profile.TokenSecretFile != "" && profile.TokenSecretEnv != "" {
+		return errors.New("choose one credential source")
+	}
 	c.ensure()
 	c.Profiles[name] = profile
 	if c.CurrentProfile == "" {
@@ -220,11 +227,14 @@ func (c *Config) SelectProfile(name string) (string, Profile, error) {
 }
 
 func ResolveTokenSecret(profile Profile) (string, error) {
-	if profile.TokenSecret != "" {
-		return profile.TokenSecret, nil
+	if profile.TokenSecretFile != "" && profile.TokenSecretEnv != "" {
+		return "", errors.New("choose token_secret_file or token_secret_env")
+	}
+	if profile.TokenSecretFile != "" {
+		return ReadCredential(profile.TokenSecretFile)
 	}
 	if profile.TokenSecretEnv == "" {
-		return "", errors.New("token_secret or token_secret_env is required")
+		return "", errors.New("token_secret_file or token_secret_env is required")
 	}
 	secret := os.Getenv(profile.TokenSecretEnv)
 	if secret == "" {
@@ -240,8 +250,8 @@ func validateProfile(profile Profile) error {
 	if profile.TokenID == "" {
 		return errors.New("token-id is required")
 	}
-	if profile.TokenSecret == "" && profile.TokenSecretEnv == "" {
-		return errors.New("token-secret or token-secret-env is required")
+	if profile.TokenSecretFile == "" && profile.TokenSecretEnv == "" {
+		return errors.New("token-secret-file or token-secret-env is required")
 	}
 	return nil
 }

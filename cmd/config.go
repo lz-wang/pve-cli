@@ -24,7 +24,7 @@ func newConfigCommand(deps Dependencies) *cli.Command {
 			newConfigListCommand(deps),
 			newConfigShowCommand(deps),
 			newConfigAddCommand(deps),
-			newConfigSetCommand(),
+			newConfigSetCommand(deps),
 			newConfigUseCommand(),
 		},
 	}
@@ -102,7 +102,7 @@ func newConfigShowCommand(deps Dependencies) *cli.Command {
 				profile := cfg.Profiles[name]
 				rows = append(rows, output.ConfigProfileRow{
 					Name: name, Current: name == cfg.CurrentProfile, Endpoint: profile.Endpoint,
-					TokenID: profile.TokenID, TokenSecret: summarizeTokenSecret(profile.TokenSecret),
+					TokenID: profile.TokenID, TokenSecretFile: profile.TokenSecretFile,
 					TokenSecretEnv: profile.TokenSecretEnv, InsecureSkipVerify: profile.InsecureSkipVerify,
 					Timeout: profile.Timeout, DefaultOutput: profile.DefaultOutput,
 				})
@@ -115,7 +115,7 @@ func newConfigShowCommand(deps Dependencies) *cli.Command {
 	}
 }
 
-func newConfigSetCommand() *cli.Command {
+func newConfigSetCommand(deps Dependencies) *cli.Command {
 	return &cli.Command{
 		Name:      "set",
 		Usage:     "Create or replace a profile",
@@ -123,8 +123,9 @@ func newConfigSetCommand() *cli.Command {
 		Flags: []cli.Flag{
 			&cli.StringFlag{Name: "endpoint", Usage: "PVE API endpoint, for example https://pve.lan:8006/api2/json"},
 			&cli.StringFlag{Name: "token-id", Usage: "PVE API token id, for example automation@pve!pve"},
-			&cli.StringFlag{Name: "token-secret", Usage: "PVE API token secret stored in plaintext; takes precedence over --token-secret-env"},
-			&cli.StringFlag{Name: "token-secret-env", Usage: "environment variable containing the PVE API token secret; used when --token-secret is empty"},
+			&cli.StringFlag{Name: "token-secret-file", Usage: "private credential file"},
+			&cli.BoolFlag{Name: "token-secret-stdin", Usage: "read token from stdin and store in a private file"},
+			&cli.StringFlag{Name: "token-secret-env", Usage: "environment variable containing the PVE API token secret"},
 			&cli.BoolFlag{Name: "insecure", Usage: "skip TLS certificate verification for this profile"},
 			&cli.StringFlag{Name: "timeout", Value: "30s", Usage: "PVE API request timeout for this profile"},
 			&cli.StringFlag{Name: "default-output", Value: output.FormatTable, Usage: "default output format: table,json,yaml"},
@@ -144,9 +145,13 @@ func newConfigSetCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("config error: %w", err)
 			}
+			secretFile, err := configCredentialSource(c, deps)
+			if err != nil {
+				return err
+			}
 			if err := cfg.SetProfile(c.Args().First(), config.Profile{
 				Endpoint: c.String("endpoint"), TokenID: c.String("token-id"),
-				TokenSecret: c.String("token-secret"), TokenSecretEnv: c.String("token-secret-env"),
+				TokenSecretFile: secretFile, TokenSecretEnv: c.String("token-secret-env"),
 				InsecureSkipVerify: c.Bool("insecure"), Timeout: c.String("timeout"), DefaultOutput: defaultOutput,
 			}); err != nil {
 				return fmt.Errorf("config error: %w", err)
@@ -184,17 +189,6 @@ func configProfileNames(cfg *config.Config) []string {
 	}
 	sort.Strings(names)
 	return names
-}
-
-func summarizeTokenSecret(secret string) string {
-	if secret == "" {
-		return ""
-	}
-	chars := []rune(secret)
-	if len(chars) <= 6 {
-		return "*****"
-	}
-	return string(chars[:3]) + "*****" + string(chars[len(chars)-3:])
 }
 
 func writeConfigPath(w io.Writer, path string) error {

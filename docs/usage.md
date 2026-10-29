@@ -756,3 +756,12 @@ last. `get` and lifecycle commands accept exact names; ambiguous names fail
 with candidate node/VMID pairs. Numeric positionals always mean VMIDs;
 `get --name 123` selects a numeric name. Clone's `--name` names the new VM;
 its source can be an ID or nonnumeric exact name.
+
+### v3 credential sources
+
+`config set NAME` requires exactly one of `--token-secret-env VAR`,
+`--token-secret-file PATH`, or `--token-secret-stdin`. Credential files must
+be regular private files (0600); managed files live in a 0700 credentials
+directory. Standard-input and interactive tokens are written atomically to
+independent files, with only their paths stored in YAML. Configuration
+rejects unknown fields and never loads legacy plaintext `token_secret`.

@@ -14,7 +14,7 @@ type ConfigProfileRow struct {
 	Current            bool
 	Endpoint           string
 	TokenID            string
-	TokenSecret        string
+	TokenSecretFile    string
 	TokenSecretEnv     string
 	InsecureSkipVerify bool
 	Timeout            string
@@ -57,7 +57,7 @@ func WriteConfigProfiles(w io.Writer, rows []ConfigProfileRow) error {
 			{"Current", formatBool(row.Current)},
 			{"Endpoint", row.Endpoint},
 			{"Token ID", row.TokenID},
-			{"Token secret", row.TokenSecret},
+			{"Token secret file", row.TokenSecretFile},
 			{"Token secret env", row.TokenSecretEnv},
 			{"Skip TLS verify", formatBool(row.InsecureSkipVerify)},
 			{"Timeout", row.Timeout},

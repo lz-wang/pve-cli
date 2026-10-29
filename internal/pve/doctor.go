@@ -202,16 +202,16 @@ func (r *DoctorResult) checkProfileFields(profile config.Profile) bool {
 	if profile.TokenID == "" {
 		missing = append(missing, "token_id")
 	}
-	if profile.TokenSecret == "" && profile.TokenSecretEnv == "" {
-		missing = append(missing, "token_secret or token_secret_env")
+	if profile.TokenSecretFile == "" && profile.TokenSecretEnv == "" {
+		missing = append(missing, "token_secret_file or token_secret_env")
 	}
 	if len(missing) > 0 {
 		r.add("PROFILE_FIELDS", output.DoctorStatusFail, "missing "+strings.Join(missing, ", "))
 		return false
 	}
 	credentialField := "token_secret_env"
-	if profile.TokenSecret != "" {
-		credentialField = "token_secret"
+	if profile.TokenSecretFile != "" {
+		credentialField = "token_secret_file"
 	}
 	r.add("PROFILE_FIELDS", output.DoctorStatusOK, "endpoint, token_id, "+credentialField)
 	return true
@@ -223,9 +223,9 @@ func (r *DoctorResult) checkTokenSecret(profile config.Profile) (string, bool) {
 		r.add("TOKEN_SECRET_ENV", output.DoctorStatusFail, err.Error())
 		return "", false
 	}
-	if profile.TokenSecret != "" {
-		r.add("TOKEN_SECRET", output.DoctorStatusOK, "token_secret is configured")
-		r.add("TOKEN_SECRET_ENV", output.DoctorStatusSkip, "using token_secret from config")
+	if profile.TokenSecretFile != "" {
+		r.add("TOKEN_SECRET", output.DoctorStatusOK, "token_secret_file is configured")
+		r.add("TOKEN_SECRET_ENV", output.DoctorStatusSkip, "using token_secret_file from config")
 		return secret, true
 	}
 	r.add("TOKEN_SECRET_ENV", output.DoctorStatusOK, fmt.Sprintf("%s is set", profile.TokenSecretEnv))

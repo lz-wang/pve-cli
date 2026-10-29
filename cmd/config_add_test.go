@@ -46,7 +46,7 @@ func TestConfigAddProfile(t *testing.T) {
 				t.Fatal(err)
 			}
 			profile := cfg.Profiles["lab"]
-			if cfg.CurrentProfile != tc.wantCurrent || profile.Endpoint != "https://lab.example:8006/api2/json" || profile.TokenID != "automation@pve!lab" || profile.TokenSecret != "fake-add-token" || profile.Timeout != "1m0s" || profile.DefaultOutput != "table" {
+			if cfg.CurrentProfile != tc.wantCurrent || profile.Endpoint != "https://lab.example:8006/api2/json" || profile.TokenID != "automation@pve!lab" || storedTestSecret(t, profile) != "fake-add-token" || profile.Timeout != "1m0s" || profile.DefaultOutput != "table" {
 				t.Fatal("add did not save the requested profile options and current selection")
 			}
 			if tc.existing && cfg.Profiles["home"] != original {
@@ -152,7 +152,7 @@ func TestConfigAddReloadsConfigBeforeSaving(t *testing.T) {
 			if saved.Profiles[concurrentName] != concurrent || saved.CurrentProfile != concurrentName {
 				t.Fatal("add must preserve profiles and current selection changed during input")
 			}
-			if !duplicate && saved.Profiles["lab"].TokenSecret != "fake-add-token" {
+			if !duplicate && storedTestSecret(t, saved.Profiles["lab"]) != "fake-add-token" {
 				t.Fatal("add must append the new profile to reloaded config")
 			}
 		})

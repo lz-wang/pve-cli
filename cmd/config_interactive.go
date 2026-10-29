@@ -38,7 +38,7 @@ func newConfigAddCommand(deps Dependencies) *cli.Command {
 			}
 			prompt, interactive := newConfigPrompter(c, deps)
 			if !interactive {
-				return errors.New("config add requires a terminal; use pve config set NAME --endpoint URL --token-id USER@REALM!TOKEN --token-secret SECRET for noninteractive setup (with the same --config path)")
+				return errors.New("config add requires a terminal; use pve config set NAME --endpoint URL --token-id USER@REALM!TOKEN --token-secret-env PVE_TOKEN_SECRET for noninteractive setup (with the same --config path)")
 			}
 			if err := prompt.addProfile(c, path, cfg, missing, true); errors.Is(err, io.EOF) {
 				_, err = fmt.Fprintln(c.App.ErrWriter, "\nProfile addition cancelled; no config file was changed.")
@@ -60,7 +60,7 @@ func guideConfigInit(c *cli.Context, deps Dependencies) error {
 	}
 	prompt, interactive := newConfigPrompter(c, deps)
 	if !interactive {
-		_, err := fmt.Fprintln(c.App.ErrWriter, "Run pve config add in a terminal for guided setup, or use pve config set NAME --endpoint URL --token-id USER@REALM!TOKEN --token-secret SECRET (with the same --config path).")
+		_, err := fmt.Fprintln(c.App.ErrWriter, "Run pve config add in a terminal for guided setup, or use pve config set NAME --endpoint URL --token-id USER@REALM!TOKEN --token-secret-env PVE_TOKEN_SECRET (with the same --config path).")
 		return err
 	}
 	if err := prompt.initialize(c, path); errors.Is(err, io.EOF) {
@@ -137,16 +137,17 @@ func (p *configPrompter) addProfile(c *cli.Context, path string, cfg *config.Con
 	}
 	source, err := p.ask("Token source (token/env)", "token", false, func(value string) error {
 		if value != "token" && value != "env" {
-			return errors.New("enter token for plaintext storage or env for an environment reference")
+			return errors.New("enter token for private credential file storage or env for an environment reference")
 		}
 		return nil
 	})
 	if err != nil {
 		return err
 	}
+	var tokenSecret string
 	profile := config.Profile{Endpoint: endpoint, TokenID: tokenID, Timeout: "30s", DefaultOutput: output.FormatTable}
 	if source == "token" {
-		profile.TokenSecret, err = p.ask("Token secret (stored in plaintext)", "", true, nil)
+		tokenSecret, err = p.ask("Token secret (stored in a private credential file)", "", true, nil)
 	} else {
 		profile.TokenSecretEnv, err = p.ask("Token-secret environment variable name", "", false, nil)
 	}
@@ -184,6 +185,12 @@ func (p *configPrompter) addProfile(c *cli.Context, path string, cfg *config.Con
 		}
 		if _, exists := cfg.Profiles[name]; exists {
 			return fmt.Errorf("profile %q was created during setup; the existing profile was kept", name)
+		}
+	}
+	if tokenSecret != "" {
+		profile.TokenSecretFile, err = config.StoreCredential(path, tokenSecret)
+		if err != nil {
+			return err
 		}
 	}
 	if err := cfg.InitProfile(config.InitOptions{Name: name, Profile: profile, Use: use}); err != nil {

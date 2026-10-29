@@ -103,54 +103,14 @@ func TestDoctorTokenEnvEmpty(t *testing.T) {
 	}
 }
 
-func TestDoctorPlaintextToken(t *testing.T) {
-	cases := []struct {
-		name    string
-		offline bool
-		envName string
-	}{
-		{name: "offline", offline: true},
-		{name: "online"},
-		{name: "plaintext wins over empty environment", envName: "PVE_DOCTOR_EMPTY_TOKEN"},
-	}
-	t.Setenv("PVE_DOCTOR_EMPTY_TOKEN", "")
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			profile := validDoctorProfile()
-			profile.TokenSecret = "fake-plaintext-doctor-token"
-			profile.TokenSecretEnv = tc.envName
-			called := false
-			service := NewDoctorService(func(_ config.Profile, options ClientOptions) (Backend, error) {
-				called = true
-				if options.TokenSecret != profile.TokenSecret {
-					t.Fatal("doctor backend did not receive the plaintext token")
-				}
-				return doctorBackend{nodes: []output.NodeRow{{Name: "pve1"}}}, nil
-			})
-			result := service.Run(context.Background(), DoctorOptions{ConfigPath: writeDoctorProfile(t, profile), Offline: tc.offline})
-			requireDoctorRow(t, result, "PROFILE_FIELDS", output.DoctorStatusOK)
-			requireDoctorRow(t, result, "TOKEN_SECRET", output.DoctorStatusOK)
-			requireDoctorRow(t, result, "TOKEN_SECRET_ENV", output.DoctorStatusSkip)
-			if result.Failed || called == tc.offline {
-				t.Fatalf("failed = %v, backend called = %v, offline = %v", result.Failed, called, tc.offline)
-			}
-			for _, row := range result.Rows {
-				if strings.Contains(row.Message, profile.TokenSecret) {
-					t.Fatal("doctor output contains the token value")
-				}
-			}
-		})
-	}
-}
-
 func TestDoctorRedactsTokenFromBackendErrors(t *testing.T) {
 	for _, stage := range []string{"factory", "nodes"} {
 		t.Run(stage, func(t *testing.T) {
 			profile := validDoctorProfile()
-			profile.TokenSecret = "fake-doctor-error-token"
-			profile.TokenSecretEnv = ""
+			t.Setenv("PVE_DOCTOR_SECRET", "fake-doctor-error-token")
+			profile.TokenSecretEnv = "PVE_DOCTOR_SECRET"
 			service := NewDoctorService(func(config.Profile, ClientOptions) (Backend, error) {
-				err := errors.New("request failed with " + profile.TokenSecret)
+				err := errors.New("request failed with " + "fake-doctor-error-token")
 				if stage == "factory" {
 					return nil, err
 				}
@@ -162,7 +122,7 @@ func TestDoctorRedactsTokenFromBackendErrors(t *testing.T) {
 				t.Fatal("backend error token was not redacted")
 			}
 			for _, row := range result.Rows {
-				if strings.Contains(row.Message, profile.TokenSecret) {
+				if strings.Contains(row.Message, "fake-doctor-error-token") {
 					t.Fatal("doctor output contains the token value")
 				}
 			}

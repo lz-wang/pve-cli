@@ -63,7 +63,7 @@ func TestConfigShowGuidedInitialization(t *testing.T) {
 			if cfg.CurrentProfile != tc.profile || profile.Endpoint != "https://pve.example:8006/api2/json" || profile.TokenID != "automation@pve!test" {
 				t.Fatal("guided initialization did not save the requested profile")
 			}
-			if profile.TokenSecret != tc.secret || profile.TokenSecretEnv != tc.env || profile.InsecureSkipVerify != tc.insecure || profile.Timeout != tc.timeout || profile.DefaultOutput != tc.output {
+			if storedTestSecret(t, profile) != tc.secret || profile.TokenSecretEnv != tc.env || profile.InsecureSkipVerify != tc.insecure || profile.Timeout != tc.timeout || profile.DefaultOutput != tc.output {
 				t.Fatal("guided initialization did not save the requested profile options")
 			}
 			if stdout.Len() != 0 || !strings.Contains(stderr.String(), "No config file found") || !strings.Contains(stderr.String(), "Config file created at "+path) {
@@ -139,7 +139,7 @@ func TestConfigShowKeepsExistingFileCreatedDuringSetup(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	created := false
 	writer := configShowTestWriter(func(data []byte) (int, error) {
-		if !created && strings.Contains(string(data), "Token secret (stored in plaintext)") {
+		if !created && strings.Contains(string(data), "Token secret (stored in a private credential file)") {
 			if err := os.WriteFile(path, []byte(original), 0o600); err != nil {
 				return 0, err
 			}

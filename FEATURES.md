@@ -471,3 +471,4 @@ unless `--yes` is passed. Bulk operations require typing `yes` unless
 - `task cancel UPID --yes` requests cancellation of a running task; inspect it again to verify termination.
 - Bulk lifecycle commands use 1–8 workers and default to at most 20 targets (`--max-targets`); all mutations require confirmation or `--yes`.
 - VM/LXC commands accept exact names, with explicit `--name` for numeric names; lists support name/status filters and six stable sort keys.
+- Profiles reference `token_secret_env` or a private `token_secret_file`; `config set --token-secret-stdin` and interactive hidden input store credentials separately.

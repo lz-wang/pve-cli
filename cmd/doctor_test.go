@@ -9,69 +9,7 @@ import (
 
 	"github.com/lz-wang/pve-cli/v3/internal/config"
 	"github.com/lz-wang/pve-cli/v3/internal/output"
-	"github.com/lz-wang/pve-cli/v3/internal/pve"
 )
-
-func TestConfigSetWithPlaintextToken(t *testing.T) {
-	cfgPath := filepath.Join(t.TempDir(), "config.yaml")
-	var stdout, stderr bytes.Buffer
-	deps := Dependencies{
-		Stdout: &stdout,
-		Stderr: &stderr,
-		BackendFactory: func(_ config.Profile, options pve.ClientOptions) (pve.Backend, error) {
-			if options.TokenSecret != "fake-plaintext-token" {
-				t.Fatal("backend did not receive the plaintext token")
-			}
-			return &commandBackend{nodes: []output.NodeRow{{Name: "pve1"}}}, nil
-		},
-	}
-	if err := RunWithDependencies([]string{
-		"pve", "--config", cfgPath, "config", "set", "home",
-		"--endpoint", "https://pve.example:8006/api2/json",
-		"--token-id", "automation@pve!test",
-		"--token-secret", "fake-plaintext-token",
-	}, "test", deps); err != nil {
-		t.Fatalf("configure: %v", err)
-	}
-	cfg, err := config.Load(cfgPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	profile := cfg.Profiles["home"]
-	if profile.TokenSecret != "fake-plaintext-token" || profile.TokenSecretEnv != "" {
-		t.Fatal("config did not store the plaintext token directly")
-	}
-	stdout.Reset()
-	if err := RunWithDependencies([]string{"pve", "--config", cfgPath, "config", "show"}, "test", deps); err != nil {
-		t.Fatalf("config show: %v", err)
-	}
-	shown := stdout.String()
-	for _, want := range []string{"FIELD", "VALUE", "Profile", "Current", "Endpoint", "Token ID", "Token secret", "Token secret env", "Skip TLS verify", "Timeout", "Default output", "fak*****ken"} {
-		if !strings.Contains(shown, want) {
-			t.Fatalf("config show missing %q:\n%s", want, shown)
-		}
-	}
-	if strings.Contains(shown+stderr.String(), "fake-plaintext-token") {
-		t.Fatal("config show should summarize the stored plaintext field")
-	}
-	if !strings.HasSuffix(shown, "Config file: "+cfgPath+"\n") {
-		t.Fatalf("config show should end with its absolute path:\n%s", shown)
-	}
-	stdout.Reset()
-	if err := RunWithDependencies([]string{"pve", "--config", cfgPath, "node", "ls"}, "test", deps); err != nil {
-		t.Fatalf("runtime: %v", err)
-	}
-	if !strings.Contains(stdout.String(), "pve1") {
-		t.Fatal("node listing did not use the configured backend")
-	}
-	stdout.Reset()
-	if err := RunWithDependencies([]string{"pve", "--config", cfgPath, "doctor", "--offline", "-o", "json"}, "test", deps); err != nil {
-		t.Fatalf("doctor: %v", err)
-	}
-	if !strings.Contains(stdout.String(), "TOKEN_SECRET") || strings.Contains(stdout.String()+stderr.String(), "fake-plaintext-token") {
-		t.Fatal("doctor should report the credential source without its value")
-	}
-}
 
 func TestConfigSetRequiresTokenSource(t *testing.T) {
 	cfgPath := filepath.Join(t.TempDir(), "config.yaml")
@@ -80,7 +18,7 @@ func TestConfigSetRequiresTokenSource(t *testing.T) {
 		"--endpoint", "https://pve.example:8006/api2/json",
 		"--token-id", "automation@pve!test",
 	}, "test", Dependencies{Stdout: &bytes.Buffer{}, Stderr: &bytes.Buffer{}})
-	if err == nil || !strings.Contains(err.Error(), "token-secret or token-secret-env is required") {
+	if err == nil || !strings.Contains(err.Error(), "token-secret-file or token-secret-env is required") {
 		t.Fatalf("missing credential source: %v", err)
 	}
 	if _, err := os.Stat(cfgPath); !os.IsNotExist(err) {
@@ -142,11 +80,11 @@ func TestConfigSetExistingProfileKeepsCurrent(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfg.Profiles["lab"] = config.Profile{
-		Endpoint:      "https://old.example:8006/api2/json",
-		TokenID:       "root@pam!old",
-		TokenSecret:   "old-placeholder-token",
-		Timeout:       "10s",
-		DefaultOutput: "json",
+		Endpoint:        "https://old.example:8006/api2/json",
+		TokenID:         "root@pam!old",
+		TokenSecretFile: "old-placeholder-token",
+		Timeout:         "10s",
+		DefaultOutput:   "json",
 	}
 	if err := config.Save(cfgPath, cfg); err != nil {
 		t.Fatal(err)
@@ -169,7 +107,7 @@ func TestConfigSetExistingProfileKeepsCurrent(t *testing.T) {
 		t.Fatal("updating lab should preserve the current home profile")
 	}
 	profile := cfg.Profiles["lab"]
-	if profile.Endpoint != "https://new.example:8006/api2/json" || profile.TokenID != "root@pam!new" || profile.TokenSecretEnv != "PVE_LAB_TOKEN" || profile.TokenSecret != "" {
+	if profile.Endpoint != "https://new.example:8006/api2/json" || profile.TokenID != "root@pam!new" || profile.TokenSecretEnv != "PVE_LAB_TOKEN" || profile.TokenSecretFile != "" {
 		t.Fatalf("updated lab = %#v", profile)
 	}
 	if profile.Timeout != "30s" || profile.DefaultOutput != "table" {
@@ -247,7 +185,7 @@ func TestConfigUseCommandSwitchesProfile(t *testing.T) {
 	originalLab := config.Profile{
 		Endpoint:           "https://lab.example:8006/api2/json",
 		TokenID:            "root@pam!lab",
-		TokenSecret:        "lab-placeholder-token",
+		TokenSecretFile:    "lab-placeholder-token",
 		TokenSecretEnv:     "PVE_LAB_TOKEN",
 		InsecureSkipVerify: true,
 		Timeout:            "45s",
@@ -280,7 +218,7 @@ func TestConfigSetDoesNotSwitchCurrentProfile(t *testing.T) {
 		"pve", "--config", cfgPath, "config", "set", "lab",
 		"--endpoint", "https://lab.example:8006/api2/json",
 		"--token-id", "root@pam!lab",
-		"--token-secret", "lab-placeholder-token",
+		"--token-secret-env", "PVE_LAB_TOKEN",
 	}, "test", Dependencies{Stdout: &bytes.Buffer{}, Stderr: &bytes.Buffer{}})
 	if err != nil {
 		t.Fatalf("set: %v", err)
@@ -292,21 +230,6 @@ func TestConfigSetDoesNotSwitchCurrentProfile(t *testing.T) {
 	if cfg.CurrentProfile != "home" {
 		t.Fatal("set should not change the current profile")
 	}
-}
-
-func TestRemovedConfigNamesAreRejected(t *testing.T) {
-	if err := RunWithDependencies([]string{"pve", "--context", "home", "version"}, "test", Dependencies{
-		Stdout: &bytes.Buffer{},
-		Stderr: &bytes.Buffer{},
-	}); err == nil {
-		t.Fatal("expected old --context flag to be rejected")
-	}
-
-	// Removed config subcommands (view, init, set-profile, current-profile,
-	// use-profile, set-context, use-context, current-context, update) are no
-	// longer registered at all; the CLI framework rejects them with its
-	// "No help topic" error and exit code 3, which calls os.Exit from inside
-	// urfave/cli and therefore cannot be exercised in-process here.
 }
 
 func TestDoctorOfflineCommand(t *testing.T) {
