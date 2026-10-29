@@ -24,7 +24,7 @@ func newGuestCommand(kind, usage string, deps Dependencies) *cli.Command {
 		guestControlCommand(kind, "stop", "Stop a guest immediately", deps),
 	}
 	if kind == "vm" {
-		commands = append(commands, newVMAgentCommand(deps), vmCreateCommand(deps))
+		commands = append(commands, newVMAgentCommand(deps), vmCreateCommand(deps), newVMDiskCommand(deps))
 	}
 	if kind == "lxc" {
 		commands = append(commands, newLXCTemplateCommand(deps), lxcCreateCommand(deps))

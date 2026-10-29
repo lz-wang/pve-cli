@@ -82,3 +82,30 @@ func TestCreateVMHTTPContract(t *testing.T) {
 		t.Fatal(e)
 	}
 }
+
+func TestDiskUnlinkHTTPNeverForcesAttachedRemoval(t *testing.T) {
+	for _, slot := range []string{"scsi1", "unused0"} {
+		t.Run(slot, func(t *testing.T) {
+			calls := 0
+			b := contractBackend(t, func(w http.ResponseWriter, r *http.Request) {
+				calls++
+				if r.Method != "PUT" || r.URL.Path != "/nodes/n/qemu/100/unlink" {
+					t.Errorf("%s %s", r.Method, r.URL.Path)
+				}
+				var body map[string]any
+				if e := json.NewDecoder(r.Body).Decode(&body); e != nil {
+					t.Error(e)
+				}
+				if body["idlist"] != slot || body["force"] != false || len(body) != 2 {
+					t.Errorf("unsafe unlink params: %+v", body)
+				}
+				if _, e := w.Write([]byte(`{"data":null}`)); e != nil {
+					t.Error(e)
+				}
+			})
+			if e := b.UnlinkDisk(context.Background(), "n", 100, slot); e != nil || calls != 1 {
+				t.Fatalf("%v %d", e, calls)
+			}
+		})
+	}
+}
