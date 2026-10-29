@@ -14,6 +14,15 @@ import (
 // contract violation this test guards against. Keep the list in sync when a
 // command gains or loses structured output.
 var structuredOutputCommands = map[string]bool{
+	"vm start":     true,
+	"vm shutdown":  true,
+	"vm reboot":    true,
+	"vm stop":      true,
+	"lxc start":    true,
+	"lxc shutdown": true,
+	"lxc reboot":   true,
+	"lxc stop":     true,
+
 	"status":             true,
 	"check":              true,
 	"doctor":             true,

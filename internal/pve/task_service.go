@@ -2,9 +2,9 @@ package pve
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
-	"math"
 	"sort"
 	"strings"
 	"time"
@@ -149,16 +149,10 @@ func (s *TaskService) Wait(ctx context.Context, upid string, timeout time.Durati
 		return output.TaskRow{}, err
 	}
 
-	if timeout <= 0 {
-		timeout = 5 * time.Minute
-	}
-	seconds := int(math.Ceil(timeout.Seconds()))
-	if seconds <= 0 {
-		seconds = 300
-	}
-
-	if err := handle.WaitFor(ctx, seconds); err != nil {
-		return output.TaskRow{}, fmt.Errorf("task %s wait failed: %w", info.UPID, err)
+	runner := TaskRunner{Wait: true, WaitTimeout: timeout}
+	result, waitErr := runner.Execute(ctx, handle)
+	if errors.Is(waitErr, ErrTaskTimeout) {
+		return output.TaskRow{UPID: info.UPID, Node: info.Node, Type: info.Type, ID: info.ID, User: info.User, Status: result.Status, ExitStatus: handle.ExitStatus()}, waitErr
 	}
 
 	row, rowErr := s.backend.Task(ctx, info.Node, info.UPID)
@@ -174,7 +168,10 @@ func (s *TaskService) Wait(ctx context.Context, upid string, timeout time.Durati
 		}
 	}
 	if handle.Failed() {
-		return row, fmt.Errorf("task %s failed: %s", info.UPID, exitStatusOrUnknown(handle.ExitStatus()))
+		return row, fmt.Errorf("%w: task %s failed: %s", ErrTaskFailed, info.UPID, exitStatusOrUnknown(handle.ExitStatus()))
+	}
+	if rowErr != nil {
+		return row, fmt.Errorf("%w: task %s final status: %w", ErrTaskTimeout, info.UPID, rowErr)
 	}
 	return row, nil
 }

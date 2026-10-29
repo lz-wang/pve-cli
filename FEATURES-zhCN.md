@@ -440,3 +440,5 @@ rollback 和 delete prompt 要求输入精确的 snapshot name，除非传入 `-
 批量操作要求输入 `yes`，除非传入 `--yes`。
 
 `--yes` 会跳过本地确认 prompt。
+
+- v3 修改操作区分已提交、成功、失败和未知结果；等待超时不会取消远端任务。

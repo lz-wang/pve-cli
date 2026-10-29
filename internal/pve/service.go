@@ -134,7 +134,7 @@ func (s *GuestService) Clone(ctx context.Context, vmid int, node string, options
 		return CloneResult{}, err
 	}
 	if err := s.tasks.Handle(ctx, task); err != nil {
-		return CloneResult{}, err
+		return result, err
 	}
 	return result, nil
 }
@@ -151,7 +151,11 @@ func (s *GuestService) Config(ctx context.Context, vmid int, node string, values
 	if err != nil {
 		return err
 	}
-	return s.tasks.Handle(ctx, task)
+	runner := s.tasks
+	runner.Resource = s.kind
+	runner.VMID = vmid
+	runner.Node = guest.Row().Node
+	return runner.Handle(ctx, task)
 }
 
 func (s *GuestService) Delete(ctx context.Context, vmid int, node string) error {
@@ -228,7 +232,11 @@ func (s *GuestService) run(ctx context.Context, vmid int, node string, action fu
 	if err != nil {
 		return err
 	}
-	return s.tasks.Handle(ctx, task)
+	runner := s.tasks
+	runner.Resource = s.kind
+	runner.VMID = vmid
+	runner.Node = guest.Row().Node
+	return runner.Handle(ctx, task)
 }
 
 func (s *GuestService) resolve(ctx context.Context, vmid int, node string) (Guest, error) {

@@ -61,10 +61,12 @@ func guestCloneCommand(kind string, deps Dependencies) *cli.Command {
 				Description: c.String("description"),
 				Format:      c.String("format"),
 			})
-			if err != nil {
-				return err
+			if err == nil || result.Task != "" {
+				if e := output.WriteCloneResult(rt.stdout, rt.format, result); e != nil {
+					return e
+				}
 			}
-			return output.WriteCloneResult(rt.stdout, rt.format, result)
+			return err
 		},
 	}
 }

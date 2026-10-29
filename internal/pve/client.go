@@ -32,7 +32,6 @@ func NewProxmoxBackend(profile config.Profile, opts ClientOptions) (Backend, err
 	clientOpts := []proxmox.Option{
 		proxmox.WithAPIToken(profile.TokenID, opts.TokenSecret),
 		proxmox.WithTimeout(opts.Timeout),
-		proxmox.WithRetry(),
 	}
 	if opts.Insecure || profile.InsecureSkipVerify {
 		clientOpts = append(clientOpts, proxmox.WithInsecureSkipVerify())

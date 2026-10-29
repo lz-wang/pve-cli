@@ -3,53 +3,75 @@ package pve
 import (
 	"context"
 	"fmt"
+	"github.com/lz-wang/pve-cli/v3/internal/output"
 	"io"
 	"math"
 	"time"
 )
 
 type TaskRunner struct {
-	Wait        bool
-	WaitTimeout time.Duration
-	ErrWriter   io.Writer
+	Wait         bool
+	WaitTimeout  time.Duration
+	ErrWriter    io.Writer
+	ResultWriter io.Writer
+	Format       string
+	Resource     string
+	VMID         int
+	Node         string
 }
 
-func (r TaskRunner) Handle(ctx context.Context, task Task) error {
+// Execute always returns the submitted UPID, including on timeout/interruption.
+func (r TaskRunner) Execute(ctx context.Context, task Task) (output.OperationResult, error) {
+	result := output.OperationResult{Resource: r.Resource, VMID: r.VMID, Node: r.Node, Status: "succeeded"}
 	if task == nil {
-		return nil
+		return result, nil
 	}
-
+	result.Task = task.UPID()
+	result.Status = "submitted"
 	if r.ErrWriter != nil {
-		fmt.Fprintf(r.ErrWriter, "task: %s\n", task.UPID())
+		if _, err := fmt.Fprintf(r.ErrWriter, "task: %s\n", task.UPID()); err != nil {
+			return result, err
+		}
 	}
 	if !r.Wait {
-		return nil
+		return result, nil
 	}
-
 	timeout := r.WaitTimeout
 	if timeout <= 0 {
 		timeout = 5 * time.Minute
 	}
-	seconds := int(math.Ceil(timeout.Seconds()))
-	if seconds <= 0 {
-		seconds = 300
-	}
-
+	waitCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
 	if r.ErrWriter != nil {
-		fmt.Fprintf(r.ErrWriter, "waiting for task: %s\n", task.UPID())
+		if _, err := fmt.Fprintf(r.ErrWriter, "waiting for task: %s\n", task.UPID()); err != nil {
+			return result, err
+		}
 	}
-	if err := task.WaitFor(ctx, seconds); err != nil {
-		return fmt.Errorf("task %s wait failed: %w", task.UPID(), err)
+	if err := task.WaitFor(waitCtx, int(math.Ceil(timeout.Seconds()))); err != nil {
+		result.Status = "unknown"
+		result.Error = "task wait failed; continue with task get/log/wait"
+		return result, fmt.Errorf("%w: task %s wait failed: %w", ErrTaskTimeout, task.UPID(), err)
 	}
 	if task.Failed() {
-		status := task.ExitStatus()
-		if status == "" {
-			status = "unknown"
-		}
-		return fmt.Errorf("task %s failed: %s", task.UPID(), status)
+		result.Status = "failed"
+		result.Error = exitStatusOrUnknown(task.ExitStatus())
+		return result, fmt.Errorf("%w: task %s failed: %s", ErrTaskFailed, task.UPID(), result.Error)
 	}
+	result.Status = "succeeded"
 	if r.ErrWriter != nil {
-		fmt.Fprintf(r.ErrWriter, "task completed: %s\n", task.UPID())
+		if _, err := fmt.Fprintf(r.ErrWriter, "task completed: %s\n", task.UPID()); err != nil {
+			return result, err
+		}
 	}
-	return nil
+	return result, nil
+}
+
+func (r TaskRunner) Handle(ctx context.Context, task Task) error {
+	result, err := r.Execute(ctx, task)
+	if r.ResultWriter != nil {
+		if e := output.WriteOperation(r.ResultWriter, r.Format, result); e != nil {
+			return e
+		}
+	}
+	return err
 }

@@ -297,7 +297,7 @@ func TestGuestServiceOperationTaskFailure(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected task failure")
 	}
-	if got := err.Error(); got != "task UPID:pve1:reboot failed: ERROR" {
+	if got := err.Error(); got != "task failed: task UPID:pve1:reboot failed: ERROR" {
 		t.Fatalf("error = %q", got)
 	}
 }
@@ -399,7 +399,7 @@ func TestGuestServiceSnapshotTaskFailure(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected task failure")
 	}
-	if got := err.Error(); got != "task UPID:pve1:rollback failed: ERROR" {
+	if got := err.Error(); got != "task failed: task UPID:pve1:rollback failed: ERROR" {
 		t.Fatalf("error = %q", got)
 	}
 }
@@ -782,6 +782,7 @@ func (g *fakeGuest) DeleteSnapshot(_ context.Context, name string) (Task, error)
 }
 
 type fakeTask struct {
+	waitErr    error
 	upid       string
 	waited     bool
 	failed     bool
@@ -794,7 +795,7 @@ func (t *fakeTask) UPID() string {
 
 func (t *fakeTask) WaitFor(context.Context, int) error {
 	t.waited = true
-	return nil
+	return t.waitErr
 }
 
 func (t *fakeTask) ExitStatus() string {

@@ -160,7 +160,7 @@ func TestBackupServiceBackupGuestTaskFailure(t *testing.T) {
 		Node:    "pve1",
 		Storage: "backup",
 	})
-	if err == nil || err.Error() != "task UPID:pve1:backup failed: ERROR" {
+	if err == nil || err.Error() != "task failed: task UPID:pve1:backup failed: ERROR" {
 		t.Fatalf("error = %v", err)
 	}
 }

@@ -1,11 +1,14 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"log/slog"
 	"os"
+	"os/signal"
 	goruntime "runtime"
+	"syscall"
 	"time"
 
 	"github.com/urfave/cli/v2"
@@ -59,7 +62,9 @@ func RunWithBuildInfo(args []string, info BuildInfo) error {
 func RunWithBuildInfoAndDependencies(args []string, info BuildInfo, deps Dependencies) error {
 	info = info.withDefaults()
 	app := NewAppWithBuildInfoAndDependencies(info, deps)
-	return app.Run(normalizeArgs(app, args))
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	return app.RunContext(ctx, normalizeArgs(app, args))
 }
 
 func NewAppWithDependencies(version string, deps Dependencies) *cli.App {
@@ -222,9 +227,12 @@ func buildRuntime(c *cli.Context, deps Dependencies) (*runtime, error) {
 		backend: backend,
 		format:  format,
 		tasks: pve.TaskRunner{
-			Wait:        boolFlag(c, "wait"),
-			WaitTimeout: waitTimeout,
-			ErrWriter:   c.App.ErrWriter,
+			Wait:         boolFlag(c, "wait"),
+			WaitTimeout:  waitTimeout,
+			ErrWriter:    c.App.ErrWriter,
+			ResultWriter: taskResultWriter(c),
+			Format:       format,
+			Resource:     c.Command.Name,
 		},
 		logger:  logger,
 		verbose: verbose,
@@ -306,9 +314,17 @@ func commonOutputFlags() []cli.Flag {
 }
 
 func commonControlFlags() []cli.Flag {
-	return []cli.Flag{
+	return append(commonOutputFlags(), []cli.Flag{
 		&cli.StringFlag{Name: "node", Usage: "PVE node name"},
 		&cli.BoolFlag{Name: "wait", Usage: "wait for async task completion"},
 		&cli.DurationFlag{Name: "wait-timeout", Usage: "task wait timeout"},
+	}...)
+}
+
+func taskResultWriter(c *cli.Context) io.Writer {
+	switch c.Command.Name {
+	case "clone", "backup", "restore", "exec", "regenerate", "set":
+		return nil
 	}
+	return c.App.Writer
 }

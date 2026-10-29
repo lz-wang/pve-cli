@@ -466,3 +466,5 @@ unless `--yes` is passed. Bulk operations require typing `yes` unless
 `--yes` is passed.
 
 `--yes` skips the local confirmation prompt.
+
+- v3 mutations expose submitted/succeeded/failed/unknown results; waiting never cancels remote tasks.

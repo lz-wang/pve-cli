@@ -359,3 +359,9 @@ Used by `firewall ls`.
 | `go_version` | string |
 | `os` | string |
 | `arch` | string |
+
+### v3 operation results
+
+Mutations return `resource`, optional `vmid`, `node`, `task`, and `status`
+(`submitted`, `succeeded`, `failed`, `unknown`, `cancel_requested`), with an
+optional `error`. A returned UPID is retained even when waiting fails.

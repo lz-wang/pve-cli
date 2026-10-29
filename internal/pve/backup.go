@@ -156,7 +156,7 @@ func (s *BackupService) BackupGuest(ctx context.Context, options BackupCreateOpt
 	}
 
 	if err := s.tasks.Handle(ctx, task); err != nil {
-		return output.BackupResult{}, err
+		return result, err
 	}
 	return result, nil
 }

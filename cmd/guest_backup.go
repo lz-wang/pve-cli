@@ -64,10 +64,12 @@ func guestBackupCommand(kind string, deps Dependencies) *cli.Command {
 				BwLimit:       c.Uint("bwlimit"),
 				Protected:     protected,
 			})
-			if err != nil {
-				return err
+			if err == nil || result.Task != "" {
+				if e := output.WriteBackupResult(rt.stdout, rt.format, result); e != nil {
+					return e
+				}
 			}
-			return output.WriteBackupResult(rt.stdout, rt.format, result)
+			return err
 		},
 	}
 }
