@@ -18,6 +18,7 @@ func newTaskCommand(deps Dependencies) *cli.Command {
 			taskGetCommand(deps),
 			taskLogCommand(deps),
 			taskWaitCommand(deps),
+			taskCancelCommand(deps),
 		},
 	}
 }

@@ -50,6 +50,7 @@ var structuredOutputCommands = map[string]bool{
 	"lxc restore":        true,
 	"node ls":            true,
 	"node get":           true,
+	"task cancel":        true,
 	"task ls":            true,
 	"task get":           true,
 	"task log":           true,

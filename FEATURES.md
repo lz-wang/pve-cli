@@ -468,3 +468,4 @@ unless `--yes` is passed. Bulk operations require typing `yes` unless
 `--yes` skips the local confirmation prompt.
 
 - v3 mutations expose submitted/succeeded/failed/unknown results; waiting never cancels remote tasks.
+- `task cancel UPID --yes` requests cancellation of a running task; inspect it again to verify termination.

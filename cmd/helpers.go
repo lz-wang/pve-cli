@@ -3,7 +3,9 @@ package cmd
 import (
 	"bufio"
 	"fmt"
+	"golang.org/x/term"
 	"io"
+	"os"
 	"strconv"
 	"strings"
 
@@ -132,6 +134,24 @@ func confirmBulkAction(in io.Reader, out io.Writer, action string, rows []output
 	}
 	if strings.TrimSpace(scanner.Text()) != "yes" {
 		return fmt.Errorf("bulk %s aborted", action)
+	}
+	return nil
+}
+
+// confirmExact rejects real redirected stdin; injected readers model TTY input in tests.
+func confirmExact(in io.Reader, out io.Writer, description, expected string) error {
+	if f, ok := in.(*os.File); ok && !term.IsTerminal(int(f.Fd())) {
+		return fmt.Errorf("non-interactive confirmation requires --yes")
+	}
+	if in == nil {
+		return fmt.Errorf("confirmation aborted")
+	}
+	if _, err := fmt.Fprintf(out, "%s; type %q to confirm: ", description, expected); err != nil {
+		return err
+	}
+	scanner := bufio.NewScanner(in)
+	if !scanner.Scan() || strings.TrimSpace(scanner.Text()) != expected {
+		return fmt.Errorf("confirmation aborted")
 	}
 	return nil
 }

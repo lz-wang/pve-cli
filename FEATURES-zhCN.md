@@ -442,3 +442,4 @@ rollback 和 delete prompt 要求输入精确的 snapshot name，除非传入 `-
 `--yes` 会跳过本地确认 prompt。
 
 - v3 修改操作区分已提交、成功、失败和未知结果；等待超时不会取消远端任务。
+- `task cancel UPID --yes` 请求取消运行中的任务；通过后续查询确认终止状态。

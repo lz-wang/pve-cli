@@ -741,3 +741,9 @@ pve vm reboot 100 --wait --wait-timeout 5m
 
 Task IDs and wait progress are written to stderr. Command results are written
 to stdout.
+
+### Cancel a task
+
+`pve task cancel UPID [--yes] [-o json]` checks that the task is running,
+requires confirmation, and returns `cancel_requested`. It never claims that
+the remote task has already stopped. Noninteractive use requires `--yes`.
