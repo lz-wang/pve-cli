@@ -89,3 +89,91 @@ func (s *TemplateService) List(ctx context.Context, o TemplateOptions) ([]output
 	sort.Slice(result, func(i, j int) bool { return result[i].Name < result[j].Name })
 	return result, nil
 }
+
+// TemplateDownloader submits exactly one appliance download request.
+type TemplateDownloader interface {
+	DownloadTemplate(context.Context, string, string, string) (Task, error)
+}
+
+func (b *ProxmoxBackend) DownloadTemplate(ctx context.Context, node, storage, name string) (Task, error) {
+	var upid string
+	if err := b.client.Post(ctx, "/nodes/"+url.PathEscape(node)+"/aplinfo", map[string]string{"storage": storage, "template": name}, &upid); err != nil {
+		return nil, ClassifyError(err)
+	}
+	return b.TaskHandle(upid)
+}
+func (s *TemplateService) Download(ctx context.Context, node, storage, name string) (output.OperationResult, error) {
+	result := output.OperationResult{Resource: "lxc-template", Node: node, Status: "unknown"}
+	if node == "" || storage == "" || name == "" || path.Base(name) != name {
+		return result, fmt.Errorf("%w: node, storage and exact template filename required", ErrInvalid)
+	}
+	available, err := s.List(ctx, TemplateOptions{Node: node, Available: true})
+	if err != nil {
+		return result, err
+	}
+	exists := false
+	for _, r := range available {
+		if r.Name == name {
+			exists = true
+		}
+	}
+	if !exists {
+		return result, fmt.Errorf("%w: template %s", ErrNotFound, name)
+	}
+	target, err := s.backend.Storage(ctx, node, storage)
+	if err != nil {
+		return result, ClassifyError(err)
+	}
+	if !storageSupports(target, "vztmpl") {
+		return result, fmt.Errorf("%w: storage does not support active vztmpl content", ErrInvalid)
+	}
+	local, err := s.List(ctx, TemplateOptions{Node: node, Storage: storage})
+	if err != nil {
+		return result, err
+	}
+	for _, r := range local {
+		if r.Name == name {
+			return result, fmt.Errorf("%w: template already downloaded", ErrConflict)
+		}
+	}
+	backend, ok := s.backend.(TemplateDownloader)
+	if !ok {
+		return result, fmt.Errorf("%w: template download unavailable", ErrUnavailable)
+	}
+	task, err := backend.DownloadTemplate(ctx, node, storage, name)
+	if err != nil {
+		return result, err
+	}
+	runner := s.tasks
+	runner.Resource = result.Resource
+	runner.Node = node
+	result, err = runner.Execute(ctx, task)
+	if err != nil {
+		return result, err
+	}
+	if result.Status == "succeeded" {
+		contents, e := s.List(ctx, TemplateOptions{Node: node, Storage: storage})
+		if e == nil {
+			for _, r := range contents {
+				if r.Name == name {
+					return result, nil
+				}
+			}
+		}
+		result.Status = "unknown"
+		result.Error = "download completed but storage content could not be verified"
+		return result, fmt.Errorf("%w: %s; task %s", ErrTaskTimeout, result.Error, result.Task)
+	}
+	return result, nil
+}
+func storageSupports(row output.StorageRow, content string) bool {
+	if !row.Active || !row.Enabled {
+		return false
+	}
+	for _, kind := range strings.Split(row.Content, ",") {
+		if strings.TrimSpace(kind) == content {
+			return true
+		}
+	}
+	return false
+}

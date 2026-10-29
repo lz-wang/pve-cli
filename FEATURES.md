@@ -475,3 +475,4 @@ unless `--yes` is passed. Bulk operations require typing `yes` unless
 - `vm/lxc config get|set` reads native PVE keys under `config` and rejects duplicate update keys; credential values are redacted.
 - `completion bash|zsh|fish` supplies command, flag, enum and read-only dynamic node/storage/VMID completion, with silent offline fallback.
 - `lxc template ls` separates the downloadable system index (`--available`) from storage `vztmpl` volumes, with name filtering.
+- Template downloads preflight the index and storage, reject duplicate downloads, and verify storage content after `--wait`.
