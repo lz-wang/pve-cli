@@ -109,3 +109,28 @@ func TestDiskUnlinkHTTPNeverForcesAttachedRemoval(t *testing.T) {
 		})
 	}
 }
+
+func TestNodePowerHTTPContract(t *testing.T) {
+	for _, action := range []string{"reboot", "shutdown"} {
+		t.Run(action, func(t *testing.T) {
+			b := contractBackend(t, func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != "POST" || r.URL.Path != "/nodes/n/status" {
+					t.Errorf("%s %s", r.Method, r.URL.Path)
+				}
+				var body map[string]any
+				if e := json.NewDecoder(r.Body).Decode(&body); e != nil {
+					t.Error(e)
+				}
+				if body["command"] != action || len(body) != 1 {
+					t.Errorf("%+v", body)
+				}
+				if _, e := w.Write([]byte(`{"data":null}`)); e != nil {
+					t.Error(e)
+				}
+			})
+			if e := b.PowerNode(context.Background(), "n", action); e != nil {
+				t.Fatal(e)
+			}
+		})
+	}
+}

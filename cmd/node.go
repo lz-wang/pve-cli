@@ -12,6 +12,8 @@ func newNodeCommand(deps Dependencies) *cli.Command {
 		Name:  "node",
 		Usage: "Inspect PVE nodes",
 		Subcommands: []*cli.Command{
+			nodePowerCommand("reboot", deps),
+			nodePowerCommand("shutdown", deps),
 			{
 				Name:  "ls",
 				Usage: "List nodes",

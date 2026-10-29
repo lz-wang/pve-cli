@@ -66,6 +66,8 @@ var structuredOutputCommands = map[string]bool{
 	"lxc snapshot ls":       true,
 	"lxc backup":            true,
 	"lxc restore":           true,
+	"node reboot":           true,
+	"node shutdown":         true,
 	"node ls":               true,
 	"node get":              true,
 	"task cancel":           true,

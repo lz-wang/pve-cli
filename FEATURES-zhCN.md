@@ -456,3 +456,4 @@ rollback 和 delete prompt 要求输入精确的 snapshot name，除非传入 `-
 - 健康检查增加 CPU/内存阈值和结构化最近备份时间；不可访问的数据标记 unknown，严格模式失败；status 显示完整性、组件错误和 PARTIAL 标记。
 - Storage `ls/usage` 支持名称、节点、利用率、总容量排序及利用率阈值；未知容量排序置后且不匹配阈值过滤。
 - 快照回滚/删除支持零修改的 `--dry-run`，检查快照与锁状态，非终端须 `--yes`；VM 回滚须先停止。
+- `node reboot/shutdown NODE` 预览运行中来宾及 API 影响，要求节点名称确认或 `--yes`；不等待节点恢复，也不自动停止来宾。
