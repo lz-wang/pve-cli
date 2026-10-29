@@ -73,6 +73,12 @@ type GuestRow struct {
 }
 
 type CloneResult struct {
+	Resource string `json:"resource" yaml:"resource"`
+	Status   string `json:"status" yaml:"status"`
+	Error    string `json:"error,omitempty" yaml:"error,omitempty"`
+	VMID     int    `json:"vmid" yaml:"vmid"`
+	Node     string `json:"node" yaml:"node"`
+
 	Kind       string `json:"kind" yaml:"kind"`
 	SourceVMID uint64 `json:"source_vmid" yaml:"source_vmid"`
 	NewVMID    uint64 `json:"new_vmid" yaml:"new_vmid"`
@@ -111,6 +117,10 @@ type BackupRow struct {
 }
 
 type BackupResult struct {
+	Resource string `json:"resource" yaml:"resource"`
+	Status   string `json:"status" yaml:"status"`
+	Error    string `json:"error,omitempty" yaml:"error,omitempty"`
+
 	Kind    string `json:"kind" yaml:"kind"`
 	VMID    uint64 `json:"vmid" yaml:"vmid"`
 	Node    string `json:"node" yaml:"node"`
@@ -120,6 +130,10 @@ type BackupResult struct {
 }
 
 type RestoreResult struct {
+	Resource string `json:"resource" yaml:"resource"`
+	Status   string `json:"status" yaml:"status"`
+	Error    string `json:"error,omitempty" yaml:"error,omitempty"`
+
 	Kind    string `json:"kind" yaml:"kind"`
 	VMID    uint64 `json:"vmid" yaml:"vmid"`
 	Node    string `json:"node" yaml:"node"`

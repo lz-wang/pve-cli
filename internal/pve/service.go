@@ -133,10 +133,17 @@ func (s *GuestService) Clone(ctx context.Context, vmid int, node string, options
 	if err != nil {
 		return CloneResult{}, err
 	}
-	if err := s.tasks.Handle(ctx, task); err != nil {
-		return result, err
-	}
-	return result, nil
+	runner := s.tasks
+	runner.Resource = s.kind
+	runner.VMID = int(result.NewVMID)
+	runner.Node = result.TargetNode
+	operation, err := runner.Execute(ctx, task)
+	result.Resource = operation.Resource
+	result.VMID = operation.VMID
+	result.Node = operation.Node
+	result.Status = operation.Status
+	result.Error = operation.Error
+	return result, err
 }
 
 func (s *GuestService) Config(ctx context.Context, vmid int, node string, values map[string]string) error {
@@ -149,7 +156,12 @@ func (s *GuestService) Config(ctx context.Context, vmid int, node string, values
 	}
 	task, err := guest.Config(ctx, values)
 	if err != nil {
-		return err
+		for key, value := range values {
+			if sensitiveConfigKey(key) {
+				err = redactError(err, value)
+			}
+		}
+		return ClassifyError(err)
 	}
 	runner := s.tasks
 	runner.Resource = s.kind

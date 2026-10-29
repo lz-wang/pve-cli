@@ -1,12 +1,14 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"github.com/lz-wang/pve-cli/v3/internal/pve"
 	"github.com/urfave/cli/v2"
 	"io"
 	"sort"
 	"strings"
+	"time"
 )
 
 func newCompletionCommand() *cli.Command {
@@ -106,6 +108,9 @@ func newCompleteCommand(deps Dependencies) *cli.Command {
 			}
 			// Dynamic completion only calls read capabilities. All failures are silent.
 			if previous == "--node" || previous == "--storage" || (command != nil && strings.Contains(command.ArgsUsage, "VMID")) {
+				ctx, cancel := context.WithTimeout(c.Context, 750*time.Millisecond)
+				defer cancel()
+				c.Context = ctx
 				rt, err := buildRuntime(c, Dependencies{BackendFactory: deps.BackendFactory, Stdin: deps.Stdin, Stdout: io.Discard, Stderr: io.Discard})
 				if err == nil {
 					switch previous {

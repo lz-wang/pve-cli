@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-
 	"github.com/urfave/cli/v2"
 
 	"github.com/lz-wang/pve-cli/v3/internal/output"
@@ -27,14 +26,14 @@ func vmCloudInitRegenerateCommand(deps Dependencies) *cli.Command {
 		Name:      "regenerate",
 		Usage:     "Regenerate the cloud-init image so the next boot picks up pending changes",
 		ArgsUsage: "VMID",
-		Flags: []cli.Flag{
+		Flags: append(commonOutputFlags(), []cli.Flag{
 			&cli.StringFlag{Name: "node", Usage: "PVE node name"},
-		},
+		}...),
 		Action: func(c *cli.Context) error {
 			if err := requireNoExtraArgs(c, 1); err != nil {
 				return err
 			}
-			vmid, err := parseVMID(c.Args().First())
+			vmid, err := resolveGuestID(c, "vm", deps, c.Args().First())
 			if err != nil {
 				return err
 			}
@@ -45,8 +44,7 @@ func vmCloudInitRegenerateCommand(deps Dependencies) *cli.Command {
 			if err := pve.NewCloudInitService(rt.backend, rt.tasks, rt.logger, rt.verbose).Regenerate(c.Context, vmid, c.String("node")); err != nil {
 				return err
 			}
-			fmt.Fprintln(rt.stdout, "cloud-init regenerated")
-			return nil
+			return output.WriteOperation(rt.stdout, rt.format, output.OperationResult{Resource: "vm", VMID: vmid, Node: c.String("node"), Status: "succeeded"})
 		},
 	}
 }
@@ -66,7 +64,7 @@ func vmCloudInitGetCommand(deps Dependencies) *cli.Command {
 			if err := requireNoExtraArgs(c, 1); err != nil {
 				return err
 			}
-			vmid, err := parseVMID(c.Args().First())
+			vmid, err := resolveGuestID(c, "vm", deps, c.Args().First())
 			if err != nil {
 				return err
 			}
@@ -102,12 +100,12 @@ func vmCloudInitSetCommand(deps Dependencies) *cli.Command {
 		Name:      "set",
 		Usage:     "Update cloud-init settings",
 		ArgsUsage: "VMID",
-		Flags:     flags,
+		Flags:     append(flags, commonOutputFlags()...),
 		Action: func(c *cli.Context) error {
 			if err := requireNoExtraArgs(c, 1); err != nil {
 				return err
 			}
-			vmid, err := parseVMID(c.Args().First())
+			vmid, err := resolveGuestID(c, "vm", deps, c.Args().First())
 			if err != nil {
 				return err
 			}
@@ -120,6 +118,7 @@ func vmCloudInitSetCommand(deps Dependencies) *cli.Command {
 			if err != nil {
 				return err
 			}
+			rt.tasks.ResultWriter = rt.stdout
 			return pve.NewCloudInitService(rt.backend, rt.tasks, rt.logger, rt.verbose).Set(c.Context, vmid, c.String("node"), pve.CloudInitSetOptions{
 				User:         c.String("user"),
 				PasswordEnv:  c.String("password-env"),

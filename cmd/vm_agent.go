@@ -34,7 +34,7 @@ func vmAgentPingCommand(deps Dependencies) *cli.Command {
 			if err := requireNoExtraArgs(c, 1); err != nil {
 				return err
 			}
-			vmid, err := parseVMID(c.Args().First())
+			vmid, err := resolveGuestID(c, "vm", deps, c.Args().First())
 			if err != nil {
 				return err
 			}
@@ -45,8 +45,8 @@ func vmAgentPingCommand(deps Dependencies) *cli.Command {
 			if err := pve.NewAgentService(rt.backend, rt.logger, rt.verbose).Ping(c.Context, vmid, c.String("node")); err != nil {
 				return err
 			}
-			fmt.Fprintln(rt.stdout, "agent ok")
-			return nil
+			_, err = fmt.Fprintln(rt.stdout, "agent ok")
+			return err
 		},
 	}
 }
@@ -66,7 +66,7 @@ func vmAgentNetworkCommand(deps Dependencies) *cli.Command {
 			if err := requireNoExtraArgs(c, 1); err != nil {
 				return err
 			}
-			vmid, err := parseVMID(c.Args().First())
+			vmid, err := resolveGuestID(c, "vm", deps, c.Args().First())
 			if err != nil {
 				return err
 			}
@@ -100,7 +100,7 @@ func vmAgentExecCommand(deps Dependencies) *cli.Command {
 			if c.NArg() < 2 {
 				return fmt.Errorf("expected VMID and COMMAND, for example: pve vm agent exec 100 -- /usr/bin/uname -a")
 			}
-			vmid, err := parseVMID(c.Args().First())
+			vmid, err := resolveGuestID(c, "vm", deps, c.Args().First())
 			if err != nil {
 				return err
 			}

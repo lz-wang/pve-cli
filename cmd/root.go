@@ -76,6 +76,8 @@ func NewAppWithBuildInfoAndDependencies(info BuildInfo, deps Dependencies) *cli.
 	deps = deps.withDefaults()
 
 	app := &cli.App{
+		ExitErrHandler:         func(*cli.Context, error) {},
+		OnUsageError:           func(c *cli.Context, err error, _ bool) error { return fmt.Errorf("%w: %v", pve.ErrInvalid, err) },
 		Name:                   "pve",
 		Usage:                  "Personal HomeLab Proxmox VE CLI",
 		Version:                info.Version,
@@ -127,6 +129,28 @@ func NewAppWithBuildInfoAndDependencies(info BuildInfo, deps Dependencies) *cli.
 			categorize("Local", newCompletionCommand()),
 			newCompleteCommand(deps),
 		},
+	}
+	var configure func([]*cli.Command)
+	configure = func(commands []*cli.Command) {
+		for _, command := range commands {
+			command.OnUsageError = app.OnUsageError
+			if len(command.Subcommands) > 0 {
+				command.Action = func(c *cli.Context) error {
+					if c.NArg() > 0 {
+						return fmt.Errorf("%w: unknown command %s", pve.ErrInvalid, c.Args().First())
+					}
+					return cli.ShowSubcommandHelp(c)
+				}
+			}
+			configure(command.Subcommands)
+		}
+	}
+	configure(app.Commands)
+	app.Action = func(c *cli.Context) error {
+		if c.NArg() > 0 {
+			return fmt.Errorf("%w: unknown command %s", pve.ErrInvalid, c.Args().First())
+		}
+		return cli.ShowAppHelp(c)
 	}
 	return app
 }
@@ -220,6 +244,9 @@ func buildRuntime(c *cli.Context, deps Dependencies) (*runtime, error) {
 		return nil, err
 	}
 
+	if flagIsSet(c, "wait-timeout") && durationFlag(c, "wait-timeout") <= 0 {
+		return nil, fmt.Errorf("%w: wait-timeout must be positive", pve.ErrInvalid)
+	}
 	waitTimeout := durationFlag(c, "wait-timeout")
 	if waitTimeout <= 0 {
 		waitTimeout = 5 * time.Minute
@@ -244,6 +271,9 @@ func buildRuntime(c *cli.Context, deps Dependencies) (*runtime, error) {
 }
 
 func resolveAPIRequestTimeout(c *cli.Context, profile config.Profile) (time.Duration, error) {
+	if flagIsSet(c, "api-timeout") && durationFlag(c, "api-timeout") <= 0 {
+		return 0, fmt.Errorf("%w: api-timeout must be positive", pve.ErrInvalid)
+	}
 	if timeout := durationFlag(c, "api-timeout"); timeout > 0 {
 		return timeout, nil
 	}
@@ -251,6 +281,9 @@ func resolveAPIRequestTimeout(c *cli.Context, profile config.Profile) (time.Dura
 		timeout, err := time.ParseDuration(profile.Timeout)
 		if err != nil {
 			return 0, fmt.Errorf("config error: invalid timeout %q: %w", profile.Timeout, err)
+		}
+		if timeout <= 0 {
+			return 0, fmt.Errorf("%w: profile timeout must be positive", pve.ErrInvalid)
 		}
 		return timeout, nil
 	}

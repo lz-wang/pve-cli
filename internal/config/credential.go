@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 )
 
@@ -17,7 +18,7 @@ func ReadCredential(path string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("read credential file: %w", err)
 	}
-	if !info.Mode().IsRegular() || info.Mode().Perm()&0077 != 0 {
+	if !info.Mode().IsRegular() || (runtime.GOOS != "windows" && info.Mode().Perm()&0077 != 0) || !credentialOwnedByUser(info) {
 		return "", fmt.Errorf("credential file must be a private regular file (0600)")
 	}
 	data, err := os.ReadFile(path)
@@ -36,13 +37,13 @@ func atomicWrite(path string, data []byte) error {
 	if err != nil {
 		return err
 	}
-	defer os.Remove(f.Name()) // best-effort cleanup of an unpublished temporary file
+	defer func() { _ = os.Remove(f.Name()) }() // best-effort cleanup of an unpublished temporary file
 	if _, err = f.Write(data); err != nil {
-		f.Close()
+		_ = f.Close()
 		return err
 	}
 	if err = f.Sync(); err != nil {
-		f.Close()
+		_ = f.Close()
 		return err
 	}
 	if err = f.Close(); err != nil {
@@ -61,6 +62,9 @@ func StoreCredential(configPath, secret string) (string, error) {
 		return "", err
 	}
 	dir := filepath.Join(filepath.Dir(path), "credentials")
+	if info, e := os.Lstat(dir); e == nil && (!info.IsDir() || info.Mode()&os.ModeSymlink != 0 || !credentialOwnedByUser(info)) {
+		return "", fmt.Errorf("credential directory must be owned by the current user and cannot be a symlink")
+	}
 	if err = os.MkdirAll(dir, 0700); err != nil {
 		return "", err
 	}
@@ -73,14 +77,14 @@ func StoreCredential(configPath, secret string) (string, error) {
 	}
 	path, err = filepath.Abs(f.Name())
 	if err != nil {
-		f.Close()
+		_ = f.Close()
 		return "", err
 	}
 	if err = f.Close(); err != nil {
 		return "", err
 	}
 	if err = atomicWrite(path, []byte(secret)); err != nil {
-		os.Remove(path)
+		_ = os.Remove(path)
 		return "", err
 	}
 	return path, nil

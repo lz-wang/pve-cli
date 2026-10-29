@@ -471,7 +471,7 @@ func TestVMCloudInitRegenerateCommandRegenerates(t *testing.T) {
 	if backend.cloudInitRegenerated != 100 {
 		t.Fatalf("regenerated vmid = %d", backend.cloudInitRegenerated)
 	}
-	if !strings.Contains(stdout.String(), "cloud-init regenerated") {
+	if !strings.Contains(stdout.String(), "succeeded") {
 		t.Fatalf("stdout = %s", stdout.String())
 	}
 }

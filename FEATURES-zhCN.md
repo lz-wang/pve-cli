@@ -457,3 +457,4 @@ rollback 和 delete prompt 要求输入精确的 snapshot name，除非传入 `-
 - Storage `ls/usage` 支持名称、节点、利用率、总容量排序及利用率阈值；未知容量排序置后且不匹配阈值过滤。
 - 快照回滚/删除支持零修改的 `--dry-run`，检查快照与锁状态，非终端须 `--yes`；VM 回滚须先停止。
 - `node reboot/shutdown NODE` 预览运行中来宾及 API 影响，要求节点名称确认或 `--yes`；不等待节点恢复，也不自动停止来宾。
+- v3 契约由 JSON/YAML、HTTP 异常、确认、不重试和补全测试覆盖；原生配置值保留 PVE API 的原始类型。

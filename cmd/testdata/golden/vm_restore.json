@@ -1,4 +1,6 @@
 {
+  "resource": "vm",
+  "status": "succeeded",
   "kind": "vm",
   "vmid": 101,
   "node": "pve1",

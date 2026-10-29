@@ -41,7 +41,7 @@ func normalizeArgs(app *cli.App, args []string) []string {
 		return args
 	}
 	root := findCommand(app.Commands, args[i])
-	if root == nil {
+	if root == nil || root.SkipFlagParsing {
 		return args
 	}
 	path := []*cli.Command{root}

@@ -155,10 +155,15 @@ func (s *BackupService) BackupGuest(ctx context.Context, options BackupCreateOpt
 		result.Task = task.UPID()
 	}
 
-	if err := s.tasks.Handle(ctx, task); err != nil {
-		return result, err
-	}
-	return result, nil
+	runner := s.tasks
+	runner.Resource = kind
+	runner.VMID = int(result.VMID)
+	runner.Node = result.Node
+	operation, err := runner.Execute(ctx, task)
+	result.Resource = operation.Resource
+	result.Status = operation.Status
+	result.Error = operation.Error
+	return result, err
 }
 
 func ParseBackupKind(value string) (string, error) {

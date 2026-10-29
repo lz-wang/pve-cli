@@ -289,6 +289,6 @@ func taskUPID(task Task) string {
 
 func (s *BulkService) progress(w io.Writer, format string, args ...any) {
 	if w != nil {
-		fmt.Fprintf(w, format, args...)
+		_, _ = fmt.Fprintf(w, format, args...) // progress is best effort; results are written by the caller
 	}
 }

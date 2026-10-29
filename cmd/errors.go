@@ -14,6 +14,9 @@ func ExitCode(err error) int {
 	}
 	var exit cli.ExitCoder
 	if errors.As(err, &exit) {
+		if exit.ExitCode() == 3 {
+			return 2
+		}
 		return exit.ExitCode()
 	}
 	switch {
@@ -27,7 +30,7 @@ func ExitCode(err error) int {
 		return 3
 	}
 	msg := err.Error()
-	for _, prefix := range []string{"config error:", "invalid ", "expected ", "flag provided", "Required flag", "at least one", "empty key"} {
+	for _, prefix := range []string{"config error:", "invalid ", "expected ", "flag provided", "Required flag", "at least one", "empty key", " is required", " must ", " cannot ", " accepts ", "choose ", "not set", "requires a", "non-interactive", "unknown command", "No help topic", "--backup-tag and"} {
 		if strings.Contains(msg, prefix) {
 			return 2
 		}

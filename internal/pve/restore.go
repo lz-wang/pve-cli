@@ -88,10 +88,15 @@ func (s *RestoreService) Restore(ctx context.Context, options RestoreOptions) (o
 	// The restore task is already submitted when the wait fails, so the
 	// structured result must survive for stdout; `task wait` follows the
 	// same pattern.
-	if err := s.tasks.Handle(ctx, task); err != nil {
-		return result, err
-	}
-	return result, nil
+	runner := s.tasks
+	runner.Resource = kind
+	runner.VMID = int(result.VMID)
+	runner.Node = result.Node
+	operation, err := runner.Execute(ctx, task)
+	result.Resource = operation.Resource
+	result.Status = operation.Status
+	result.Error = operation.Error
+	return result, err
 }
 
 func parseRestoreKind(value string) (string, error) {

@@ -14,6 +14,15 @@ import (
 // contract violation this test guards against. Keep the list in sync when a
 // command gains or loses structured output.
 var structuredOutputCommands = map[string]bool{
+	"vm cloud-init set":        true,
+	"vm cloud-init regenerate": true,
+	"vm delete":                true,
+	"lxc delete":               true,
+	"vm resize":                true,
+	"lxc resize":               true,
+	"vm migrate":               true,
+	"lxc migrate":              true,
+
 	"vm start":     true,
 	"vm shutdown":  true,
 	"vm reboot":    true,

@@ -194,7 +194,7 @@ func TestNormalizeArgsDerivesValueFlagsFromCommandTree(t *testing.T) {
 				walk(append(path, command), command.Subcommands)
 				continue
 			}
-			var args []string = []string{"pve"}
+			args := []string{"pve"}
 			for _, segment := range path {
 				args = append(args, segment.Name)
 			}

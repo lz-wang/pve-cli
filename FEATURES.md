@@ -483,3 +483,4 @@ unless `--yes` is passed. Bulk operations require typing `yes` unless
 - Storage `ls/usage` supports `--sort name|node|used-percent|total`, `--desc`, and `--min-used-percent`; unknown capacity sorts last and is excluded from threshold matches.
 - Snapshot rollback/delete support read-only `--dry-run`, verify snapshots and locks, and require `--yes` outside a terminal. VM rollback requires a stopped VM.
 - `node reboot/shutdown NODE` previews running guests and API impact, requires exact node confirmation or `--yes`, submits without waiting, and never stops guests automatically.
+- v3 command/output contracts are covered by JSON/YAML, HTTP failure, confirmation, no-retry and completion tests; native PVE configuration values retain the API's original types.

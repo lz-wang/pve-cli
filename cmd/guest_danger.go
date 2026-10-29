@@ -7,12 +7,12 @@ func guestDeleteCommand(kind string, deps Dependencies) *cli.Command {
 		Name:      "delete",
 		Usage:     "Delete a guest",
 		ArgsUsage: "VMID",
-		Flags: []cli.Flag{
+		Flags: append(commonOutputFlags(), []cli.Flag{
 			&cli.StringFlag{Name: "node", Usage: "PVE node name"},
 			&cli.BoolFlag{Name: "yes", Usage: "skip local delete confirmation"},
 			&cli.BoolFlag{Name: "wait", Usage: "wait for async task completion"},
 			&cli.DurationFlag{Name: "wait-timeout", Usage: "task wait timeout"},
-		},
+		}...),
 		Action: func(c *cli.Context) error {
 			if err := requireNoExtraArgs(c, 1); err != nil {
 				return err

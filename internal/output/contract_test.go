@@ -93,10 +93,12 @@ func TestStructuredOutputContracts(t *testing.T) {
 		{
 			name: "CloneResult",
 			value: CloneResult{
+				Resource: "vm", Status: "succeeded", Error: "example", VMID: 100, Node: "pve2",
 				Kind: "vm", SourceVMID: 9000, NewVMID: 100, SourceNode: "pve1",
 				TargetNode: "pve2", Name: "app", Task: "UPID:pve1:clone",
 			},
 			fields: []contractField{
+				{"resource", stringType}, {"status", stringType}, {"error", stringType}, {"vmid", intType}, {"node", stringType},
 				{"kind", stringType},
 				{"source_vmid", uint64Type},
 				{"new_vmid", uint64Type},
@@ -151,9 +153,11 @@ func TestStructuredOutputContracts(t *testing.T) {
 		{
 			name: "BackupResult",
 			value: BackupResult{
+				Resource: "vm", Status: "succeeded", Error: "example",
 				Kind: "vm", VMID: 100, Node: "pve1", Storage: "backup", Mode: "snapshot", Task: "UPID:pve1:backup",
 			},
 			fields: []contractField{
+				{"resource", stringType}, {"status", stringType}, {"error", stringType},
 				{"kind", stringType},
 				{"vmid", uint64Type},
 				{"node", stringType},
@@ -165,10 +169,12 @@ func TestStructuredOutputContracts(t *testing.T) {
 		{
 			name: "RestoreResult",
 			value: RestoreResult{
+				Resource: "vm", Status: "succeeded", Error: "example",
 				Kind: "vm", VMID: 101, Node: "pve1",
 				Archive: "backup:backup/vzdump-qemu-100.vma.zst", Storage: "local-lvm", Task: "UPID:pve1:restore",
 			},
 			fields: []contractField{
+				{"resource", stringType}, {"status", stringType}, {"error", stringType},
 				{"kind", stringType},
 				{"vmid", uint64Type},
 				{"node", stringType},

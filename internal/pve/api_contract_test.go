@@ -3,9 +3,13 @@ package pve
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	proxmox "github.com/luthermonson/go-proxmox"
+	"github.com/lz-wang/pve-cli/v3/internal/config"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -130,6 +134,33 @@ func TestNodePowerHTTPContract(t *testing.T) {
 			})
 			if e := b.PowerNode(context.Background(), "n", action); e != nil {
 				t.Fatal(e)
+			}
+		})
+	}
+}
+
+func TestHTTPFailuresTypedAndMutationsNotRetried(t *testing.T) {
+	for _, tc := range []struct {
+		code int
+		kind error
+	}{{400, ErrInvalid}, {401, ErrPermissionDenied}, {403, ErrPermissionDenied}, {404, ErrNotFound}, {409, ErrConflict}, {503, ErrUnavailable}} {
+		t.Run(fmt.Sprint(tc.code), func(t *testing.T) {
+			calls := 0
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				calls++
+				w.WriteHeader(tc.code)
+				if _, e := w.Write([]byte(`{"errors":{"password":"echoed-secret"}}`)); e != nil {
+					t.Error(e)
+				}
+			}))
+			defer server.Close()
+			backend, e := NewProxmoxBackend(config.Profile{Endpoint: server.URL, TokenID: "test@pve!cli"}, ClientOptions{TokenSecret: "private-test-token"})
+			if e != nil {
+				t.Fatal(e)
+			}
+			_, e = backend.(GuestCreator).CreateGuest(context.Background(), "vm", "n", 101, map[string]any{})
+			if !errors.Is(e, tc.kind) || calls != 1 || strings.Contains(e.Error(), "echoed-secret") {
+				t.Fatalf("%v calls=%d", e, calls)
 			}
 		})
 	}

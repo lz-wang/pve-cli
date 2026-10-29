@@ -146,7 +146,9 @@ func taskWaitCommand(deps Dependencies) *cli.Command {
 				return err
 			}
 			upid := c.Args().First()
-			fmt.Fprintf(rt.stderr, "waiting for task: %s\n", upid)
+			if _, err := fmt.Fprintf(rt.stderr, "waiting for task: %s\n", upid); err != nil {
+				return err
+			}
 			row, err := taskService(rt).Wait(c.Context, upid, rt.tasks.WaitTimeout)
 			if row.UPID != "" {
 				if writeErr := output.WriteTaskDetail(rt.stdout, rt.format, row); writeErr != nil {

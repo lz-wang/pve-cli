@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"github.com/lz-wang/pve-cli/v3/internal/config"
+	"github.com/lz-wang/pve-cli/v3/internal/output"
 	"github.com/lz-wang/pve-cli/v3/internal/pve"
 	"strings"
 	"testing"
@@ -24,6 +25,19 @@ func TestCompletionScriptsAndStaticFallback(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !strings.Contains(out.String(), "start") || !strings.Contains(out.String(), "stop") {
+		t.Fatal(out.String())
+	}
+}
+
+func TestCompletionDynamicOnlyReadsInventory(t *testing.T) {
+	path := writeTestConfig(t, "table")
+	var out bytes.Buffer
+	backend := &commandBackend{nodes: []output.NodeRow{{Name: "pve-test"}}}
+	deps := testDeps(&out, backend)
+	if e := RunWithDependencies([]string{"pve", "_complete", "--config", path, "vm", "get", "--node", "pve"}, "test", deps); e != nil {
+		t.Fatal(e)
+	}
+	if !strings.Contains(out.String(), "pve-test") {
 		t.Fatal(out.String())
 	}
 }

@@ -1,7 +1,9 @@
 package pve
 
 import (
+	"crypto/tls"
 	"fmt"
+	"net/http"
 	"time"
 
 	proxmox "github.com/luthermonson/go-proxmox"
@@ -29,13 +31,10 @@ func NewProxmoxBackend(profile config.Profile, opts ClientOptions) (Backend, err
 		opts.Timeout = 30 * time.Second
 	}
 
-	clientOpts := []proxmox.Option{
-		proxmox.WithAPIToken(profile.TokenID, opts.TokenSecret),
-		proxmox.WithTimeout(opts.Timeout),
-	}
-	if opts.Insecure || profile.InsecureSkipVerify {
-		clientOpts = append(clientOpts, proxmox.WithInsecureSkipVerify())
-	}
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12, InsecureSkipVerify: opts.Insecure || profile.InsecureSkipVerify}
+	httpClient := &http.Client{Timeout: opts.Timeout, Transport: statusTransport{transport}, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	clientOpts := []proxmox.Option{proxmox.WithAPIToken(profile.TokenID, opts.TokenSecret), proxmox.WithHTTPClient(httpClient)}
 
 	return &ProxmoxBackend{client: proxmox.NewClient(profile.Endpoint, clientOpts...)}, nil
 }
