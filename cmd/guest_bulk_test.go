@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lz-wang/pve-cli/v2/internal/output"
+	"github.com/lz-wang/pve-cli/v3/internal/output"
 )
 
 func bulkTestBackend() *commandBackend {
@@ -72,7 +72,7 @@ func TestGuestBulkShutdownExecutesWithForce(t *testing.T) {
 		"pve", "--config", cfgPath,
 		"guest", "shutdown",
 		"--tag", "infra",
-		"--force",
+		"--yes",
 	}, "test", testDeps(&bytes.Buffer{}, backend))
 	if err != nil {
 		t.Fatalf("run: %v", err)
@@ -149,7 +149,7 @@ func TestGuestBulkPartialFailureWritesAllResultsAndFails(t *testing.T) {
 		"pve", "--config", cfgPath,
 		"guest", "shutdown",
 		"--tag", "infra",
-		"--force",
+		"--yes",
 	}, "test", testDeps(&stdout, backend))
 	if err == nil {
 		t.Fatal("expected aggregated failure")
@@ -187,7 +187,7 @@ func TestGuestBulkKeepsProgressOnStderrAndResultsOnStdout(t *testing.T) {
 		"pve", "--config", cfgPath,
 		"guest", "shutdown",
 		"--tag", "infra",
-		"--force",
+		"--yes",
 		"-o", "json",
 	}, "test", commandDeps(&stdout, &stderr, backend))
 	if err != nil {

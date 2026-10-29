@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lz-wang/pve-cli/v2/internal/config"
-	"github.com/lz-wang/pve-cli/v2/internal/output"
+	"github.com/lz-wang/pve-cli/v3/internal/config"
+	"github.com/lz-wang/pve-cli/v3/internal/output"
 )
 
 type DoctorOptions struct {

@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lz-wang/pve-cli/v2/internal/output"
+	"github.com/lz-wang/pve-cli/v3/internal/output"
 )
 
 func parseCheckVMID(resource string) (uint64, error) {

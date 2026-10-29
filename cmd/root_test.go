@@ -10,9 +10,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lz-wang/pve-cli/v2/internal/config"
-	"github.com/lz-wang/pve-cli/v2/internal/output"
-	"github.com/lz-wang/pve-cli/v2/internal/pve"
+	"github.com/lz-wang/pve-cli/v3/internal/config"
+	"github.com/lz-wang/pve-cli/v3/internal/output"
+	"github.com/lz-wang/pve-cli/v3/internal/pve"
 )
 
 func TestParseVMID(t *testing.T) {
@@ -358,7 +358,7 @@ func TestVMDeleteCommandForceSkipsConfirmation(t *testing.T) {
 	err := RunWithDependencies([]string{
 		"pve", "--config", cfgPath,
 		"vm", "delete", "101",
-		"--force",
+		"--yes",
 	}, "test", testDeps(&bytes.Buffer{}, backend))
 	if err != nil {
 		t.Fatalf("run: %v", err)
@@ -661,7 +661,7 @@ func TestVMSnapshotRollbackCommandForceWaits(t *testing.T) {
 	err := RunWithDependencies([]string{
 		"pve", "--config", cfgPath,
 		"vm", "snapshot", "rollback", "101", "before-upgrade",
-		"--force",
+		"--yes",
 		"--wait",
 	}, "test", testDeps(&bytes.Buffer{}, backend))
 	if err != nil {
@@ -690,7 +690,7 @@ func TestLXCSnapshotRollbackCommandForceWaits(t *testing.T) {
 	err := RunWithDependencies([]string{
 		"pve", "--config", cfgPath,
 		"lxc", "snapshot", "rollback", "201", "before-upgrade",
-		"--force",
+		"--yes",
 		"--wait",
 	}, "test", testDeps(&bytes.Buffer{}, backend))
 	if err != nil {
@@ -744,7 +744,7 @@ func TestVMSnapshotDeleteCommandForceWaits(t *testing.T) {
 	err := RunWithDependencies([]string{
 		"pve", "--config", cfgPath,
 		"vm", "snapshot", "delete", "101", "before-upgrade",
-		"--force",
+		"--yes",
 		"--wait",
 	}, "test", testDeps(&bytes.Buffer{}, backend))
 	if err != nil {

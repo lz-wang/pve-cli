@@ -7,7 +7,7 @@ import (
 
 	proxmox "github.com/luthermonson/go-proxmox"
 
-	"github.com/lz-wang/pve-cli/v2/internal/output"
+	"github.com/lz-wang/pve-cli/v3/internal/output"
 )
 
 // NodeBackend lists cluster nodes and returns node detail. It is embedded by

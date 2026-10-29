@@ -3,7 +3,7 @@ package cmd
 import (
 	"github.com/urfave/cli/v2"
 
-	"github.com/lz-wang/pve-cli/v2/internal/output"
+	"github.com/lz-wang/pve-cli/v3/internal/output"
 )
 
 func guestSnapshotCommand(kind string, deps Dependencies) *cli.Command {
@@ -69,7 +69,7 @@ func guestSnapshotCommand(kind string, deps Dependencies) *cli.Command {
 				ArgsUsage: "VMID SNAPNAME",
 				Flags: []cli.Flag{
 					&cli.StringFlag{Name: "node", Usage: "PVE node name"},
-					&cli.BoolFlag{Name: "force", Usage: "skip local snapshot delete confirmation"},
+					&cli.BoolFlag{Name: "yes", Usage: "skip local snapshot delete confirmation"},
 					&cli.BoolFlag{Name: "wait", Usage: "wait for async task completion"},
 					&cli.DurationFlag{Name: "wait-timeout", Usage: "task wait timeout"},
 				},
@@ -90,7 +90,7 @@ func guestSnapshotCommand(kind string, deps Dependencies) *cli.Command {
 						return err
 					}
 					svc := guestService(kind, rt)
-					if !c.Bool("force") {
+					if !c.Bool("yes") {
 						row, err := svc.Get(c.Context, vmid, c.String("node"))
 						if err != nil {
 							return err
@@ -108,7 +108,7 @@ func guestSnapshotCommand(kind string, deps Dependencies) *cli.Command {
 				ArgsUsage: "VMID SNAPNAME",
 				Flags: []cli.Flag{
 					&cli.StringFlag{Name: "node", Usage: "PVE node name"},
-					&cli.BoolFlag{Name: "force", Usage: "skip local rollback confirmation"},
+					&cli.BoolFlag{Name: "yes", Usage: "skip local rollback confirmation"},
 					&cli.BoolFlag{Name: "wait", Usage: "wait for async task completion"},
 					&cli.DurationFlag{Name: "wait-timeout", Usage: "task wait timeout"},
 				},
@@ -129,7 +129,7 @@ func guestSnapshotCommand(kind string, deps Dependencies) *cli.Command {
 						return err
 					}
 					svc := guestService(kind, rt)
-					if !c.Bool("force") {
+					if !c.Bool("yes") {
 						row, err := svc.Get(c.Context, vmid, c.String("node"))
 						if err != nil {
 							return err

@@ -12,8 +12,8 @@ import (
 
 	"github.com/urfave/cli/v2"
 
-	"github.com/lz-wang/pve-cli/v2/internal/config"
-	"github.com/lz-wang/pve-cli/v2/internal/output"
+	"github.com/lz-wang/pve-cli/v3/internal/config"
+	"github.com/lz-wang/pve-cli/v3/internal/output"
 )
 
 func newConfigCommand(deps Dependencies) *cli.Command {

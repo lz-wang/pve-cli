@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lz-wang/pve-cli/v2/internal/config"
-	"github.com/lz-wang/pve-cli/v2/internal/pve"
+	"github.com/lz-wang/pve-cli/v3/internal/config"
+	"github.com/lz-wang/pve-cli/v3/internal/pve"
 )
 
 func TestConfigShowGuidedInitialization(t *testing.T) {

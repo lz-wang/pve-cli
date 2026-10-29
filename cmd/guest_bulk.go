@@ -5,8 +5,8 @@ import (
 
 	"github.com/urfave/cli/v2"
 
-	"github.com/lz-wang/pve-cli/v2/internal/output"
-	"github.com/lz-wang/pve-cli/v2/internal/pve"
+	"github.com/lz-wang/pve-cli/v3/internal/output"
+	"github.com/lz-wang/pve-cli/v3/internal/pve"
 )
 
 // guestBulkCommand builds the bulk lifecycle commands under `guest`.
@@ -25,7 +25,7 @@ func guestBulkCommand(action, usage string, deps Dependencies) *cli.Command {
 				&cli.StringFlag{Name: "tag-match", Value: pve.TagMatchAll, Usage: "tag match mode: all,any"},
 				&cli.IntFlag{Name: "jobs", Value: 2, Usage: "number of guests to operate on concurrently"},
 				&cli.BoolFlag{Name: "dry-run", Usage: "show the guests that would be affected and exit"},
-				&cli.BoolFlag{Name: "force", Usage: "skip local bulk confirmation"},
+				&cli.BoolFlag{Name: "yes", Usage: "skip local bulk confirmation"},
 				&cli.BoolFlag{Name: "wait", Usage: "wait for async task completion"},
 				&cli.DurationFlag{Name: "wait-timeout", Usage: "task wait timeout"},
 			},
@@ -70,7 +70,7 @@ func guestBulkCommand(action, usage string, deps Dependencies) *cli.Command {
 			if len(rows) == 0 {
 				return fmt.Errorf("no guests match the selection")
 			}
-			if len(rows) > 1 && !c.Bool("force") {
+			if len(rows) > 1 && !c.Bool("yes") {
 				if err := confirmBulkAction(deps.withDefaults().Stdin, rt.stderr, action, rows); err != nil {
 					return err
 				}

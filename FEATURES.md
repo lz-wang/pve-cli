@@ -185,7 +185,7 @@ every guest matching a selection:
 - `--type all|vm|lxc` narrows the guest kind
 - `--dry-run` prints the affected guests and exits
 - operations hitting more than one guest require a local `yes` confirmation;
-  `--force` skips it
+  `--yes` skips it
 - `--jobs N` (default 2) bounds concurrency
 - `--wait`/`--wait-timeout` wait for each guest's task
 - one failing guest never aborts the run; per-guest results are written to
@@ -327,7 +327,7 @@ VM and LXC snapshot commands are grouped under `snapshot`.
 - `lxc snapshot delete CTID SNAPNAME`
 
 Rollback and delete are treated as dangerous operations and require local
-confirmation unless `--force` is passed.
+confirmation unless `--yes` is passed.
 
 ## Backups
 
@@ -460,9 +460,9 @@ explicit:
 - `lxc snapshot delete`
 - bulk `guest start/shutdown/reboot/stop` hitting more than one guest
 
-Delete prompts require typing the exact VMID/CTID unless `--force` is passed.
+Delete prompts require typing the exact VMID/CTID unless `--yes` is passed.
 Snapshot rollback and delete prompts require typing the exact snapshot name
-unless `--force` is passed. Bulk operations require typing `yes` unless
-`--force` is passed.
+unless `--yes` is passed. Bulk operations require typing `yes` unless
+`--yes` is passed.
 
-`--force` skips the local confirmation prompt.
+`--yes` skips the local confirmation prompt.

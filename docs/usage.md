@@ -296,7 +296,7 @@ pve guest start --tag lab --dry-run
 pve guest start --tag lab
 pve guest shutdown --tag infra
 pve guest reboot --node pve1 --status running
-pve guest stop --tag legacy --force
+pve guest stop --tag legacy --yes
 ```
 
 Selection flags: `--node`, `--type all|vm|lxc`, `--status`, `--tag`,
@@ -307,7 +307,7 @@ Safety and execution:
 
 - `--dry-run` prints the affected guests and exits without changing anything.
 - Operations hitting more than one guest require a local `yes` confirmation;
-  `--force` skips it.
+  `--yes` skips it.
 - `--jobs N` (default 2) bounds concurrency; `--wait`/`--wait-timeout` wait
   for each task.
 - One failing guest never aborts the run: every per-guest result is written to
@@ -421,7 +421,7 @@ pve lxc restore backup:backup/vzdump-lxc-200-2026_06_06-00_00_00.tar.zst \
 ```
 
 `--node` and `--vmid` are required. The restore refuses to run when the target
-VMID already exists anywhere in the cluster; there is no `--force` overwrite.
+VMID already exists anywhere in the cluster; there is no `--yes` overwrite.
 The VMID check must see every node, so it aborts before starting when any
 node's guest inventory cannot be queried. Results are written to stdout and
 include the task ID; wait progress goes to stderr. When a submitted task
@@ -642,45 +642,45 @@ Firewall rule mutation is a non-goal.
 
 ### Delete
 
-Delete commands require a local confirmation prompt unless `--force` is passed:
+Delete commands require a local confirmation prompt unless `--yes` is passed:
 
 ```bash
 pve vm delete 101
 pve lxc delete 201
 ```
 
-The prompt requires typing the exact VMID/CTID. The `--force` flag only skips
+The prompt requires typing the exact VMID/CTID. The `--yes` flag only skips
 this local prompt; it is not passed to the Proxmox LXC delete API.
 
 Use `--wait` when scripts need completion status:
 
 ```bash
-pve vm delete 101 --force --wait
-pve lxc delete 201 --force --wait
+pve vm delete 101 --yes --wait
+pve lxc delete 201 --yes --wait
 ```
 
 ### Snapshot Rollback
 
 Snapshot rollback commands require typing the exact snapshot name unless
-`--force` is passed:
+`--yes` is passed:
 
 ```bash
 pve vm snapshot rollback 101 before-upgrade
 pve lxc snapshot rollback 201 before-upgrade
 ```
 
-The `--force` flag only skips this local prompt. Rollback is an asynchronous
+The `--yes` flag only skips this local prompt. Rollback is an asynchronous
 PVE task, so use `--wait` when scripts need completion status:
 
 ```bash
-pve vm snapshot rollback 101 before-upgrade --force --wait
-pve lxc snapshot rollback 201 before-upgrade --force --wait
+pve vm snapshot rollback 101 before-upgrade --yes --wait
+pve lxc snapshot rollback 201 before-upgrade --yes --wait
 ```
 
 ### Snapshot Delete
 
 Snapshot delete commands require typing the exact snapshot name unless
-`--force` is passed:
+`--yes` is passed:
 
 ```bash
 pve vm snapshot delete 101 before-upgrade

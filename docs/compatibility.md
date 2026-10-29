@@ -93,3 +93,11 @@ restore.
 - Arbitrary Proxmox REST API passthrough.
 
 See the README for the full project non-goals list.
+
+## v3 development contract
+
+The module is `github.com/lz-wang/pve-cli/v3`. `--yes` skips only local
+confirmation. `--wait` waits locally; `--wait-timeout` never cancels the remote
+task. Results use stdout and progress uses stderr. Exit codes: 0 success,
+1 operation failure, 2 input/configuration, 3 API access, 4 resolution/conflict,
+5 unknown outcome. Old command and config formats are not retained.

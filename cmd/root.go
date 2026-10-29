@@ -10,9 +10,9 @@ import (
 
 	"github.com/urfave/cli/v2"
 
-	"github.com/lz-wang/pve-cli/v2/internal/config"
-	"github.com/lz-wang/pve-cli/v2/internal/output"
-	"github.com/lz-wang/pve-cli/v2/internal/pve"
+	"github.com/lz-wang/pve-cli/v3/internal/config"
+	"github.com/lz-wang/pve-cli/v3/internal/output"
+	"github.com/lz-wang/pve-cli/v3/internal/pve"
 )
 
 type BackendFactory func(config.Profile, pve.ClientOptions) (pve.Backend, error)

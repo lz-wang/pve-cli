@@ -2,12 +2,9 @@ package pve
 
 import (
 	"context"
-	"errors"
 
-	"github.com/lz-wang/pve-cli/v2/internal/output"
+	"github.com/lz-wang/pve-cli/v3/internal/output"
 )
-
-var ErrNotFound = errors.New("not found")
 
 type Guest interface {
 	Row() output.GuestRow

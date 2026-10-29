@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/lz-wang/pve-cli/v2/internal/output"
+	"github.com/lz-wang/pve-cli/v3/internal/output"
 )
 
 func TestStatusServiceReportSummaries(t *testing.T) {

@@ -170,7 +170,7 @@ uptime 和 tags 等 Proxmox VE 可提供的字段。
   执行，而不是带着部分集群视图继续
 - `--type all|vm|lxc` 收窄 guest 类型
 - `--dry-run` 打印将受影响的 guest 后退出
-- 命中超过一个 guest 时需要本地输入 `yes` 确认；`--force` 跳过
+- 命中超过一个 guest 时需要本地输入 `yes` 确认；`--yes` 跳过
 - `--jobs N`（默认 2）限制并发
 - `--wait`/`--wait-timeout` 等待每个 guest 的 task
 - 单个 guest 失败不会中止整批；每个 guest 的结果以 `BulkGuestResult` 行写入
@@ -308,7 +308,7 @@ VM 和 LXC 快照命令位于 `snapshot` 分组下。
 - `lxc snapshot rollback CTID SNAPNAME`
 - `lxc snapshot delete CTID SNAPNAME`
 
-Rollback 和 delete 被视为危险操作，除非传入 `--force`，否则需要本地确认。
+Rollback 和 delete 被视为危险操作，除非传入 `--yes`，否则需要本地确认。
 
 ## 备份
 
@@ -435,8 +435,8 @@ Cloud-init 命令使用 PVE 原生 cloud-init 配置。
 - `lxc snapshot delete`
 - 命中超过一个 guest 的批量 `guest start/shutdown/reboot/stop`
 
-Delete prompt 要求输入精确的 VMID/CTID，除非传入 `--force`。Snapshot
-rollback 和 delete prompt 要求输入精确的 snapshot name，除非传入 `--force`。
-批量操作要求输入 `yes`，除非传入 `--force`。
+Delete prompt 要求输入精确的 VMID/CTID，除非传入 `--yes`。Snapshot
+rollback 和 delete prompt 要求输入精确的 snapshot name，除非传入 `--yes`。
+批量操作要求输入 `yes`，除非传入 `--yes`。
 
-`--force` 会跳过本地确认 prompt。
+`--yes` 会跳过本地确认 prompt。

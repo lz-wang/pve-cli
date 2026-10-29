@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/lz-wang/pve-cli/v2/cmd"
+	"github.com/lz-wang/pve-cli/v3/cmd"
 )
 
 var (
@@ -20,6 +20,6 @@ func main() {
 		Date:    date,
 	}); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
+		os.Exit(cmd.ExitCode(err))
 	}
 }

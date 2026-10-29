@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lz-wang/pve-cli/v2/internal/output"
+	"github.com/lz-wang/pve-cli/v3/internal/output"
 )
 
 // TaskService implements task inspection on top of TaskBackend.

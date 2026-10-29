@@ -3,8 +3,8 @@ package cmd
 import (
 	"github.com/urfave/cli/v2"
 
-	"github.com/lz-wang/pve-cli/v2/internal/output"
-	"github.com/lz-wang/pve-cli/v2/internal/pve"
+	"github.com/lz-wang/pve-cli/v3/internal/output"
+	"github.com/lz-wang/pve-cli/v3/internal/pve"
 )
 
 // newNetworkCommand is read-only network inventory. Mutating PVE network
