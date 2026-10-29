@@ -481,3 +481,4 @@ unless `--yes` is passed. Bulk operations require typing `yes` unless
 - `vm disk ls|add|remove|delete` distinguishes attached/system/unused devices. Remove preserves the unused volume; delete only accepts unused slots, requires exact confirmation, and verifies storage removal.
 - Health checks add CPU/memory thresholds and structured backup timestamps; inaccessible data is `unknown` and fails strict mode. Status reports expose completeness and component errors, with a PARTIAL table marker.
 - Storage `ls/usage` supports `--sort name|node|used-percent|total`, `--desc`, and `--min-used-percent`; unknown capacity sorts last and is excluded from threshold matches.
+- Snapshot rollback/delete support read-only `--dry-run`, verify snapshots and locks, and require `--yes` outside a terminal. VM rollback requires a stopped VM.

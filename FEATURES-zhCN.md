@@ -455,3 +455,4 @@ rollback 和 delete prompt 要求输入精确的 snapshot name，除非传入 `-
 - `vm disk ls|add|remove|delete` 区分系统盘、附加盘和未使用卷；remove 保留卷，delete 仅接受 unused 槽位、精确确认并核对存储删除结果。
 - 健康检查增加 CPU/内存阈值和结构化最近备份时间；不可访问的数据标记 unknown，严格模式失败；status 显示完整性、组件错误和 PARTIAL 标记。
 - Storage `ls/usage` 支持名称、节点、利用率、总容量排序及利用率阈值；未知容量排序置后且不匹配阈值过滤。
+- 快照回滚/删除支持零修改的 `--dry-run`，检查快照与锁状态，非终端须 `--yes`；VM 回滚须先停止。

@@ -66,70 +66,38 @@ func parseSnapshotName(value string) (string, error) {
 }
 
 func confirmDelete(in io.Reader, out io.Writer, kind string, vmid uint64, node string) error {
-	if in == nil {
-		return fmt.Errorf("delete aborted")
-	}
-	if out != nil {
-		fmt.Fprintf(out, "delete %s %d on node %s? type %d to confirm: ", kind, vmid, node, vmid)
-	}
-	scanner := bufio.NewScanner(in)
-	if !scanner.Scan() {
-		return fmt.Errorf("delete aborted")
-	}
-	if strings.TrimSpace(scanner.Text()) != strconv.FormatUint(vmid, 10) {
-		return fmt.Errorf("delete aborted")
-	}
-	return nil
+	return confirmExact(in, out, fmt.Sprintf("delete %s %d on node %s", kind, vmid, node), strconv.FormatUint(vmid, 10))
 }
-
 func confirmRollback(in io.Reader, out io.Writer, kind string, vmid uint64, node, snapshot string) error {
-	if in == nil {
-		return fmt.Errorf("rollback aborted")
-	}
-	if out != nil {
-		fmt.Fprintf(out, "rollback %s %d on node %s to snapshot %s? type %q to confirm: ", kind, vmid, node, snapshot, snapshot)
-	}
-	scanner := bufio.NewScanner(in)
-	if !scanner.Scan() {
-		return fmt.Errorf("rollback aborted")
-	}
-	if strings.TrimSpace(scanner.Text()) != snapshot {
-		return fmt.Errorf("rollback aborted")
-	}
-	return nil
+	return confirmExact(in, out, fmt.Sprintf("rollback %s %d on node %s to snapshot %s", kind, vmid, node, snapshot), snapshot)
 }
-
 func confirmSnapshotDelete(in io.Reader, out io.Writer, kind string, vmid uint64, node, snapshot string) error {
-	if in == nil {
-		return fmt.Errorf("snapshot delete aborted")
-	}
-	if out != nil {
-		fmt.Fprintf(out, "delete snapshot %s of %s %d on node %s? type %q to confirm: ", snapshot, kind, vmid, node, snapshot)
-	}
-	scanner := bufio.NewScanner(in)
-	if !scanner.Scan() {
-		return fmt.Errorf("snapshot delete aborted")
-	}
-	if strings.TrimSpace(scanner.Text()) != snapshot {
-		return fmt.Errorf("snapshot delete aborted")
-	}
-	return nil
+	return confirmExact(in, out, fmt.Sprintf("delete snapshot %s of %s %d on node %s", snapshot, kind, vmid, node), snapshot)
 }
 
 func confirmBulkAction(in io.Reader, out io.Writer, action string, rows []output.GuestRow) error {
+	if f, ok := in.(*os.File); ok && !term.IsTerminal(int(f.Fd())) {
+		return fmt.Errorf("non-interactive confirmation requires --yes")
+	}
 	if in == nil {
 		return fmt.Errorf("bulk %s aborted", action)
 	}
 	if out != nil {
-		fmt.Fprintf(out, "About to %s %d guests:\n", action, len(rows))
+		if _, err := fmt.Fprintf(out, "About to %s %d guests:\n", action, len(rows)); err != nil {
+			return err
+		}
 		for _, row := range rows {
 			name := row.Name
 			if name == "" {
 				name = "-"
 			}
-			fmt.Fprintf(out, "  %s %d %s\n", row.Kind, row.VMID, name)
+			if _, err := fmt.Fprintf(out, "  %s %d %s\n", row.Kind, row.VMID, name); err != nil {
+				return err
+			}
 		}
-		fmt.Fprintln(out, `Type "yes" to continue: `)
+		if _, err := fmt.Fprintln(out, `Type "yes" to continue: `); err != nil {
+			return err
+		}
 	}
 	scanner := bufio.NewScanner(in)
 	if !scanner.Scan() {

@@ -351,8 +351,9 @@ func TestGuestServiceCreateSnapshotWaits(t *testing.T) {
 func TestGuestServiceRollbackSnapshotWaits(t *testing.T) {
 	task := &fakeTask{upid: "UPID:pve1:rollback"}
 	guest := &fakeGuest{
-		row:  output.GuestRow{Kind: "vm", VMID: 101, Node: "pve1"},
-		task: task,
+		snapshots: []output.SnapshotRow{{Name: "before-upgrade"}},
+		row:       output.GuestRow{Kind: "vm", VMID: 101, Node: "pve1", Status: "stopped"},
+		task:      task,
 	}
 	backend := &fakeBackend{
 		nodes: []output.NodeRow{{Name: "pve1"}},
@@ -386,8 +387,9 @@ func TestGuestServiceSnapshotNameRequired(t *testing.T) {
 func TestGuestServiceSnapshotTaskFailure(t *testing.T) {
 	task := &fakeTask{upid: "UPID:pve1:rollback", failed: true, exitStatus: "ERROR"}
 	guest := &fakeGuest{
-		row:  output.GuestRow{Kind: "vm", VMID: 101, Node: "pve1"},
-		task: task,
+		snapshots: []output.SnapshotRow{{Name: "before-upgrade"}},
+		row:       output.GuestRow{Kind: "vm", VMID: 101, Node: "pve1", Status: "stopped"},
+		task:      task,
 	}
 	backend := &fakeBackend{
 		nodes: []output.NodeRow{{Name: "pve1"}},

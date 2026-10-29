@@ -650,8 +650,9 @@ func TestVMSnapshotRollbackCommandForceWaits(t *testing.T) {
 	cfgPath := writeTestConfig(t, "table")
 	task := &commandTask{upid: "UPID:pve1:rollback"}
 	guest := &commandGuest{
-		row:  output.GuestRow{Kind: "vm", VMID: 101, Node: "pve1"},
-		task: task,
+		snapshots: []output.SnapshotRow{{Name: "before-upgrade"}},
+		row:       output.GuestRow{Kind: "vm", VMID: 101, Node: "pve1", Status: "stopped"},
+		task:      task,
 	}
 	backend := &commandBackend{
 		nodes:    []output.NodeRow{{Name: "pve1"}},
@@ -679,8 +680,9 @@ func TestLXCSnapshotRollbackCommandForceWaits(t *testing.T) {
 	cfgPath := writeTestConfig(t, "table")
 	task := &commandTask{upid: "UPID:pve1:lxcrollback"}
 	guest := &commandGuest{
-		row:  output.GuestRow{Kind: "lxc", VMID: 201, Node: "pve1"},
-		task: task,
+		snapshots: []output.SnapshotRow{{Name: "before-upgrade"}},
+		row:       output.GuestRow{Kind: "lxc", VMID: 201, Node: "pve1", Status: "stopped"},
+		task:      task,
 	}
 	backend := &commandBackend{
 		nodes:     []output.NodeRow{{Name: "pve1"}},
@@ -707,8 +709,9 @@ func TestLXCSnapshotRollbackCommandForceWaits(t *testing.T) {
 func TestSnapshotRollbackCommandConfirms(t *testing.T) {
 	cfgPath := writeTestConfig(t, "table")
 	guest := &commandGuest{
-		row:  output.GuestRow{Kind: "vm", VMID: 101, Node: "pve1"},
-		task: &commandTask{upid: "UPID:pve1:rollback"},
+		snapshots: []output.SnapshotRow{{Name: "before-upgrade"}},
+		row:       output.GuestRow{Kind: "vm", VMID: 101, Node: "pve1", Status: "stopped"},
+		task:      &commandTask{upid: "UPID:pve1:rollback"},
 	}
 	backend := &commandBackend{
 		nodes:    []output.NodeRow{{Name: "pve1"}},
@@ -733,8 +736,9 @@ func TestVMSnapshotDeleteCommandForceWaits(t *testing.T) {
 	cfgPath := writeTestConfig(t, "table")
 	task := &commandTask{upid: "UPID:pve1:snapdelete"}
 	guest := &commandGuest{
-		row:  output.GuestRow{Kind: "vm", VMID: 101, Node: "pve1"},
-		task: task,
+		snapshots: []output.SnapshotRow{{Name: "before-upgrade"}},
+		row:       output.GuestRow{Kind: "vm", VMID: 101, Node: "pve1", Status: "stopped"},
+		task:      task,
 	}
 	backend := &commandBackend{
 		nodes:    []output.NodeRow{{Name: "pve1"}},
@@ -761,8 +765,9 @@ func TestVMSnapshotDeleteCommandForceWaits(t *testing.T) {
 func TestSnapshotDeleteCommandConfirms(t *testing.T) {
 	cfgPath := writeTestConfig(t, "table")
 	guest := &commandGuest{
-		row:  output.GuestRow{Kind: "lxc", VMID: 201, Node: "pve1"},
-		task: &commandTask{upid: "UPID:pve1:lxcsnapdelete"},
+		snapshots: []output.SnapshotRow{{Name: "before-upgrade"}},
+		row:       output.GuestRow{Kind: "lxc", VMID: 201, Node: "pve1", Status: "stopped"},
+		task:      &commandTask{upid: "UPID:pve1:lxcsnapdelete"},
 	}
 	backend := &commandBackend{
 		nodes:     []output.NodeRow{{Name: "pve1"}},

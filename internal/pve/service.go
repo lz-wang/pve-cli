@@ -208,7 +208,11 @@ func (s *GuestService) RollbackSnapshot(ctx context.Context, vmid int, node, nam
 	if err != nil {
 		return err
 	}
-	return s.run(ctx, vmid, node, func(guest Guest) (Task, error) {
+	plan, err := s.PlanSnapshot(ctx, vmid, node, name, "rollback")
+	if err != nil {
+		return err
+	}
+	return s.run(ctx, vmid, plan.Node, func(guest Guest) (Task, error) {
 		return guest.RollbackSnapshot(ctx, name)
 	})
 }
@@ -218,7 +222,11 @@ func (s *GuestService) DeleteSnapshot(ctx context.Context, vmid int, node, name 
 	if err != nil {
 		return err
 	}
-	return s.run(ctx, vmid, node, func(guest Guest) (Task, error) {
+	plan, err := s.PlanSnapshot(ctx, vmid, node, name, "delete")
+	if err != nil {
+		return err
+	}
+	return s.run(ctx, vmid, plan.Node, func(guest Guest) (Task, error) {
 		return guest.DeleteSnapshot(ctx, name)
 	})
 }
