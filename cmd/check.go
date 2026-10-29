@@ -15,6 +15,8 @@ func newCheckCommand(deps Dependencies) *cli.Command {
 		Usage: "Check HomeLab health (nodes, storage usage, optional backup coverage)",
 		Flags: append(
 			[]cli.Flag{
+				&cli.IntFlag{Name: "cpu-warn", Value: 85, Usage: "CPU warn percent"},
+				&cli.IntFlag{Name: "memory-warn", Value: 90, Usage: "memory warn percent"},
 				&cli.StringFlag{Name: "node", Usage: "limit checks to one PVE node"},
 				&cli.IntFlag{Name: "storage-warn", Value: pve.DefaultStorageWarnPercent, Usage: "storage usage warn threshold in percent"},
 				&cli.IntFlag{Name: "storage-fail", Value: pve.DefaultStorageFailPercent, Usage: "storage usage fail threshold in percent"},
@@ -27,6 +29,11 @@ func newCheckCommand(deps Dependencies) *cli.Command {
 		Action: func(c *cli.Context) error {
 			if err := requireNoExtraArgs(c, 0); err != nil {
 				return err
+			}
+			for _, name := range []string{"cpu-warn", "memory-warn", "storage-warn", "storage-fail"} {
+				if c.Int(name) < 1 || c.Int(name) > 100 {
+					return fmt.Errorf("invalid %s: expected 1..100", name)
+				}
 			}
 			warn := c.Int("storage-warn")
 			fail := c.Int("storage-fail")
@@ -47,6 +54,7 @@ func newCheckCommand(deps Dependencies) *cli.Command {
 				return err
 			}
 			result, err := pve.NewCheckService(rt.backend).Run(c.Context, pve.CheckOptions{
+				CPUWarn: c.Int("cpu-warn"), MemoryWarn: c.Int("memory-warn"),
 				Node:         c.String("node"),
 				StorageWarn:  warn,
 				StorageFail:  fail,

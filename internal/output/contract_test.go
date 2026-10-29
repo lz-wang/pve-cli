@@ -235,9 +235,11 @@ func TestStructuredOutputContracts(t *testing.T) {
 		{
 			name: "CheckRow",
 			value: CheckRow{
+				LatestBackup: 1710000000, Value: 87, Threshold: 85,
 				Check: "storage-usage", Status: DoctorStatusWarn, Resource: "backup", Message: "usage 87%",
 			},
 			fields: []contractField{
+				{"latest_backup", uint64Type}, {"value", float64Type}, {"threshold", float64Type},
 				{"check", stringType},
 				{"status", reflect.TypeOf(DoctorStatus(""))},
 				{"resource", stringType},
@@ -262,6 +264,7 @@ func TestStructuredOutputContracts(t *testing.T) {
 		{
 			name: "StatusReport",
 			value: StatusReport{
+				ComponentErrors: map[string][]string{"backup": {"query failed"}},
 				Nodes: NodeSummary{
 					Total: 1, Online: 1,
 					Rows: []NodeRow{{Name: "pve1", Status: "online"}},
@@ -272,6 +275,8 @@ func TestStructuredOutputContracts(t *testing.T) {
 				Issues:   []StatusIssue{{Component: "backup", Message: "query failed"}},
 			},
 			fields: []contractField{
+				{"complete", boolType},
+				{"component_errors", reflect.TypeOf(map[string][]string{})},
 				{"nodes", reflect.TypeOf(NodeSummary{})},
 				{"guests", reflect.TypeOf(GuestSummary{})},
 				{"storages", reflect.TypeOf(StorageSummary{})},

@@ -6,6 +6,22 @@
     "message": "online"
   },
   {
+    "value": 25,
+    "threshold": 85,
+    "check": "node-cpu",
+    "status": "ok",
+    "resource": "pve1",
+    "message": "25.0% (warn 85%)"
+  },
+  {
+    "value": 25,
+    "threshold": 90,
+    "check": "node-memory",
+    "status": "ok",
+    "resource": "pve1",
+    "message": "25.0% (warn 90%)"
+  },
+  {
     "check": "storage",
     "status": "ok",
     "resource": "pve1/backup",

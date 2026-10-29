@@ -164,8 +164,8 @@ func TestStatusServiceFailsWhenNodesUnreachable(t *testing.T) {
 	backend := &failingNodesBackend{}
 	svc := NewStatusService(backend)
 
-	if _, err := svc.Report(context.Background()); err == nil {
-		t.Fatal("expected node listing failure")
+	if report, err := svc.Report(context.Background()); err != nil || report.Complete || len(report.ComponentErrors["node"]) == 0 {
+		t.Fatal("expected incomplete node report")
 	}
 }
 

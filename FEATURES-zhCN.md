@@ -453,3 +453,4 @@ rollback 和 delete prompt 要求输入精确的 snapshot name，除非传入 `-
 - `lxc create CTID` 预检 ID、模板、存储及网络，支持密码环境变量和 SSH 公钥，默认创建非特权且未启动的容器。
 - `vm create VMID` 配置 CPU、内存、SCSI 磁盘和网桥，可挂载 ISO 并配置开机自启；不启动或安装操作系统。
 - `vm disk ls|add|remove|delete` 区分系统盘、附加盘和未使用卷；remove 保留卷，delete 仅接受 unused 槽位、精确确认并核对存储删除结果。
+- 健康检查增加 CPU/内存阈值和结构化最近备份时间；不可访问的数据标记 unknown，严格模式失败；status 显示完整性、组件错误和 PARTIAL 标记。

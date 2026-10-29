@@ -479,3 +479,4 @@ unless `--yes` is passed. Bulk operations require typing `yes` unless
 - `lxc create CTID` preflights ID, template, storage and networking; supports private password sources/public keys and defaults to unprivileged, stopped containers.
 - `vm create VMID` provisions a stopped VM with CPU, memory, SCSI disk and bridge, optionally ISO boot and onboot; it does not install an OS.
 - `vm disk ls|add|remove|delete` distinguishes attached/system/unused devices. Remove preserves the unused volume; delete only accepts unused slots, requires exact confirmation, and verifies storage removal.
+- Health checks add CPU/memory thresholds and structured backup timestamps; inaccessible data is `unknown` and fails strict mode. Status reports expose completeness and component errors, with a PARTIAL table marker.

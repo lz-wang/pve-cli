@@ -20,6 +20,8 @@ const (
 
 type DoctorStatus string
 
+const DoctorStatusUnknown DoctorStatus = "unknown"
+
 const (
 	DoctorStatusOK   DoctorStatus = "ok"
 	DoctorStatusWarn DoctorStatus = "warn"
@@ -127,11 +129,13 @@ type RestoreResult struct {
 }
 
 type StatusReport struct {
-	Nodes    NodeSummary    `json:"nodes" yaml:"nodes"`
-	Guests   GuestSummary   `json:"guests" yaml:"guests"`
-	Storages StorageSummary `json:"storages" yaml:"storages"`
-	Backups  BackupSummary  `json:"backups" yaml:"backups"`
-	Issues   []StatusIssue  `json:"issues,omitempty" yaml:"issues,omitempty"`
+	Complete        bool                `json:"complete" yaml:"complete"`
+	ComponentErrors map[string][]string `json:"component_errors,omitempty" yaml:"component_errors,omitempty"`
+	Nodes           NodeSummary         `json:"nodes" yaml:"nodes"`
+	Guests          GuestSummary        `json:"guests" yaml:"guests"`
+	Storages        StorageSummary      `json:"storages" yaml:"storages"`
+	Backups         BackupSummary       `json:"backups" yaml:"backups"`
+	Issues          []StatusIssue       `json:"issues,omitempty" yaml:"issues,omitempty"`
 }
 
 type NodeSummary struct {
@@ -292,10 +296,13 @@ type DoctorRow struct {
 }
 
 type CheckRow struct {
-	Check    string       `json:"check" yaml:"check"`
-	Status   DoctorStatus `json:"status" yaml:"status"`
-	Resource string       `json:"resource,omitempty" yaml:"resource,omitempty"`
-	Message  string       `json:"message" yaml:"message"`
+	LatestBackup uint64       `json:"latest_backup,omitempty" yaml:"latest_backup,omitempty"`
+	Value        float64      `json:"value,omitempty" yaml:"value,omitempty"`
+	Threshold    float64      `json:"threshold,omitempty" yaml:"threshold,omitempty"`
+	Check        string       `json:"check" yaml:"check"`
+	Status       DoctorStatus `json:"status" yaml:"status"`
+	Resource     string       `json:"resource,omitempty" yaml:"resource,omitempty"`
+	Message      string       `json:"message" yaml:"message"`
 }
 
 type TaskRow struct {
@@ -1092,6 +1099,11 @@ func WriteBulkResults(w io.Writer, format string, results []BulkGuestResult) err
 func WriteStatusReport(w io.Writer, format string, report StatusReport) error {
 	return Write(w, format, report, func(w io.Writer) error {
 		tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+		if !report.Complete {
+			if _, err := fmt.Fprintln(tw, "PARTIAL — observed counts only; unavailable components are UNKNOWN"); err != nil {
+				return err
+			}
+		}
 
 		if _, err := fmt.Fprintln(tw, "NODE"); err != nil {
 			return err

@@ -124,7 +124,7 @@ func TestCheckServiceStorageListingFailureWarns(t *testing.T) {
 	}
 	var found bool
 	for _, row := range result.Rows {
-		if row.Check == "storage" && row.Resource == "pve1" && row.Status == output.DoctorStatusWarn {
+		if row.Check == "storage" && row.Resource == "pve1" && row.Status == output.DoctorStatusUnknown {
 			found = true
 		}
 	}
@@ -324,7 +324,7 @@ func TestCheckServiceBackupQueryFailureIsNotACoverageGap(t *testing.T) {
 			guestRow = row
 		}
 	}
-	if sourceRow == nil || sourceRow.Status != output.DoctorStatusWarn || sourceRow.Message != "list backups: timeout" {
+	if sourceRow == nil || sourceRow.Status != output.DoctorStatusUnknown || sourceRow.Message != "list backups: timeout" {
 		t.Fatalf("source row = %#v", sourceRow)
 	}
 	if guestRow == nil || guestRow.Message != "backup status unavailable" {
@@ -389,7 +389,7 @@ func TestCheckServiceBackupCoveragePartialSourceFailureIsIndeterminate(t *testin
 	// vm 101 was not found on the reachable source, but the failing source
 	// may hide a newer backup: the verdict must stay indeterminate instead
 	// of claiming "no backup found".
-	if row := byVMID[101]; row.Status != output.DoctorStatusWarn || row.Message != "backup status unavailable" {
+	if row := byVMID[101]; row.Status != output.DoctorStatusUnknown || row.Message != "backup status unavailable" {
 		t.Fatalf("vm 101 row = %#v, want backup status unavailable", row)
 	}
 }
@@ -430,7 +430,7 @@ func TestCheckServiceBackupCoveragePartialFailureBeatsStaleVerdict(t *testing.T)
 		if row.Check == "backup-coverage" && row.Resource == "vm 100" {
 			// The stale backup on pve1 is not proof that no fresher backup
 			// exists on the unqueryable source.
-			if row.Status != output.DoctorStatusWarn || row.Message != "backup status unavailable" {
+			if row.Status != output.DoctorStatusUnknown || row.Message != "backup status unavailable" {
 				t.Fatalf("vm 100 row = %#v, want backup status unavailable", row)
 			}
 			return
@@ -569,4 +569,18 @@ func TestCheckServiceBackupCoverageSharedStorageFallsBackOnQueryFailure(t *testi
 		return
 	}
 	t.Fatalf("no vm 100 coverage row: %#v", result.Rows)
+}
+
+func TestUtilizationUnknownAndThresholds(t *testing.T) {
+	s := NewCheckService(nil)
+	result := CheckResult{}
+	s.checkUtilization(output.NodeRow{Name: "n", Status: "online", CPU: .9, Mem: 95, MaxMem: 100}, CheckOptions{CPUWarn: 85, MemoryWarn: 90}, &result)
+	if len(result.Rows) != 2 || !result.Warned || result.Rows[0].Value != 90 {
+		t.Fatalf("%+v", result)
+	}
+	result = CheckResult{}
+	s.checkUtilization(output.NodeRow{Name: "n"}, CheckOptions{}, &result)
+	if result.Rows[0].Status != output.DoctorStatusUnknown || !result.Warned {
+		t.Fatalf("%+v", result)
+	}
 }

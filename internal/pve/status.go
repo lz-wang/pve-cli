@@ -22,12 +22,12 @@ func NewStatusService(backend Backend) *StatusService {
 }
 
 func (s *StatusService) Report(ctx context.Context) (output.StatusReport, error) {
-	report := output.StatusReport{}
+	report := output.StatusReport{Complete: true}
 	var issues []output.StatusIssue
 
 	nodes, err := s.backend.Nodes(ctx)
 	if err != nil {
-		return output.StatusReport{}, fmt.Errorf("list nodes: %w", err)
+		return output.StatusReport{Complete: false, ComponentErrors: map[string][]string{"node": {err.Error()}}, Issues: []output.StatusIssue{{Component: "node", Message: "node inventory unavailable"}}}, nil
 	}
 
 	nodeRows := sortNodeRows(nodes)
@@ -48,6 +48,13 @@ func (s *StatusService) Report(ctx context.Context) (output.StatusReport, error)
 	issues = append(issues, backupIssues...)
 
 	report.Issues = issues
+	report.Complete = len(issues) == 0
+	if !report.Complete {
+		report.ComponentErrors = map[string][]string{}
+		for _, issue := range issues {
+			report.ComponentErrors[issue.Component] = append(report.ComponentErrors[issue.Component], issue.Message)
+		}
+	}
 	return report, nil
 }
 

@@ -29,6 +29,8 @@ func NewCheckService(backend Backend) *CheckService {
 // The backup coverage check only runs when both BackupTag and BackupMaxAge
 // are set; it never assumes every guest must be backed up.
 type CheckOptions struct {
+	CPUWarn      int
+	MemoryWarn   int
 	Node         string
 	StorageWarn  int
 	StorageFail  int
@@ -54,7 +56,8 @@ func (s *CheckService) Run(ctx context.Context, options CheckOptions) (CheckResu
 
 	nodes, err := s.backend.Nodes(ctx)
 	if err != nil {
-		return CheckResult{}, fmt.Errorf("list nodes: %w", err)
+		result.add(output.CheckRow{Check: "nodes", Status: output.DoctorStatusUnknown, Message: "node inventory unavailable"})
+		return result, nil
 	}
 
 	nodeNames := make([]string, 0, len(nodes))
@@ -67,6 +70,7 @@ func (s *CheckService) Run(ctx context.Context, options CheckOptions) (CheckResu
 		}
 		nodeNames = append(nodeNames, node.Name)
 		s.checkNode(node, &result)
+		s.checkUtilization(node, options, &result)
 	}
 
 	// A filtered-out-everything run must never look healthy: cron and other
@@ -85,7 +89,7 @@ func (s *CheckService) Run(ctx context.Context, options CheckOptions) (CheckResu
 	for _, nodeName := range sortedKeys(storageErrs) {
 		result.add(output.CheckRow{
 			Check:    "storage",
-			Status:   output.DoctorStatusWarn,
+			Status:   output.DoctorStatusUnknown,
 			Resource: nodeName,
 			Message:  fmt.Sprintf("list storage: %v", storageErrs[nodeName]),
 		})
@@ -192,7 +196,7 @@ func (s *CheckService) checkBackupCoverage(ctx context.Context, nodes []string, 
 	for _, nodeName := range sortedKeys(guestErrs) {
 		result.add(output.CheckRow{
 			Check:    "backup-coverage",
-			Status:   output.DoctorStatusWarn,
+			Status:   output.DoctorStatusUnknown,
 			Resource: nodeName,
 			Message:  fmt.Sprintf("list guests: %v", guestErrs[nodeName]),
 		})
@@ -210,7 +214,7 @@ func (s *CheckService) checkBackupCoverage(ctx context.Context, nodes []string, 
 	for _, source := range sortedKeys(backupErrs) {
 		result.add(output.CheckRow{
 			Check:    "backup-coverage",
-			Status:   output.DoctorStatusWarn,
+			Status:   output.DoctorStatusUnknown,
 			Resource: source,
 			Message:  fmt.Sprintf("list backups: %v", backupErrs[source]),
 		})
@@ -220,8 +224,22 @@ func (s *CheckService) checkBackupCoverage(ctx context.Context, nodes []string, 
 	// while any source is unqueryable; keep query outages and coverage gaps
 	// apart for cron and agent consumers.
 	hasUncertainSource := len(backupErrs) > 0
+	for _, n := range nodes {
+		hasStorage := false
+		for _, r := range storages {
+			if r.Node == n {
+				hasStorage = true
+			}
+		}
+		if !hasStorage {
+			hasUncertainSource = true
+		}
+	}
 	now := uint64(time.Now().Unix())
-	cutoff := now - uint64(options.BackupMaxAge.Seconds())
+	cutoff := uint64(0)
+	if seconds := uint64(options.BackupMaxAge.Seconds()); seconds < now {
+		cutoff = now - seconds
+	}
 	for _, guest := range guests {
 		resource := fmt.Sprintf("%s %d", guest.Kind, guest.VMID)
 		ctime, ok := latest[backupGuestKey(guest.Kind, guest.VMID)]
@@ -230,31 +248,35 @@ func (s *CheckService) checkBackupCoverage(ctx context.Context, nodes []string, 
 			// A compliant backup was proven to exist; a failing source
 			// cannot overturn that verdict.
 			result.add(output.CheckRow{
-				Check:    "backup-coverage",
-				Status:   output.DoctorStatusOK,
-				Resource: resource,
-				Message:  fmt.Sprintf("latest backup is %s old", output.FormatUptime(now-ctime)),
+				Check:        "backup-coverage",
+				LatestBackup: ctime,
+				Status:       output.DoctorStatusOK,
+				Resource:     resource,
+				Message:      fmt.Sprintf("latest backup is %s old", output.FormatUptime(now-ctime)),
 			})
 		case hasUncertainSource:
 			result.add(output.CheckRow{
-				Check:    "backup-coverage",
-				Status:   output.DoctorStatusWarn,
-				Resource: resource,
-				Message:  "backup status unavailable",
+				Check:        "backup-coverage",
+				LatestBackup: ctime,
+				Status:       output.DoctorStatusUnknown,
+				Resource:     resource,
+				Message:      "backup status unavailable",
 			})
 		case !ok:
 			result.add(output.CheckRow{
-				Check:    "backup-coverage",
-				Status:   output.DoctorStatusWarn,
-				Resource: resource,
-				Message:  "no backup found",
+				Check:        "backup-coverage",
+				LatestBackup: ctime,
+				Status:       output.DoctorStatusWarn,
+				Resource:     resource,
+				Message:      "no backup found",
 			})
 		default:
 			result.add(output.CheckRow{
-				Check:    "backup-coverage",
-				Status:   output.DoctorStatusWarn,
-				Resource: resource,
-				Message:  fmt.Sprintf("latest backup is %s old", output.FormatUptime(now-ctime)),
+				Check:        "backup-coverage",
+				LatestBackup: ctime,
+				Status:       output.DoctorStatusWarn,
+				Resource:     resource,
+				Message:      fmt.Sprintf("latest backup is %s old", output.FormatUptime(now-ctime)),
 			})
 		}
 	}
@@ -320,7 +342,7 @@ func (r *CheckResult) add(row output.CheckRow) {
 	switch row.Status {
 	case output.DoctorStatusFail:
 		r.Failed = true
-	case output.DoctorStatusWarn:
+	case output.DoctorStatusWarn, output.DoctorStatusUnknown:
 		r.Warned = true
 	}
 }
@@ -339,5 +361,39 @@ func sortStrings(values []string) {
 		for j := i; j > 0 && values[j] < values[j-1]; j-- {
 			values[j], values[j-1] = values[j-1], values[j]
 		}
+	}
+}
+
+func (s *CheckService) checkUtilization(node output.NodeRow, o CheckOptions, result *CheckResult) {
+	cpuWarn := o.CPUWarn
+	if cpuWarn == 0 {
+		cpuWarn = 85
+	}
+	memoryWarn := o.MemoryWarn
+	if memoryWarn == 0 {
+		memoryWarn = 90
+	}
+	for _, metric := range []struct {
+		name      string
+		value     float64
+		threshold int
+		known     bool
+	}{
+		{"node-cpu", node.CPU * 100, cpuWarn, node.Status == "online" && node.MaxMem > 0},
+		{"node-memory", func() float64 {
+			if node.MaxMem == 0 {
+				return 0
+			}
+			return float64(node.Mem) / float64(node.MaxMem) * 100
+		}(), memoryWarn, node.Status == "online" && node.MaxMem > 0},
+	} {
+		row := output.CheckRow{Check: metric.name, Resource: node.Name, Status: output.DoctorStatusOK, Value: metric.value, Threshold: float64(metric.threshold), Message: fmt.Sprintf("%.1f%% (warn %d%%)", metric.value, metric.threshold)}
+		if !metric.known {
+			row.Status = output.DoctorStatusUnknown
+			row.Message = "utilization unavailable"
+		} else if metric.value >= float64(metric.threshold) {
+			row.Status = output.DoctorStatusWarn
+		}
+		result.add(row)
 	}
 }
