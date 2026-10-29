@@ -124,6 +124,8 @@ func NewAppWithBuildInfoAndDependencies(info BuildInfo, deps Dependencies) *cli.
 			categorize("Local", newConfigCommand(deps)),
 			categorize("Dashboard", newDoctorCommand(deps)),
 			categorize("Local", newVersionCommand(info)),
+			categorize("Local", newCompletionCommand()),
+			newCompleteCommand(deps),
 		},
 	}
 	return app

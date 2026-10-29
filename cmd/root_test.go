@@ -1280,10 +1280,13 @@ func TestTopLevelHelpCategories(t *testing.T) {
 		"Dashboard":      {"check", "doctor", "status"},
 		"Guests":         {"guest", "lxc", "vm"},
 		"Infrastructure": {"backup", "firewall", "network", "node", "storage", "task"},
-		"Local":          {"config", "version"},
+		"Local":          {"completion", "config", "version"},
 	}
 	got := make(map[string][]string)
 	for _, command := range NewAppWithDependencies("test", Dependencies{}).Commands {
+		if command.Hidden {
+			continue
+		}
 		got[command.Category] = append(got[command.Category], command.Name)
 	}
 	if len(got) != len(want) {
