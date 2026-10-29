@@ -476,3 +476,4 @@ unless `--yes` is passed. Bulk operations require typing `yes` unless
 - `completion bash|zsh|fish` supplies command, flag, enum and read-only dynamic node/storage/VMID completion, with silent offline fallback.
 - `lxc template ls` separates the downloadable system index (`--available`) from storage `vztmpl` volumes, with name filtering.
 - Template downloads preflight the index and storage, reject duplicate downloads, and verify storage content after `--wait`.
+- `lxc create CTID` preflights ID, template, storage and networking; supports private password sources/public keys and defaults to unprivileged, stopped containers.

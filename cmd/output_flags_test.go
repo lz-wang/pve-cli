@@ -48,6 +48,7 @@ var structuredOutputCommands = map[string]bool{
 	"vm restore":            true,
 	"lxc template download": true,
 	"lxc template ls":       true,
+	"lxc create":            true,
 	"lxc ls":                true,
 	"lxc get":               true,
 	"lxc clone":             true,

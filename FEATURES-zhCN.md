@@ -450,3 +450,4 @@ rollback 和 delete prompt 要求输入精确的 snapshot name，除非传入 `-
 - `completion bash|zsh|fish` 支持命令、参数、枚举及只读 Node/Storage/VMID 动态补全，离线时静默回退。
 - `lxc template ls` 区分可下载系统模板（`--available`）与存储中的 `vztmpl` 卷，支持名称过滤。
 - 模板下载预检索引和存储、拒绝重复下载，并在 `--wait` 成功后核对存储文件。
+- `lxc create CTID` 预检 ID、模板、存储及网络，支持密码环境变量和 SSH 公钥，默认创建非特权且未启动的容器。
