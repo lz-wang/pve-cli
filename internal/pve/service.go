@@ -2,6 +2,7 @@ package pve
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -232,36 +233,45 @@ func (s *GuestService) run(ctx context.Context, vmid int, node string, action fu
 
 func (s *GuestService) resolve(ctx context.Context, vmid int, node string) (Guest, error) {
 	if vmid <= 0 {
-		return nil, fmt.Errorf("invalid vmid %d", vmid)
+		return nil, fmt.Errorf("%w: invalid vmid %d", ErrInvalid, vmid)
 	}
 	if node != "" {
-		return s.getOnNode(ctx, node, vmid)
+		g, err := s.getOnNode(ctx, node, vmid)
+		return g, ClassifyError(err)
 	}
-
+	// Production backends use one cluster inventory request. Capability-only
+	// backends use a complete traversal, preserving all non-NotFound errors.
+	if _, ok := s.backend.(ClusterGuestBackend); ok {
+		ref, err := s.Resolve(ctx, fmt.Sprint(vmid), node, false)
+		if err != nil {
+			return nil, err
+		}
+		g, err := s.getOnNode(ctx, ref.Node, vmid)
+		return g, ClassifyError(err)
+	}
 	nodes, err := s.backend.Nodes(ctx)
 	if err != nil {
-		return nil, err
+		return nil, ClassifyError(err)
 	}
-
-	var firstErr error
-	for _, nodeRow := range nodes {
-		if nodeRow.Name == "" {
-			continue
+	var found Guest
+	for _, n := range nodes {
+		g, e := s.getOnNode(ctx, n.Name, vmid)
+		if e != nil {
+			e = ClassifyError(e)
+			if errors.Is(e, ErrNotFound) {
+				continue
+			}
+			return nil, e
 		}
-		guest, err := s.getOnNode(ctx, nodeRow.Name, vmid)
-		if err == nil {
-			return guest, nil
+		if found != nil {
+			return nil, fmt.Errorf("%w: %s %d", ErrAmbiguous, s.kind, vmid)
 		}
-		if firstErr == nil {
-			firstErr = err
-		}
-		s.debug("skip node", "node", nodeRow.Name, "error", err)
+		found = g
 	}
-
-	if firstErr != nil {
-		return nil, fmt.Errorf("%s %d not found", s.kind, vmid)
+	if found == nil {
+		return nil, fmt.Errorf("%w: %s %d not found", ErrNotFound, s.kind, vmid)
 	}
-	return nil, fmt.Errorf("%s %d not found", s.kind, vmid)
+	return found, nil
 }
 
 func (s *GuestService) listOnNode(ctx context.Context, node string) ([]output.GuestRow, error) {

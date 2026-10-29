@@ -192,9 +192,9 @@ func (s *GuestAggregateService) getAuto(ctx context.Context, vmid int, node stri
 		if firstErr != nil {
 			return output.GuestRow{}, firstErr
 		}
-		return output.GuestRow{}, fmt.Errorf("guest %d not found", vmid)
+		return output.GuestRow{}, fmt.Errorf("%w: guest %d not found", ErrNotFound, vmid)
 	default:
-		return output.GuestRow{}, fmt.Errorf("guest %d is ambiguous: found both vm and lxc, use --type vm or --type lxc", vmid)
+		return output.GuestRow{}, fmt.Errorf("%w: guest %d is ambiguous: found both vm and lxc, use --type vm or --type lxc", ErrAmbiguous, vmid)
 	}
 }
 

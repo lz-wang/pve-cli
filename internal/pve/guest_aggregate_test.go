@@ -2,6 +2,7 @@ package pve
 
 import (
 	"context"
+	"errors"
 	"strconv"
 	"strings"
 	"testing"
@@ -121,7 +122,7 @@ func TestGuestAggregateServiceGetAutoNotFound(t *testing.T) {
 	svc := NewGuestAggregateService(backend, nil, false)
 
 	_, err := svc.Get(context.Background(), 999, GuestGetOptions{Type: GuestTypeAuto})
-	if err == nil || err.Error() != "guest 999 not found" {
+	if !errors.Is(err, ErrNotFound) {
 		t.Fatalf("error = %v", err)
 	}
 }
