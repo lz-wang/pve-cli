@@ -448,3 +448,4 @@ rollback 和 delete prompt 要求输入精确的 snapshot name，除非传入 `-
 - Profile 使用 `token_secret_env` 或私有 `token_secret_file`；支持标准输入和交互隐藏输入，凭据独立存储。
 - `vm/lxc config get|set` 使用 PVE 原生字段和 `config` 对象；拒绝重复更新键并隐藏凭据字段。
 - `completion bash|zsh|fish` 支持命令、参数、枚举及只读 Node/Storage/VMID 动态补全，离线时静默回退。
+- `lxc template ls` 区分可下载系统模板（`--available`）与存储中的 `vztmpl` 卷，支持名称过滤。

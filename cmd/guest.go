@@ -26,6 +26,9 @@ func newGuestCommand(kind, usage string, deps Dependencies) *cli.Command {
 	if kind == "vm" {
 		commands = append(commands, newVMAgentCommand(deps))
 	}
+	if kind == "lxc" {
+		commands = append(commands, newLXCTemplateCommand(deps))
+	}
 	commands = append(commands, guestConfigCommand(kind, deps))
 	if kind == "vm" {
 		commands = append(commands, newVMCloudInitCommand(deps))
