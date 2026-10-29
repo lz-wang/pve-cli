@@ -11,11 +11,14 @@ import (
 )
 
 type StorageListOptions struct {
-	Node    string
-	Content string
-	Type    string
-	Active  bool
-	Enabled bool
+	Sort           string
+	Desc           bool
+	MinUsedPercent float64
+	Node           string
+	Content        string
+	Type           string
+	Active         bool
+	Enabled        bool
 }
 
 type StorageContentListOptions struct {
@@ -40,7 +43,7 @@ func (s *StorageService) List(ctx context.Context, options StorageListOptions) (
 		if err != nil {
 			return nil, err
 		}
-		return sortStorageRows(filterStorageRows(rows, options)), nil
+		return queryStorages(rows, options)
 	}
 
 	nodes, err := s.backend.Nodes(ctx)
@@ -69,7 +72,7 @@ func (s *StorageService) List(ctx context.Context, options StorageListOptions) (
 	if successes == 0 && firstErr != nil {
 		return nil, fmt.Errorf("list storage: no nodes could be queried: %w", firstErr)
 	}
-	return sortStorageRows(filterStorageRows(rows, options)), nil
+	return queryStorages(rows, options)
 }
 
 func (s *StorageService) Get(ctx context.Context, node, storage string) (output.StorageRow, error) {

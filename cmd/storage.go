@@ -31,6 +31,9 @@ func storageUsageCommand(deps Dependencies) *cli.Command {
 				&cli.StringFlag{Name: "type", Usage: "filter by storage type, for example dir or lvmthin"},
 				&cli.BoolFlag{Name: "active", Usage: "show only active storages"},
 				&cli.BoolFlag{Name: "enabled", Usage: "show only enabled storages"},
+				&cli.StringFlag{Name: "sort", Usage: "name,node,used-percent,total"},
+				&cli.BoolFlag{Name: "desc"},
+				&cli.Float64Flag{Name: "min-used-percent", Usage: "minimum known usage percent"},
 			},
 			commonOutputFlags()...,
 		),
@@ -43,6 +46,7 @@ func storageUsageCommand(deps Dependencies) *cli.Command {
 				return err
 			}
 			rows, err := pve.NewStorageService(rt.backend).List(c.Context, pve.StorageListOptions{
+				Sort: c.String("sort"), Desc: c.Bool("desc"), MinUsedPercent: c.Float64("min-used-percent"),
 				Node:    c.String("node"),
 				Content: c.String("content"),
 				Type:    c.String("type"),
@@ -68,6 +72,9 @@ func storageListCommand(deps Dependencies) *cli.Command {
 				&cli.StringFlag{Name: "type", Usage: "filter by storage type, for example dir or lvmthin"},
 				&cli.BoolFlag{Name: "active", Usage: "show only active storages"},
 				&cli.BoolFlag{Name: "enabled", Usage: "show only enabled storages"},
+				&cli.StringFlag{Name: "sort", Usage: "name,node,used-percent,total"},
+				&cli.BoolFlag{Name: "desc"},
+				&cli.Float64Flag{Name: "min-used-percent", Usage: "minimum known usage percent"},
 			},
 			commonOutputFlags()...,
 		),
@@ -80,6 +87,7 @@ func storageListCommand(deps Dependencies) *cli.Command {
 				return err
 			}
 			rows, err := pve.NewStorageService(rt.backend).List(c.Context, pve.StorageListOptions{
+				Sort: c.String("sort"), Desc: c.Bool("desc"), MinUsedPercent: c.Float64("min-used-percent"),
 				Node:    c.String("node"),
 				Content: c.String("content"),
 				Type:    c.String("type"),
@@ -154,6 +162,7 @@ func storageContentListCommand(deps Dependencies) *cli.Command {
 				return err
 			}
 			rows, err := pve.NewStorageService(rt.backend).ListContent(c.Context, pve.StorageContentListOptions{
+
 				Node:    c.String("node"),
 				Storage: c.String("storage"),
 				Content: c.String("content"),
