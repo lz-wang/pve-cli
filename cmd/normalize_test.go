@@ -50,8 +50,8 @@ func TestNormalizeArgsMovesGuestTypeAndOutputFlags(t *testing.T) {
 }
 
 func TestNormalizeArgsMovesRepeatedSetFlags(t *testing.T) {
-	args := []string{"pve", "vm", "config", "101", "--set", "memory=4096", "--set", "cores=4", "--wait"}
-	want := []string{"pve", "vm", "config", "--set", "memory=4096", "--set", "cores=4", "--wait", "101"}
+	args := []string{"pve", "vm", "config", "set", "101", "--set", "memory=4096", "--set", "cores=4", "--wait"}
+	want := []string{"pve", "vm", "config", "set", "--set", "memory=4096", "--set", "cores=4", "--wait", "101"}
 
 	if got := testNormalize(t, args); !reflect.DeepEqual(got, want) {
 		t.Fatalf("normalize = %#v, want %#v", got, want)

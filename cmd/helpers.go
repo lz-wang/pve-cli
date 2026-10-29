@@ -49,6 +49,9 @@ func parseSetFlags(items []string) (map[string]string, error) {
 		if key == "" {
 			return nil, fmt.Errorf("empty key in --set %q", item)
 		}
+		if _, exists := result[key]; exists {
+			return nil, fmt.Errorf("invalid duplicate --set key %q", key)
+		}
 		result[key] = value
 	}
 	return result, nil

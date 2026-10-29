@@ -472,3 +472,4 @@ unless `--yes` is passed. Bulk operations require typing `yes` unless
 - Bulk lifecycle commands use 1–8 workers and default to at most 20 targets (`--max-targets`); all mutations require confirmation or `--yes`.
 - VM/LXC commands accept exact names, with explicit `--name` for numeric names; lists support name/status filters and six stable sort keys.
 - Profiles reference `token_secret_env` or a private `token_secret_file`; `config set --token-secret-stdin` and interactive hidden input store credentials separately.
+- `vm/lxc config get|set` reads native PVE keys under `config` and rejects duplicate update keys; credential values are redacted.

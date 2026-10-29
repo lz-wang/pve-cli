@@ -297,7 +297,7 @@ func TestVMConfigCommandPassesSetValuesAndWaits(t *testing.T) {
 
 	err := RunWithDependencies([]string{
 		"pve", "--config", cfgPath,
-		"vm", "config", "101",
+		"vm", "config", "set", "101",
 		"--set", "memory=4096",
 		"--set", "cores=4",
 		"--wait",
@@ -327,7 +327,7 @@ func TestLXCConfigCommandPassesSetValues(t *testing.T) {
 
 	err := RunWithDependencies([]string{
 		"pve", "--config", cfgPath,
-		"lxc", "config", "201",
+		"lxc", "config", "set", "201",
 		"--set", "memory=2048",
 		"--set", "cores=2",
 		"--wait",

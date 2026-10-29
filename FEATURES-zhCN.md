@@ -446,3 +446,4 @@ rollback 和 delete prompt 要求输入精确的 snapshot name，除非传入 `-
 - 批量生命周期操作使用 1–8 个 worker，默认限制 20 个目标（`--max-targets`）；提交前确认或使用 `--yes`。
 - VM/LXC 支持精确名称定位，纯数字名称使用 `--name`；列表支持名称/状态过滤和六种稳定排序。
 - Profile 使用 `token_secret_env` 或私有 `token_secret_file`；支持标准输入和交互隐藏输入，凭据独立存储。
+- `vm/lxc config get|set` 使用 PVE 原生字段和 `config` 对象；拒绝重复更新键并隐藏凭据字段。
