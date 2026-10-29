@@ -1,103 +1,39 @@
-# Compatibility Policy
+# v3 CLI contract
 
-Development on `main` is the v2 line. The next release will be **v2.0.0**, not
-v1.2.0: the changes collected under v2.0.0 remove and rename documented v1
-commands, flags, and defaults, which this policy defines as breaking. v2.0.0
-supersedes the v1.x stability promise instead of restoring compatibility
-stubs for it.
+The current major version is v3. The executable is `pve`; the Go module is
+`github.com/lz-wang/pve-cli/v3`. Configuration lives at
+`~/.config/pve/config.yaml`, selected by optional global `--config`/`--profile`.
 
-Within v2.x, this tool is intended to be stable for personal HomeLab scripts
-and automation. This policy applies to documented behavior.
+Documented commands, flag names, positional argument meanings, JSON/YAML fields
+and their scalar types remain stable within v3.x. Adding optional flags,
+commands and output fields is allowed. Table layout and wording may improve.
+Scripts should use JSON/YAML and the exit-code contract.
 
-## v1 to v2 Migration
+- Results go to stdout; UPIDs, task progress and diagnostics go to stderr.
+- Numeric positional targets mean VMIDs; exact names must resolve uniquely.
+- Native `config` objects preserve the remote API's dynamic keys and value types.
+- `--yes` skips only local confirmation. Dry-run is read-only. Nonterminal
+  dangerous operations require explicit confirmation bypass.
+- Operation states distinguish submission, confirmed outcomes, unknown outcomes
+  and cancellation requests. A returned UPID is never discarded after waiting.
+- Waiting is Context-bound and never implicitly cancels a remote task.
+- Non-idempotent requests are not automatically resubmitted.
+- Bulk selection must be complete and constrained; results are per target.
+- Partial status counts are observed values; `complete=false` and component
+  errors must be checked before interpreting them as cluster totals.
+- Credentials are file/environment references. Config rejects unknown fields;
+  no automatic data migration or compatibility alias layer is implemented.
 
-v2.0.0 intentionally breaks the documented v1 CLI surface. The main changes:
+| Exit | Meaning |
+|---|---|
+| 0 | Success |
+| 1 | Confirmed operation failure or failed strict health check |
+| 2 | Argument or configuration error |
+| 3 | API authentication, authorization, connectivity or availability failure |
+| 4 | Missing, ambiguous or conflicting resource |
+| 5 | Final operation outcome not confirmed |
 
-- The executable is `pve` and the Homebrew formula is `lz-wang/tap/pve`; no
-  `pvectl` executable alias is provided.
-- The default config path is `~/.config/pve/config.yaml`; the old directory is
-  not searched or migrated automatically. Existing config files can be moved
-  there or selected with `--config`. Token-secret environment variable names
-  remain user-defined.
-- Global `--timeout` is renamed to `--api-timeout` so it no longer collides
-  with the guest-command `--timeout` of `vm agent exec`.
-- Global `--output`, `--wait`, and `--wait-timeout` are removed; they are
-  per-command flags on the commands that use them.
-- `config update` is replaced by `config set` and `config use`, and the
-  historical `view`, `init`, `set-profile`, `use-profile`, `current-profile`,
-  `set-context`, `use-context`, and `current-context` subcommands are removed.
-- `firewall --type` is renamed to `--scope`, `backup ls --kind` to `--type`,
-  and `vm cloud-init update` to `vm cloud-init regenerate`.
-- `vm/lxc backup --protected` is a boolean flag instead of a literal `0` or
-  `1` value.
-
-See `CHANGELOG.md` for the complete list. There are no hidden aliases or
-compatibility stubs for removed v1 names; update scripts to the new surface.
-
-## Stable Within v2.x
-
-- Command names and documented subcommand structure.
-- Positional argument order and meaning.
-- Documented flags and their accepted value shapes.
-- JSON and YAML output field names and field types.
-- Command results on stdout.
-- Task IDs, wait progress, and bulk-operation progress on stderr.
-- Local confirmation behavior for dangerous operations, including snapshot
-  delete and multi-guest bulk operations.
-- Bulk operations write one result row per guest to stdout and exit non-zero
-  only when at least one guest failed.
-- Doctor and check diagnostics as structured rows, including failure rows on
-  stdout.
-
-## Allowed Non-breaking Changes
-
-- Add new commands.
-- Add new optional flags.
-- Add new JSON/YAML fields.
-- Improve table output formatting.
-- Improve error messages without changing exit semantics.
-- Add more doctor diagnostic rows.
-
-## Breaking Changes
-
-These require a new major version:
-
-- Remove or rename documented commands.
-- Remove or rename documented flags.
-- Change positional argument meaning.
-- Remove or rename JSON/YAML fields.
-- Change JSON/YAML field types.
-- Move command result output from stdout to stderr.
-- Move task IDs or wait progress from stderr to stdout.
-- Skip dangerous-operation confirmation by default.
-
-## Table Output
-
-Table output is for humans and may be adjusted for readability within a major
-version. Scripts should use `-o json` or `-o yaml`.
-
-## In Scope
-
-One-off VM/LXC backup restore is supported. Restoring a vzdump archive into a
-new, non-existing VMID is a supported disaster-recovery workflow. Overwriting
-an existing VMID during restore is a non-goal; delete the guest first, then
-restore.
-
-## Non-goals
-
-- Scheduled backup job management.
-- Backup prune policy management.
-- PBS datastore administration.
-- PBS verification/prune administration.
-- HA/Ceph/SDN full management.
-- Arbitrary Proxmox REST API passthrough.
-
-See the README for the full project non-goals list.
-
-## v3 development contract
-
-The module is `github.com/lz-wang/pve-cli/v3`. `--yes` skips only local
-confirmation. `--wait` waits locally; `--wait-timeout` never cancels the remote
-task. Results use stdout and progress uses stderr. Exit codes: 0 success,
-1 operation failure, 2 input/configuration, 3 API access, 4 resolution/conflict,
-5 unknown outcome. Old command and config formats are not retained.
+Removal/renaming of documented commands or fields, field-type changes, changes
+to argument meaning, output-stream changes, or weakening required confirmation
+need another major version. See [usage](usage.md) and [schema](output-schema.md)
+for the complete current contract.

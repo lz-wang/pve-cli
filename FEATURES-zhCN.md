@@ -1,460 +1,58 @@
-# pve 功能说明
-
-`pve` 是一个小而明确的个人 HomeLab Proxmox VE CLI。它通过
-`go-proxmox` 调用 Proxmox VE API，重点覆盖日常 VM/QEMU 和 LXC 工作流。
-
-## 全局 CLI 能力
-
-- 帮助命令按 Dashboard、Guests、Infrastructure、Local 四个类别分组，
-  总览与健康检查在前、本地工具在后，符合日常 HomeLab 使用顺序。下级帮助
-  优先显示查询和启停，guest 删除和 snapshot 回滚放在相应列表末尾。
-- 本地构建、安装和发布包统一使用 `pve` 二进制名称；Homebrew 通过
-  `brew install lz-wang/tap/pve` 安装。
-- 通过命令级的 `--output` 或 `-o` 支持资源的 `table`、`json`、`yaml` 输出；本地
-  配置查询使用表格。
-- 通过 `--profile` 支持选择 profile。
-- 通过 `--config` 支持指定配置文件路径。
-- 通过全局 `--api-timeout` 支持覆盖 API 请求超时；`vm agent exec` 的
-  `--timeout` 专指 guest 内命令的等待上限。
-- 异步操作命令支持 `--wait` 和 `--wait-timeout`。
-- 通过 `--insecure` 支持覆盖 TLS 校验行为。
-- 命令结果输出到 stdout。
-- task ID、等待进度和日志输出到 stderr。
-
-## 配置
-
-`pve config` 管理本地 YAML 配置和 profile 选择。
-
-默认配置路径为 `~/.config/pve/config.yaml`。已有配置文件可移至此路径，
-或通过 `--config` 显式指定；不回退查找旧路径，也不自动迁移。token-secret
-环境变量名由用户指定，文档使用 `PVE_*` 作为示例。
-
-- `config ls` 仅显示 profile 名称和 endpoint 两列，按名称排序。
-- `config show` 默认显示当前 profile，`config show NAME` 或全局 `--profile NAME`
-  选择一个 profile，`config show --all` 显示所有 profile。多个选择方式不能
-  组合使用。每个 profile 使用 `FIELD` / `VALUE` 两列表格，包含 Profile、Current、
-  Endpoint、Token ID、Token secret、Token secret env、Skip TLS verify、Timeout 和
-  Default output。最后一行显示 `Config file: /absolute/path/config.yaml`。
-- `config add` 交互式添加 profile，明文 token 输入隐藏回显，也可选择环境变量
-  引用。全局 `--api-timeout` 和 `--insecure` 提供默认设置；向导会询问
-  是否设为当前 profile，未配置当前 profile 时默认是，否则默认否。同名 profile 不会被
-  覆盖，取消时不写入任何变更。
-- `config set NAME` 非交互式创建或替换 profile。写入连接设置时必须提供
-  endpoint、token ID 和至少一种 token 来源，默认 timeout 为 `30s`、输出为
-  `table`。空配置写入的第一个 profile 自动成为当前 profile，之后写入不会
-  改变当前 profile。
-- `config use NAME` 仅切换当前 profile。要求 profile 已存在，且不修改其
-  连接设置。
-- `config help` 说明可用命令，顺序为 `ls`、`show`、`add`、`set`、`use`、
-  `help`。原有 config 子命令已移除。
-
-`config show` 将超过六个 Unicode 字符的 token 显示为摘要：保留前三个和后三个
-字符，中间显示 `*****`；六个字符及以内仅显示 `*****`。环境变量名称正常
-展示，不读取其值，配置文件中存储的 token 不变。末行配置路径为展开 `~` 和
-环境变量后的绝对路径，文件名中的换行会转义，确保路径显示在一行中。
-
-文件不存在时，`config ls` 和 `config show` 在终端中交互式引导初始化。拒绝或
-结束输入不会创建文件；非终端输入显示 add/set 初始化命令提示，不等待
-输入。这些情况均正常退出。初始化提示输出到 stderr，且不会覆盖已有文件。
-
-配置文件保存 Proxmox endpoint、token ID、TLS 行为、timeout 和默认输出格式。
-可通过 `--token-secret` 将 token 值直接明文保存到 `token_secret`，也可通过
-`--token-secret-env` 保存 `token_secret_env` 环境变量引用。非空明文值优先于
-环境变量引用。
-Unix 上保存配置时使用 `0600` 文件权限，已有文件也会收紧到该权限。
-
-## 诊断
-
-`pve doctor` 校验本地配置；除非使用 `--offline`，否则也会验证 Proxmox
-API 连接。
-
-检查项包括：
-
-- 配置路径和配置文件是否存在
-- YAML 解析
-- 当前选中的 profile
-- profile 必填字段
-- 明文 token 或 token-secret 环境变量是否存在
-- timeout 和默认输出设置
-- endpoint 形态和 TLS 模式
-- API 连接
-- 节点列表权限
-- 通过 `--node` 可选验证指定节点
-
-Doctor 输出结构化诊断行，并且不会打印 token secret。
-
-`doctor` 检查的是 `pve` 自身能否工作；`check`（见下文）检查 HomeLab 当前
-是否健康。
-
-## HomeLab Status
-
-`pve status` 聚合输出一份紧凑的 HomeLab 概览：
-
-- 节点摘要（total/online/offline，含每个节点的行）
-- guest 摘要（total、running、stopped、VM 与 LXC 数量）
-- 存储摘要（total、active，含每个存储的行）
-- 备份摘要（数量、跨备份存储的最新备份时间；shared 存储只在一个节点查询
-  并只统计一次）
-- 查询失败的部分以 `issues` 呈现，而不是让整个命令失败
-
-## HomeLab 健康检查
-
-`pve check` 以适合 cron 的退出码语义检查 HomeLab 健康状况：
-
-- 离线节点报告 `fail`
-- inactive 存储报告 `fail`，disabled 存储报告 `warn`
-- 存储使用率超过 `--storage-warn`（默认 85%）报告 `warn`，超过
-  `--storage-fail`（默认 95%）报告 `fail`
-- 通过 `--backup-tag` 和 `--backup-max-age` 可选开启备份覆盖率检查，只针对
-  带该 tag 的 guest；备份存储不可查询时报告 `backup status unavailable`，
-  而不是误导性的 `no backup found`
-- `--node` 指向不存在的节点时报告 `fail`，而不是输出虚假的正常结果
-- `fail` 使退出码非零；`--strict` 让 `warn` 也非零
-
-## 版本
-
-`pve version` 打印构建和运行时元数据。它不读取配置文件，也不连接
-Proxmox VE。
-
-支持常规输出格式：
-
-- `pve version`
-- `pve version -o json`
-- `pve version -o yaml`
-
-## 节点
-
-`pve node ls` 列出 Proxmox VE 节点。
-
-节点输出包含 status、CPU、memory、disk 和 uptime 字段。
-
-`pve node get NODE` 显示节点详情：status、CPU、memory、disk、uptime、PVE
-版本、内核版本、load average 以及 CPU 型号/核数/插槽数。
-
-## Task 检查
-
-PVE task 是一等资源：
-
-- `task ls` 列出最近的 task；省略 `--node` 时跨节点聚合并容忍部分节点失败
-- `task ls --type vzdump`、`task ls --status running`、`task ls --limit N`
-- `task get UPID` 显示单个 task 状态
-- `task log UPID` 与 `task log UPID --tail N` 显示 task 日志
-- `task wait UPID --wait-timeout DURATION` 阻塞等待完成
-
-task status 取值：`running`、`ok`、`error`、`unknown`。
-
-## Guest 聚合视图
-
-`pve guest` 聚合 VM/QEMU 和 LXC guest。
-
-- `guest ls` 列出所有 guest。
-- `guest ls --node NODE` 按节点过滤。
-- `guest ls --type vm` 只显示 VM。
-- `guest ls --type lxc` 只显示容器。
-- `guest ls --status running` 按 guest 状态过滤。
-- `guest ls --tag TAG` 按 tag 过滤；可重复，配合 `--tag-match all|any`（默认
-  `all`）。Proxmox VE 用 `;` 连接 guest tags，`pve` 先按该格式解码再匹配。
-- `guest get VMID` 解析并显示指定 ID 的 guest。
-- `guest get VMID --type vm` 或 `--type lxc` 用于消除重复 ID 歧义。
-
-Guest 输出包含 kind、VMID/CTID、name、node、status、CPU、memory、disk、
-uptime 和 tags 等 Proxmox VE 可提供的字段。
-
-### 批量 Guest 操作
-
-`guest start`、`guest shutdown`、`guest reboot`、`guest stop` 作用于所有匹配
-选择条件的 guest：
-
-- 选择条件至少需要 `--node`、`--status`、`--tag` 之一
-- 选择结果是变更操作的输入，必须 fail closed：任一节点无法查询时整体拒绝
-  执行，而不是带着部分集群视图继续
-- `--type all|vm|lxc` 收窄 guest 类型
-- `--dry-run` 打印将受影响的 guest 后退出
-- 命中超过一个 guest 时需要本地输入 `yes` 确认；`--yes` 跳过
-- `--jobs N`（默认 2）限制并发
-- `--wait`/`--wait-timeout` 等待每个 guest 的 task
-- 单个 guest 失败不会中止整批；每个 guest 的结果以 `BulkGuestResult` 行写入
-  stdout，进度输出到 stderr，只有至少一个 guest 失败时退出码才非零
-
-## VM/QEMU 管理
-
-`pve vm` 管理 QEMU 虚拟机。
-
-读取操作：
-
-- `vm ls`
-- `vm ls --node NODE`
-- `vm get VMID`
-- `vm get VMID --node NODE`
-
-生命周期操作：
-
-- `vm start VMID`
-- `vm shutdown VMID`
-- `vm stop VMID`
-- `vm reboot VMID`
-
-维护操作：
-
-- `vm clone SOURCE_VMID --name NAME --target NODE`
-- `vm config VMID --set key=value`
-- `vm migrate VMID --target NODE`
-- `vm resize VMID --disk DISK --size SIZE`
-- `vm backup VMID --storage STORAGE`
-- `vm delete VMID`
-
-省略 `--node` 时，工具可以遍历集群节点来解析 VM 所在位置。
-
-## LXC 管理
-
-`pve lxc` 为 LXC 容器提供与 VM 类似的命令形态。
-
-读取操作：
-
-- `lxc ls`
-- `lxc ls --node NODE`
-- `lxc get CTID`
-- `lxc get CTID --node NODE`
-
-生命周期操作：
-
-- `lxc start CTID`
-- `lxc shutdown CTID`
-- `lxc stop CTID`
-- `lxc reboot CTID`
-
-维护操作：
-
-- `lxc clone SOURCE_CTID --hostname HOSTNAME --target NODE`
-- `lxc config CTID --set key=value`
-- `lxc migrate CTID --target NODE`
-- `lxc resize CTID --disk DISK --size SIZE`
-- `lxc backup CTID --storage STORAGE`
-- `lxc delete CTID`
-
-省略 `--node` 时，工具可以遍历集群节点来解析容器所在位置。
-
-## 克隆
-
-VM 和 LXC clone 命令从已有 guest 创建新 guest。
-
-通用选项：
-
-- `--node` 选择源节点。
-- `--newid` 设置新的 VMID/CTID；省略时由 Proxmox 分配。
-- `--target` 选择目标节点，必填。
-- `--storage` 选择目标存储。
-- `--full` 请求完整克隆。
-- `--pool` 设置目标资源池。
-- `--snapname` 从指定快照克隆。
-- `--description` 设置描述。
-- `--wait` 等待 task 完成。
-- `--wait-timeout` 设置 task 等待超时。
-- `-o json` 让脚本能够捕获 `new_vmid`。
-
-VM 专用选项：
-
-- `--name`
-- `--format`
-
-LXC 专用选项：
-
-- `--hostname`
-
-## Guest 配置更新
-
-`vm config` 和 `lxc config` 将通用 `key=value` 选项传给 Proxmox guest
-config API。
-
-示例：
-
-```bash
-pve vm config 101 --set memory=4096 --set cores=4 --wait
-pve lxc config 201 --set memory=2048 --set cores=2 --wait
-```
-
-## 扩容
-
-`vm resize` 和 `lxc resize` 调整 guest 磁盘大小。
-
-示例：
-
-```bash
-pve vm resize 101 --disk scsi0 --size +20G --wait
-pve lxc resize 201 --disk rootfs --size +10G --wait
-```
-
-## 迁移
-
-`vm migrate` 和 `lxc migrate` 将 guest 迁移到另一个节点。
-
-支持选项：
-
-- `--node` 选择源节点。
-- `--target` 选择目标节点，必填。
-- `--online` 请求在线迁移。
-- `--wait` 等待 task 完成。
-
-## 快照
-
-VM 和 LXC 快照命令位于 `snapshot` 分组下。
-
-- `vm snapshot ls VMID`
-- `vm snapshot create VMID SNAPNAME`
-- `vm snapshot rollback VMID SNAPNAME`
-- `vm snapshot delete VMID SNAPNAME`
-- `lxc snapshot ls CTID`
-- `lxc snapshot create CTID SNAPNAME`
-- `lxc snapshot rollback CTID SNAPNAME`
-- `lxc snapshot delete CTID SNAPNAME`
-
-Rollback 和 delete 被视为危险操作，除非传入 `--yes`，否则需要本地确认。
-
-## 备份
-
-备份支持刻意保持轻量。
-
-`backup ls` 列出指定节点和存储上的备份文件：
-
-- `backup ls --node NODE --storage STORAGE`
-- `backup ls --node NODE --storage STORAGE --vmid VMID`
-- `backup ls --node NODE --storage STORAGE --type vm`
-- `backup ls --node NODE --storage STORAGE --type lxc`
-- `backup ls --node NODE --storage STORAGE --latest`
-
-`vm backup` 和 `lxc backup` 创建一次性 guest 备份：
-
-- `--storage` 必填。
-- `--mode` 支持 `snapshot`、`suspend`、`stop`。
-- `--compress` 支持 `zstd`、`lzo`、`gzip`、`none`。
-- `--notes-template` 设置备份备注模板。
-- `--bwlimit` 设置带宽限制，单位 KiB/s。
-- `--protected`（布尔值）保护备份不被清理。
-- `--wait` 等待完成。
-
-`vm restore` 和 `lxc restore` 将 vzdump 备份归档恢复到新的、尚不存在的
-VMID/CTID：
-
-- `--node` 和 `--vmid` 必填
-- `--storage` 可选指定目标存储
-- 目标 VMID 已存在时拒绝执行；没有覆盖开关
-- VMID 预检必须能看到所有节点；任一节点的 guest 清单无法查询时，restore
-  会在发起之前中止
-- `--wait` 期间已提交的 task 失败时，结果行（含 task ID）仍会写入 stdout，
-  之后命令再以非零码退出
-- 归档名带 vzdump 类型前缀（`vzdump-qemu-`/`vzdump-lxc-`）时必须与命令类型
-  匹配
-
-## VM QEMU Guest Agent（仅 VM）
-
-`vm agent` 查询 QEMU guest agent。LXC 容器没有该 API。
-
-- 所有 agent 命令的 `--node` 可选；省略时跨集群定位 VM，与其他面向
-  VMID 的命令一致
-- `vm agent ping VMID` 验证 agent 是否可用
-- `vm agent network VMID` 列出 guest 内部看到的网卡和地址（回答"克隆出来的
-  VM 拿到了什么 IP"）
-- `vm agent exec VMID -- COMMAND [ARG...]` 在 guest 内执行 executable+argv，
-  不隐式包装 shell；支持 `--input` 传入 stdin 数据、`--timeout` 限制等待；
-  guest 命令退出码会被保留并反映在命令退出码中
-
-文件写入/读取、fs freeze、密码重置刻意不在范围内。
-
-## VM Cloud-init
-
-Cloud-init 命令使用 PVE 原生 cloud-init 配置。
-
-- 所有 cloud-init 命令的 `--node` 可选；省略时跨集群定位 VM
-- `vm cloud-init get VMID` 显示归一化的 cloud-init 配置；密码永不回显，只报
-  告 `password_configured`
-- `vm cloud-init set VMID` 更新 `--user`、`--ssh-key-file`、`--ipconfig0..3`、
-  `--nameserver`、`--searchdomain` 和 `--password-env`
-- 密码只接受通过 `--password-env` 指定的环境变量名，绝不接受 flag 值
-- `vm cloud-init regenerate VMID` 重新生成 cloud-init 镜像，让下次启动生效
-- 只有 `vm cloud-init get` 支持 `-o`；`set` 和 `regenerate` 输出纯文本确认，
-  不产生结构化输出
-
-## 网络清单（只读）
-
-`network` 查看节点网络接口。
-
-- `network ls --node NODE`
-- `network ls --type bridge`
-- `network ls --active`
-- 省略 `--node` 时跨节点聚合并容忍部分节点失败
-- `network get IFACE --node NODE`
-
-网络变更（create/update/delete/apply/reload）是非目标。
-
-## 防火墙清单（只读）
-
-`firewall` 查看防火墙状态和规则。
-
-- `firewall status --node NODE`
-- `firewall ls --node NODE`
-- `firewall status --node NODE --scope vm --vmid VMID`
-- `firewall ls --node NODE --scope vm --vmid VMID`
-- `firewall ls --scope lxc --vmid CTID` 省略 `--node` 时跨集群定位
-  guest，与其他面向 VMID 的命令一致
-
-`--scope node` 是默认值且必须提供 `--node`。防火墙规则变更是非目标。
-
-## 存储清单
-
-存储命令是只读的。
-
-`storage ls` 列出存储状态：
-
-- `storage ls`
-- `storage ls --node NODE`
-- `storage ls --content backup`
-- `storage ls --type dir`
-- `storage ls --active`
-- `storage ls --enabled`
-
-`storage usage` 是复用 `StorageRow` schema 的紧凑日常用量视图。
-
-`storage get STORAGE --node NODE` 显示某节点上的一个存储。
-
-`storage content ls` 列出通用存储内容：
-
-- `storage content ls --node NODE --storage STORAGE`
-- `storage content ls --node NODE --storage STORAGE --content iso`
-- `storage content ls --node NODE --storage STORAGE --content backup`
-- `storage content ls --node NODE --storage STORAGE --vmid VMID`
-
-## 危险操作
-
-以下操作可能改变或破坏 guest 状态，因此保持显式操作：
-
-- `vm delete`
-- `lxc delete`
-- `vm snapshot rollback`
-- `lxc snapshot rollback`
-- `vm snapshot delete`
-- `lxc snapshot delete`
-- 命中超过一个 guest 的批量 `guest start/shutdown/reboot/stop`
-
-Delete prompt 要求输入精确的 VMID/CTID，除非传入 `--yes`。Snapshot
-rollback 和 delete prompt 要求输入精确的 snapshot name，除非传入 `--yes`。
-批量操作要求输入 `yes`，除非传入 `--yes`。
-
-`--yes` 会跳过本地确认 prompt。
-
-- v3 修改操作区分已提交、成功、失败和未知结果；等待超时不会取消远端任务。
-- `task cancel UPID --yes` 请求取消运行中的任务；通过后续查询确认终止状态。
-- 批量生命周期操作使用 1–8 个 worker，默认限制 20 个目标（`--max-targets`）；提交前确认或使用 `--yes`。
-- VM/LXC 支持精确名称定位，纯数字名称使用 `--name`；列表支持名称/状态过滤和六种稳定排序。
-- Profile 使用 `token_secret_env` 或私有 `token_secret_file`；支持标准输入和交互隐藏输入，凭据独立存储。
-- `vm/lxc config get|set` 使用 PVE 原生字段和 `config` 对象；拒绝重复更新键并隐藏凭据字段。
-- `completion bash|zsh|fish` 支持命令、参数、枚举及只读 Node/Storage/VMID 动态补全，离线时静默回退。
-- `lxc template ls` 区分可下载系统模板（`--available`）与存储中的 `vztmpl` 卷，支持名称过滤。
-- 模板下载预检索引和存储、拒绝重复下载，并在 `--wait` 成功后核对存储文件。
-- `lxc create CTID` 预检 ID、模板、存储及网络，支持密码环境变量和 SSH 公钥，默认创建非特权且未启动的容器。
-- `vm create VMID` 配置 CPU、内存、SCSI 磁盘和网桥，可挂载 ISO 并配置开机自启；不启动或安装操作系统。
-- `vm disk ls|add|remove|delete` 区分系统盘、附加盘和未使用卷；remove 保留卷，delete 仅接受 unused 槽位、精确确认并核对存储删除结果。
-- 健康检查增加 CPU/内存阈值和结构化最近备份时间；不可访问的数据标记 unknown，严格模式失败；status 显示完整性、组件错误和 PARTIAL 标记。
-- Storage `ls/usage` 支持名称、节点、利用率、总容量排序及利用率阈值；未知容量排序置后且不匹配阈值过滤。
-- 快照回滚/删除支持零修改的 `--dry-run`，检查快照与锁状态，非终端须 `--yes`；VM 回滚须先停止。
-- `node reboot/shutdown NODE` 预览运行中来宾及 API 影响，要求节点名称确认或 `--yes`；不等待节点恢复，也不自动停止来宾。
-- v3 契约由 JSON/YAML、HTTP 异常、确认、不重试和补全测试覆盖；原生配置值保留 PVE API 的原始类型。
+# pve v3 功能清单
+
+面向个人 HomeLab 的资源式、单二进制 Proxmox VE CLI。
+全部命令、参数与默认值见[使用指南](docs/usage.md)，JSON/YAML 契约见
+[输出 Schema](docs/output-schema.md)。
+
+## CLI 与配置
+
+- 可执行文件为 `pve`，Go Module 为 `github.com/lz-wang/pve-cli/v3`，使用 urfave/cli/v2。
+- 帮助按 Dashboard、Guests、Infrastructure、Local 分组。
+- 各命令支持表格、JSON/YAML 结果；stdout 输出结果，stderr 输出进度及 UPID。
+- 全局配置路径、Profile、API 超时、TLS 和详细日志选项；本地异步等待。
+- `config ls/show/add/set/use`、引导配置、隐藏 Token 输入、当前 Profile 选择、独立凭据文件和环境变量引用；show 仅显示引用与绝对配置路径。
+- 严格 YAML Schema；仅允许一个凭据源；Unix 凭据文件须私有且属于当前用户；采用原子写入和私有目录。
+- Bash、Zsh、Fish 命令/参数/枚举补全及只读 Node、Storage、VMID 动态补全；有超时限制和静默回退。
+
+## 来宾查询与生命周期
+
+- `vm/lxc ls/get` 和聚合 `guest ls/get` 支持精确 ID/名称、显式数字名称、重名候选及完整清单校验。
+- 名称、状态、标签过滤，标签 all/any 匹配；按 VMID、名称、节点、状态、内存、CPU 稳定排序，缺失指标置后。
+- 单来宾启动、关闭、重启和强制停止，异步操作返回可追踪结果。
+- VM/LXC 混合批量生命周期操作支持选择范围约束、dry-run、确认、1–8 个 worker、默认 20 个目标上限和逐来宾结果。
+- Context 取消阻止尚未提交的操作；部分失败独立保留，按 VMID 稳定输出。
+
+## 部署与维护
+
+- LXC 可下载系统模板索引与本地 `vztmpl` 清单，模板类别/名称过滤，防重复下载及等待后文件校验。
+- LXC 创建预检 ID、模板、rootdir 存储和网络；默认非特权且不启动；支持 SSH 公钥和密码环境变量。
+- VM 创建支持 CPU、内存、SCSI 磁盘、网桥、可选 ISO 启动与开机自启；不启动或自动安装系统。
+- VM/LXC 原生配置 get/set，在 `config` 中保留原始字段及类型；隐藏凭据值并拒绝重复更新键。
+- VM 磁盘区分系统盘、附加盘、安装介质和未使用卷；add 检查槽位及存储；remove 保留 unused 卷；delete 仅删除明确的未使用卷，需精确确认并验证存储结果；保留 resize。
+- VM/LXC 克隆、扩容、迁移及快照查询、创建、回滚、删除。
+- 快照回滚/删除预检存在性和锁，支持只读 dry-run 与确认；VM 回滚要求已停止。
+- VM cloud-init get/set/regenerate；部署使用已准备的模板克隆流程。
+- VM QEMU Agent ping、网络清单及不隐式使用 Shell 的 executable/argv exec。
+- 备份清单、过滤和最近备份查询；一次性 VM/LXC 备份及恢复到未占用的新 VMID，不自动覆盖现有来宾。
+
+## 基础设施与健康检查
+
+- 节点列表/详情及重启/关机预检，显示运行来宾数量和影响，要求精确节点名确认；不自动停止来宾或等待节点恢复。
+- 存储列表/详情/内容/容量，支持内容/类型/状态过滤、名称/节点/利用率/容量排序及阈值；未知容量置后，共享存储按节点展示且不重复累加容量。
+- 只读节点网络清单和 Node/VM/LXC 防火墙状态/规则。
+- Task ls/get/log/wait、状态/类型过滤、日志 tail 与运行中任务取消请求；取消返回 cancel_requested。
+- 统一 submitted/succeeded/failed/unknown 操作状态，保留可恢复 UPID，等待受 Context 控制，非幂等请求不自动重复提交。
+- Doctor 检查本地配置、凭据和 API 连通性，不输出秘密。
+- 健康检查覆盖节点状态、CPU/内存阈值、存储 Warn/Fail 阈值及标签来宾的备份时效与最近时间；不可访问时为 unknown，严格模式将 warning/unknown 视为失败。
+- Status 聚合节点/来宾/存储/备份，提供 complete/component_errors、已观测数量及 PARTIAL 表格标记。
+
+## 契约与交付
+
+- 退出码：0 成功，1 操作/健康失败，2 参数/配置错误，3 API 访问失败，4 定位/冲突，5 结果未知。
+- `--yes` 仅跳过本地确认；非终端危险操作必须显式提供。Dry-run 零修改，等待超时不取消远端任务。
+- 类型化且不回显凭据的 HTTP 错误，不输出可能包含密码的原始错误响应。
+- Mock Service、命令、HTTP 契约、JSON/YAML Golden 和竞态测试。
+- 从源码生成命令/Schema 参考并检查同步。
+- Linux/macOS/Windows amd64/arm64 构建、校验和、基于 Changelog 的 GitHub Release 与 Homebrew Formula 发布。
+
+保持个人 HomeLab 范围：不提供常驻服务、Web UI、多用户控制平面、任意 REST 透传、定时备份策略或完整 HA/Ceph/SDN 管理。

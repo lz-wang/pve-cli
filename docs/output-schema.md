@@ -1,367 +1,468 @@
-# Output Schema
+# v3 JSON and YAML output schema
 
-JSON and YAML output are script-facing and stable within v2.x. New fields may be
-added in minor releases, but existing field names and types will not be removed,
-renamed, or changed without a new major version. Table output is for humans and
-should not be parsed by scripts.
+Use the per-command `-o json` or `-o yaml` option. Results go to stdout;
+task IDs, wait progress and diagnostic text go to stderr. Config inspection
+uses human-readable tables without credential values.
 
-Fields marked optional use `omitempty` and may be absent when the value is empty
-or zero.
+Operations carry `resource`, optional `vmid/node/task`, `status`, and optional
+`error`. Clone, backup and restore include the same operation semantics plus
+resource-specific metadata. `submitted` means accepted without a completed
+wait; `succeeded` and `failed` reflect confirmed outcomes. `unknown` includes
+wait timeout/interruption and failed post-operation verification. A task ID is
+preserved whenever PVE returned one. `cancel_requested` does not imply stopped.
+Task inventory retains its own `running/ok/error/unknown` vocabulary.
+
+`StatusReport.complete=false` means component queries failed. Component errors
+are grouped by name and also appear as issue rows. Counts in such reports are
+observed counts, not authoritative cluster totals. Unknown resource capacity
+must not be interpreted as an actual zero-percent utilization.
+
+Guest configuration uses a dynamic `config` object containing native API keys.
+Values retain original JSON types, including numeric strings. Credential-key
+values are `[REDACTED]`. Other documented row types have stable field names and
+Go scalar types listed below. `uint64`/`int64`/`int` serialize as JSON numbers;
+`DoctorStatus` is a string; `map[string]interface {}` is a dynamic object.
+Slices are arrays; omitted optional fields are absent in both JSON and YAML.
+
+The following reference is generated from the actual output structs.
+
+<!-- GENERATED_REFERENCE -->
 
 ## NodeRow
 
-| Field | Type |
-| --- | --- |
-| `name` | string |
-| `status` | string |
-| `cpu` | number |
-| `mem` | uint64 |
-| `max_mem` | uint64 |
-| `disk` | uint64 |
-| `max_disk` | uint64 |
-| `uptime` | uint64 |
-
-## GuestRow
-
-Used by `guest`, `vm`, and `lxc` list/detail commands.
-
-| Field | Type |
-| --- | --- |
-| `kind` | string |
-| `vmid` | uint64 |
-| `name` | string |
-| `node` | string |
-| `status` | string |
-| `cpus` | int |
-| `cpu` | number |
-| `mem` | uint64 |
-| `max_mem` | uint64 |
-| `max_disk` | uint64 |
-| `uptime` | uint64 |
-| `tags` | string, optional |
-
-## CloneResult
-
-| Field | Type |
-| --- | --- |
-| `kind` | string |
-| `source_vmid` | uint64 |
-| `new_vmid` | uint64 |
-| `source_node` | string |
-| `target_node` | string |
-| `name` | string |
-| `task` | string, optional |
-
-## SnapshotRow
-
-| Field | Type |
-| --- | --- |
-| `kind` | string |
-| `vmid` | uint64 |
-| `node` | string |
-| `name` | string |
-| `description` | string |
-| `parent` | string |
-| `snaptime` | int64 |
-| `vmstate` | int |
-| `state` | string |
-
-## BackupRow
-
-| Field | Type |
-| --- | --- |
-| `node` | string |
-| `storage` | string |
-| `kind` | string |
-| `vmid` | uint64 |
-| `volid` | string |
-| `format` | string |
-| `size` | uint64 |
-| `used` | uint64, optional |
-| `ctime` | uint64 |
-| `protected` | string, optional |
-| `encrypted` | string, optional |
-| `verify_state` | string, optional |
-| `notes` | string, optional |
-
-## BackupResult
-
-| Field | Type |
-| --- | --- |
-| `kind` | string |
-| `vmid` | uint64 |
-| `node` | string |
-| `storage` | string |
-| `mode` | string |
-| `task` | string, optional |
-
-## StorageRow
-
-| Field | Type |
-| --- | --- |
-| `node` | string |
-| `storage` | string |
-| `type` | string |
-| `active` | bool |
-| `enabled` | bool |
-| `shared` | bool |
-| `content` | string |
-| `used` | uint64 |
-| `avail` | uint64 |
-| `total` | uint64 |
-| `used_fraction` | number |
-
-## StorageContentRow
-
-| Field | Type |
-| --- | --- |
-| `node` | string |
-| `storage` | string |
-| `content` | string |
-| `vmid` | uint64, optional |
-| `volid` | string |
-| `format` | string, optional |
-| `size` | uint64 |
-| `used` | uint64, optional |
-| `ctime` | uint64, optional |
-| `protected` | string, optional |
-| `encrypted` | string, optional |
-| `verify_state` | string, optional |
-| `notes` | string, optional |
-
-## DoctorRow
-
-| Field | Type |
-| --- | --- |
-| `check` | string |
-| `status` | string |
-| `message` | string |
-
-Known `status` values are `ok`, `warn`, `fail`, and `skip`.
-
-When a plaintext `token_secret` is used, doctor adds a `TOKEN_SECRET` row with
-status `ok` and marks `TOKEN_SECRET_ENV` as `skip`. Environment-based profiles
-continue to use `TOKEN_SECRET_ENV`. Credential values are not included in
-diagnostic messages.
-
-## CheckRow
-
-Used by `check`. `status` uses the same `ok`/`warn`/`fail`/`skip` vocabulary as
-`DoctorRow`.
-
-| Field | Type |
-| --- | --- |
-| `check` | string |
-| `status` | string |
-| `resource` | string, optional |
-| `message` | string |
-
-## TaskRow
-
-Used by `task ls` and `task get`.
-
-| Field | Type |
-| --- | --- |
-| `upid` | string |
-| `node` | string |
-| `type` | string |
-| `id` | string, optional |
-| `user` | string, optional |
-| `status` | string |
-| `exit_status` | string, optional |
-| `start_time` | int64, optional |
-| `end_time` | int64, optional |
-
-Known `status` values are `running`, `ok`, `error`, and `unknown`.
-
-## TaskLogRow
-
-| Field | Type |
-| --- | --- |
-| `line` | int |
-| `text` | string |
-
-## RestoreResult
-
-Used by `vm restore` and `lxc restore`.
-
-| Field | Type |
-| --- | --- |
-| `kind` | string |
-| `vmid` | uint64 |
-| `node` | string |
-| `archive` | string |
-| `storage` | string, optional |
-| `task` | string, optional |
-
-## StatusReport
-
-Used by `status`.
-
-| Field | Type |
-| --- | --- |
-| `nodes` | NodeSummary |
-| `guests` | GuestSummary |
-| `storages` | StorageSummary |
-| `backups` | BackupSummary |
-| `issues` | StatusIssue[], optional |
-
-NodeSummary: `total` (int), `online` (int), `offline` (int), `rows`
-(NodeRow[], optional).
-
-GuestSummary: `total`, `running`, `stopped`, `vm`, `lxc` (all int).
-
-StorageSummary: `total` (int), `active` (int), `rows` (StorageRow[], optional).
-
-BackupSummary: `count` (int), `latest_ctime` (uint64, optional).
-
-StatusIssue: `component` (string), `message` (string).
+| Field | Go / wire value type | May be omitted |
+|---|---|---|
+| `name` | `string` | no |
+| `status` | `string` | no |
+| `cpu` | `float64` | no |
+| `mem` | `uint64` | no |
+| `max_mem` | `uint64` | no |
+| `disk` | `uint64` | no |
+| `max_disk` | `uint64` | no |
+| `uptime` | `uint64` | no |
 
 ## NodeDetail
 
-Used by `node get`.
+| Field | Go / wire value type | May be omitted |
+|---|---|---|
+| `name` | `string` | no |
+| `status` | `string` | no |
+| `cpu` | `float64` | no |
+| `mem` | `uint64` | no |
+| `max_mem` | `uint64` | no |
+| `disk` | `uint64` | no |
+| `max_disk` | `uint64` | no |
+| `uptime` | `uint64` | no |
+| `pve_version` | `string` | no |
+| `kernel_version` | `string` | no |
+| `load_average` | `string` | no |
+| `cpu_model` | `string` | no |
+| `cpu_cores` | `int` | no |
+| `cpu_sockets` | `int` | no |
 
-| Field | Type |
-| --- | --- |
-| `name` | string |
-| `status` | string |
-| `cpu` | number |
-| `mem` | uint64 |
-| `max_mem` | uint64 |
-| `disk` | uint64 |
-| `max_disk` | uint64 |
-| `uptime` | uint64 |
-| `pve_version` | string |
-| `kernel_version` | string |
-| `load_average` | string |
-| `cpu_model` | string |
-| `cpu_cores` | int |
-| `cpu_sockets` | int |
+## GuestRow
+
+| Field | Go / wire value type | May be omitted |
+|---|---|---|
+| `kind` | `string` | no |
+| `vmid` | `uint64` | no |
+| `name` | `string` | no |
+| `node` | `string` | no |
+| `status` | `string` | no |
+| `cpus` | `int` | no |
+| `cpu` | `float64` | no |
+| `mem` | `uint64` | no |
+| `max_mem` | `uint64` | no |
+| `max_disk` | `uint64` | no |
+| `uptime` | `uint64` | no |
+| `tags` | `string` | yes |
+
+## OperationResult
+
+| Field | Go / wire value type | May be omitted |
+|---|---|---|
+| `resource` | `string` | no |
+| `vmid` | `int` | yes |
+| `node` | `string` | yes |
+| `task` | `string` | yes |
+| `status` | `string` | no |
+| `error` | `string` | yes |
+
+## CloneResult
+
+| Field | Go / wire value type | May be omitted |
+|---|---|---|
+| `resource` | `string` | no |
+| `status` | `string` | no |
+| `error` | `string` | yes |
+| `vmid` | `int` | no |
+| `node` | `string` | no |
+| `kind` | `string` | no |
+| `source_vmid` | `uint64` | no |
+| `new_vmid` | `uint64` | no |
+| `source_node` | `string` | no |
+| `target_node` | `string` | no |
+| `name` | `string` | no |
+| `task` | `string` | yes |
+
+## SnapshotRow
+
+| Field | Go / wire value type | May be omitted |
+|---|---|---|
+| `kind` | `string` | no |
+| `vmid` | `uint64` | no |
+| `node` | `string` | no |
+| `name` | `string` | no |
+| `description` | `string` | no |
+| `parent` | `string` | no |
+| `snaptime` | `int64` | no |
+| `vmstate` | `int` | no |
+| `state` | `string` | no |
+
+## SnapshotPlan
+
+| Field | Go / wire value type | May be omitted |
+|---|---|---|
+| `resource` | `string` | no |
+| `vmid` | `int` | no |
+| `node` | `string` | no |
+| `snapshot` | `string` | no |
+| `action` | `string` | no |
+| `impact` | `string` | no |
+
+## BackupRow
+
+| Field | Go / wire value type | May be omitted |
+|---|---|---|
+| `node` | `string` | no |
+| `storage` | `string` | no |
+| `kind` | `string` | no |
+| `vmid` | `uint64` | no |
+| `volid` | `string` | no |
+| `format` | `string` | no |
+| `size` | `uint64` | no |
+| `used` | `uint64` | yes |
+| `ctime` | `uint64` | no |
+| `protected` | `string` | yes |
+| `encrypted` | `string` | yes |
+| `verify_state` | `string` | yes |
+| `notes` | `string` | yes |
+
+## BackupResult
+
+| Field | Go / wire value type | May be omitted |
+|---|---|---|
+| `resource` | `string` | no |
+| `status` | `string` | no |
+| `error` | `string` | yes |
+| `kind` | `string` | no |
+| `vmid` | `uint64` | no |
+| `node` | `string` | no |
+| `storage` | `string` | no |
+| `mode` | `string` | no |
+| `task` | `string` | yes |
+
+## RestoreResult
+
+| Field | Go / wire value type | May be omitted |
+|---|---|---|
+| `resource` | `string` | no |
+| `status` | `string` | no |
+| `error` | `string` | yes |
+| `kind` | `string` | no |
+| `vmid` | `uint64` | no |
+| `node` | `string` | no |
+| `archive` | `string` | no |
+| `storage` | `string` | yes |
+| `task` | `string` | yes |
+
+## StatusReport
+
+| Field | Go / wire value type | May be omitted |
+|---|---|---|
+| `complete` | `bool` | no |
+| `component_errors` | `map[string][]string` | yes |
+| `nodes` | `NodeSummary` | no |
+| `guests` | `GuestSummary` | no |
+| `storages` | `StorageSummary` | no |
+| `backups` | `BackupSummary` | no |
+| `issues` | `[]output.StatusIssue` | yes |
+
+## NodeSummary
+
+| Field | Go / wire value type | May be omitted |
+|---|---|---|
+| `total` | `int` | no |
+| `online` | `int` | no |
+| `offline` | `int` | no |
+| `rows` | `[]output.NodeRow` | yes |
+
+## GuestSummary
+
+| Field | Go / wire value type | May be omitted |
+|---|---|---|
+| `total` | `int` | no |
+| `running` | `int` | no |
+| `stopped` | `int` | no |
+| `vm` | `int` | no |
+| `lxc` | `int` | no |
+
+## StorageSummary
+
+| Field | Go / wire value type | May be omitted |
+|---|---|---|
+| `total` | `int` | no |
+| `active` | `int` | no |
+| `rows` | `[]output.StorageRow` | yes |
+
+## BackupSummary
+
+| Field | Go / wire value type | May be omitted |
+|---|---|---|
+| `count` | `int` | no |
+| `latest_ctime` | `uint64` | yes |
+
+## StatusIssue
+
+| Field | Go / wire value type | May be omitted |
+|---|---|---|
+| `component` | `string` | no |
+| `message` | `string` | no |
 
 ## BulkGuestResult
 
-Used by bulk `guest start/shutdown/reboot/stop`. One row per affected guest;
-partial failures still write every row to stdout.
-
-| Field | Type |
-| --- | --- |
-| `kind` | string |
-| `vmid` | uint64 |
-| `node` | string |
-| `name` | string |
-| `action` | string |
-| `status` | string (`ok` or `error`) |
-| `task` | string, optional |
-| `error` | string, optional |
+| Field | Go / wire value type | May be omitted |
+|---|---|---|
+| `kind` | `string` | no |
+| `vmid` | `uint64` | no |
+| `node` | `string` | no |
+| `name` | `string` | no |
+| `action` | `string` | no |
+| `status` | `string` | no |
+| `task` | `string` | yes |
+| `error` | `string` | yes |
 
 ## AgentNetworkRow
 
-Used by `vm agent network`.
-
-| Field | Type |
-| --- | --- |
-| `name` | string |
-| `hardware_address` | string, optional |
-| `addresses` | string[], optional |
+| Field | Go / wire value type | May be omitted |
+|---|---|---|
+| `name` | `string` | no |
+| `hardware_address` | `string` | yes |
+| `addresses` | `[]string` | yes |
 
 ## AgentExecResult
 
-Used by `vm agent exec`.
+| Field | Go / wire value type | May be omitted |
+|---|---|---|
+| `exit_code` | `int` | no |
+| `signal` | `int` | yes |
+| `stdout` | `string` | yes |
+| `stderr` | `string` | yes |
+| `truncated` | `bool` | yes |
 
-| Field | Type |
-| --- | --- |
-| `exit_code` | int |
-| `signal` | int, optional |
-| `stdout` | string, optional |
-| `stderr` | string, optional |
-| `truncated` | bool, optional |
+## CloudInitIPConfig
+
+| Field | Go / wire value type | May be omitted |
+|---|---|---|
+| `device` | `string` | no |
+| `config` | `string` | no |
+
+## CloudInitCustom
+
+| Field | Go / wire value type | May be omitted |
+|---|---|---|
+| `device` | `string` | no |
+| `volume` | `string` | no |
 
 ## CloudInitConfig
 
-Used by `vm cloud-init get`. The `cipassword` value is never echoed; only
-`password_configured` is reported.
-
-| Field | Type |
-| --- | --- |
-| `vmid` | uint64 |
-| `node` | string |
-| `user` | string, optional |
-| `password_configured` | bool |
-| `ssh_keys` | string, optional |
-| `ip_configs` | CloudInitIPConfig[], optional |
-| `nameserver` | string, optional |
-| `searchdomain` | string, optional |
-| `type` | string, optional |
-| `custom` | CloudInitCustom[], optional |
-
-CloudInitIPConfig: `device` (string, for example `ipconfig0`), `config`
-(string). CloudInitCustom: `device` (string), `volume` (string).
+| Field | Go / wire value type | May be omitted |
+|---|---|---|
+| `vmid` | `uint64` | no |
+| `node` | `string` | no |
+| `user` | `string` | yes |
+| `password_configured` | `bool` | no |
+| `ssh_keys` | `string` | yes |
+| `ip_configs` | `[]output.CloudInitIPConfig` | yes |
+| `nameserver` | `string` | yes |
+| `searchdomain` | `string` | yes |
+| `type` | `string` | yes |
+| `custom` | `[]output.CloudInitCustom` | yes |
 
 ## NetworkRow
 
-Used by `network ls` and `network get`.
-
-| Field | Type |
-| --- | --- |
-| `node` | string |
-| `name` | string |
-| `type` | string, optional |
-| `active` | bool |
-| `autostart` | bool |
-| `address` | string, optional |
-| `cidr` | string, optional |
-| `gateway` | string, optional |
-| `bridge_ports` | string, optional |
-| `bond_slaves` | string, optional |
-| `vlan_aware` | bool |
-| `comments` | string, optional |
+| Field | Go / wire value type | May be omitted |
+|---|---|---|
+| `node` | `string` | no |
+| `name` | `string` | no |
+| `type` | `string` | yes |
+| `active` | `bool` | no |
+| `autostart` | `bool` | no |
+| `address` | `string` | yes |
+| `cidr` | `string` | yes |
+| `gateway` | `string` | yes |
+| `bridge_ports` | `string` | yes |
+| `bond_slaves` | `string` | yes |
+| `vlan_aware` | `bool` | no |
+| `comments` | `string` | yes |
 
 ## FirewallStatusRow
 
-Used by `firewall status`.
-
-| Field | Type |
-| --- | --- |
-| `scope` | string (`node`, `vm`, or `lxc`) |
-| `node` | string |
-| `vmid` | uint64, optional |
-| `enabled` | bool |
+| Field | Go / wire value type | May be omitted |
+|---|---|---|
+| `scope` | `string` | no |
+| `node` | `string` | no |
+| `vmid` | `uint64` | yes |
+| `enabled` | `bool` | no |
 
 ## FirewallRuleRow
 
-Used by `firewall ls`.
+| Field | Go / wire value type | May be omitted |
+|---|---|---|
+| `scope` | `string` | no |
+| `node` | `string` | no |
+| `vmid` | `uint64` | yes |
+| `position` | `int` | no |
+| `enabled` | `bool` | no |
+| `direction` | `string` | yes |
+| `action` | `string` | yes |
+| `interface` | `string` | yes |
+| `source` | `string` | yes |
+| `destination` | `string` | yes |
+| `protocol` | `string` | yes |
+| `source_port` | `string` | yes |
+| `dest_port` | `string` | yes |
+| `log` | `string` | yes |
+| `comment` | `string` | yes |
 
-| Field | Type |
-| --- | --- |
-| `scope` | string |
-| `node` | string |
-| `vmid` | uint64, optional |
-| `position` | int |
-| `enabled` | bool |
-| `direction` | string, optional |
-| `action` | string, optional |
-| `interface` | string, optional |
-| `source` | string, optional |
-| `destination` | string, optional |
-| `protocol` | string, optional |
-| `source_port` | string, optional |
-| `dest_port` | string, optional |
-| `log` | string, optional |
-| `comment` | string, optional |
+## StorageRow
+
+| Field | Go / wire value type | May be omitted |
+|---|---|---|
+| `node` | `string` | no |
+| `storage` | `string` | no |
+| `type` | `string` | no |
+| `active` | `bool` | no |
+| `enabled` | `bool` | no |
+| `shared` | `bool` | no |
+| `content` | `string` | no |
+| `used` | `uint64` | no |
+| `avail` | `uint64` | no |
+| `total` | `uint64` | no |
+| `used_fraction` | `float64` | no |
+
+## StorageContentRow
+
+| Field | Go / wire value type | May be omitted |
+|---|---|---|
+| `node` | `string` | no |
+| `storage` | `string` | no |
+| `content` | `string` | no |
+| `vmid` | `uint64` | yes |
+| `volid` | `string` | no |
+| `format` | `string` | yes |
+| `size` | `uint64` | no |
+| `used` | `uint64` | yes |
+| `ctime` | `uint64` | yes |
+| `protected` | `string` | yes |
+| `encrypted` | `string` | yes |
+| `verify_state` | `string` | yes |
+| `notes` | `string` | yes |
+
+## DoctorRow
+
+| Field | Go / wire value type | May be omitted |
+|---|---|---|
+| `check` | `string` | no |
+| `status` | `DoctorStatus` | no |
+| `message` | `string` | no |
+
+## CheckRow
+
+| Field | Go / wire value type | May be omitted |
+|---|---|---|
+| `latest_backup` | `uint64` | yes |
+| `value` | `float64` | yes |
+| `threshold` | `float64` | yes |
+| `check` | `string` | no |
+| `status` | `DoctorStatus` | no |
+| `resource` | `string` | yes |
+| `message` | `string` | no |
+
+## TaskRow
+
+| Field | Go / wire value type | May be omitted |
+|---|---|---|
+| `upid` | `string` | no |
+| `node` | `string` | no |
+| `type` | `string` | no |
+| `id` | `string` | yes |
+| `user` | `string` | yes |
+| `status` | `string` | no |
+| `exit_status` | `string` | yes |
+| `start_time` | `int64` | yes |
+| `end_time` | `int64` | yes |
+
+## TaskLogRow
+
+| Field | Go / wire value type | May be omitted |
+|---|---|---|
+| `line` | `int` | no |
+| `text` | `string` | no |
 
 ## VersionInfo
 
-| Field | Type |
-| --- | --- |
-| `version` | string |
-| `commit` | string |
-| `date` | string |
-| `go_version` | string |
-| `os` | string |
-| `arch` | string |
+| Field | Go / wire value type | May be omitted |
+|---|---|---|
+| `version` | `string` | no |
+| `commit` | `string` | no |
+| `date` | `string` | no |
+| `go_version` | `string` | no |
+| `os` | `string` | no |
+| `arch` | `string` | no |
 
-### v3 operation results
+## GuestConfig
 
-Mutations return `resource`, optional `vmid`, `node`, `task`, and `status`
-(`submitted`, `succeeded`, `failed`, `unknown`, `cancel_requested`), with an
-optional `error`. A returned UPID is retained even when waiting fails.
+| Field | Go / wire value type | May be omitted |
+|---|---|---|
+| `resource` | `string` | no |
+| `vmid` | `int` | no |
+| `node` | `string` | no |
+| `config` | `map[string]interface {}` | no |
+
+## TemplateRow
+
+| Field | Go / wire value type | May be omitted |
+|---|---|---|
+| `name` | `string` | no |
+| `section` | `string` | no |
+| `size` | `uint64` | no |
+| `node` | `string` | no |
+| `storage` | `string` | yes |
+| `volid` | `string` | yes |
+| `available` | `bool` | no |
+
+## DiskRow
+
+| Field | Go / wire value type | May be omitted |
+|---|---|---|
+| `vmid` | `int` | no |
+| `node` | `string` | no |
+| `slot` | `string` | no |
+| `volume` | `string` | no |
+| `device` | `string` | no |
+| `size` | `string` | yes |
+| `role` | `string` | no |
+
+## DiskResult
+
+| Field | Go / wire value type | May be omitted |
+|---|---|---|
+| `resource` | `string` | no |
+| `vmid` | `int` | yes |
+| `node` | `string` | yes |
+| `task` | `string` | yes |
+| `status` | `string` | no |
+| `error` | `string` | yes |
+| `slot` | `string` | no |
+| `volume` | `string` | yes |

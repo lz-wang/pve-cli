@@ -14,6 +14,7 @@ type DiskUnlinker interface {
 }
 
 // UnlinkDisk intentionally never sends force=true. Unused slots are physical deletion.
+// The SDK expects a task here, but PVE 9 documents and returns synchronous null.
 func (b *ProxmoxBackend) UnlinkDisk(ctx context.Context, node string, id int, slot string) error {
 	return ClassifyError(b.client.Put(ctx, guestPath("vm", node, id)+"/unlink", map[string]any{"idlist": slot, "force": false}, nil))
 }
@@ -98,15 +99,21 @@ func (s *DiskService) Add(ctx context.Context, id int, node, slot, storage, size
 	}
 	node = g.Row().Node
 	result.Node = node
-	rows, err := s.List(ctx, id, node)
+	native, ok := s.backend.(NativeConfigBackend)
+	if !ok {
+		return result, fmt.Errorf("%w: native config unavailable", ErrUnavailable)
+	}
+	cfg, err := native.GuestConfig(ctx, "vm", node, id)
 	if err != nil {
 		return result, err
 	}
-	for _, r := range rows {
-		if r.Slot == slot {
-			return result, fmt.Errorf("%w: slot is occupied", ErrConflict)
-		}
+	if _, occupied := cfg[slot]; occupied {
+		return result, fmt.Errorf("%w: slot is occupied", ErrConflict)
 	}
+	if !resourceNamePattern.MatchString(storage) {
+		return result, fmt.Errorf("%w: invalid storage", ErrInvalid)
+	}
+
 	b, ok := s.backend.(StorageBackend)
 	if !ok {
 		return result, fmt.Errorf("%w: storage lookup unavailable", ErrUnavailable)
@@ -145,7 +152,7 @@ func (s *DiskService) Add(ctx context.Context, id int, node, slot, storage, size
 	}
 	return result, nil
 }
-func (s *DiskService) Unlink(ctx context.Context, id int, node, slot string, deleteVolume bool) (output.DiskResult, error) {
+func (s *DiskService) Unlink(ctx context.Context, id int, node, slot, expectedVolume string, deleteVolume bool) (output.DiskResult, error) {
 	result := output.DiskResult{OperationResult: output.OperationResult{Resource: "vm-disk", VMID: id, Node: node, Status: "unknown"}, Slot: slot}
 	if deleteVolume && !unusedSlotPattern.MatchString(slot) || !deleteVolume && !attachedSlotPattern.MatchString(slot) {
 		return result, fmt.Errorf("%w: delete requires unusedN; remove requires an attached slot", ErrInvalid)
@@ -162,6 +169,9 @@ func (s *DiskService) Unlink(ctx context.Context, id int, node, slot string, del
 			result.Node = r.Node
 			result.Volume = r.Volume
 		}
+	}
+	if expectedVolume != "" && result.Volume != expectedVolume {
+		return result, fmt.Errorf("%w: disk target changed after confirmation", ErrConflict)
 	}
 	if result.Volume == "" {
 		return result, fmt.Errorf("%w: disk slot %s", ErrNotFound, slot)

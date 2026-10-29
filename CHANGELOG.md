@@ -1,5 +1,45 @@
 # Changelog
 
+## v3.0.0 - 2026-10-29
+
+### Added
+
+- Cluster-aware exact ID/name resolution, typed errors and stable exit codes.
+- Recoverable operation results, Context-bound waits and running-task cancellation.
+- Bounded mixed VM/LXC bulk operations with target limits and per-guest outcomes.
+- Guest name/status filtering and sorting; storage sorting and usage thresholds.
+- Private credential-file, stdin and environment token setup.
+- Native VM/LXC config get/set, with credential redaction and duplicate-key checks.
+- Bash, Zsh and Fish static/dynamic read-only completions.
+- System LXC template inventory/download and preflighted container creation.
+- Preflighted blank/ISO VM creation and disk list/add/detach/unused-volume deletion.
+- CPU/memory and backup health diagnostics, unknown checks and partial reports.
+- Snapshot dry-run and safety preconditions; guarded node reboot/shutdown.
+- Generated command/schema documentation and HTTP/JSON/YAML contract coverage.
+
+### Changed
+
+- Use Go semantic module path `github.com/lz-wang/pve-cli/v3`.
+- Standardize local confirmation as `--yes`; nonterminal dangerous operations
+  require it. VM snapshot rollback requires a stopped VM.
+- Profiles use one file/environment credential reference; remove plaintext-token
+  configuration and CLI secret arguments without automatic migration.
+- Use `vm/lxc config get|set` for native configuration.
+- All mutation outputs distinguish submitted/succeeded/failed/unknown outcomes;
+  failed waits preserve UPIDs. API mutations are never automatically retried.
+- Incomplete health data is unknown; status exposes completeness and component
+  errors. Strict checks fail on unknowns as well as warnings.
+- Remove obsolete compatibility code and the local CLAUDE.md instruction link.
+
+### Validation
+
+- Formatting, vet, unit tests, race tests, lint and native build pass.
+- Isolated 8845h acceptance covered VM/LXC creation, native config, safe disk
+  detach/delete, snapshot preview/rollback/delete and mixed bulk lifecycle;
+  test guests were removed and existing guests retained.
+- Node power, task cancellation, template download and exceptional HTTP states
+  use mock/HTTP contract tests; node power was not run on a real host.
+
 ## v2.0.1 - 2026-10-06
 
 ### Fixed

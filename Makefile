@@ -8,16 +8,16 @@ LDFLAGS := -ldflags "-s -w -X main.version=$(VERSION) -X main.commit=$(COMMIT) -
 GOENV := CGO_ENABLED=0
 SHA256SUM := $(shell command -v sha256sum >/dev/null 2>&1 && echo sha256sum || echo "shasum -a 256")
 
-.PHONY: all build dist install uninstall fmt check test test-race clean help
+.PHONY: all build dist install uninstall fmt check test test-race docs docs-check completions completions-check validate clean help
 
-all: fmt check test build
+all: fmt check test build docs-check
 
 build:
 	$(GOENV) go build $(LDFLAGS) -o bin/$(APP) ./main.go
 
 dist:
 	@mkdir -p dist
-	@for goos in linux darwin windows; do \
+	@set -eu; for goos in linux darwin windows; do \
 		for goarch in amd64 arm64; do \
 			output="dist/$(APP)-$(VERSION)-$${goos}-$${goarch}"; \
 			if [ "$$goos" = "windows" ]; then output="$$output.exe"; fi; \
@@ -58,4 +58,26 @@ help:
 	@echo "make check  - run go vet"
 	@echo "make test   - run tests"
 	@echo "make test-race - run tests with the race detector"
+	@echo "make docs   - regenerate command and schema references"
+	@echo "make docs-check - verify generated references"
+	@echo "make completions - generate shell scripts"
+	@echo "make validate - run the release gate"
 	@echo "make clean  - clean generated artifacts"
+
+docs:
+	go run ./scripts/docgen
+
+docs-check:
+	go run ./scripts/docgen -check
+
+completions: build
+	@mkdir -p dist/completions
+	@for shell in bash zsh fish; do bin/pve completion $$shell > dist/completions/pve.$$shell; done
+
+validate:
+	$(MAKE) fmt check test test-race build docs-check
+
+completions-check: completions
+	bash -n dist/completions/pve.bash
+	zsh -n dist/completions/pve.zsh
+	fish --no-execute dist/completions/pve.fish

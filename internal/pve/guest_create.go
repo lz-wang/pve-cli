@@ -2,8 +2,12 @@ package pve
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/binary"
 	"fmt"
+	proxmox "github.com/luthermonson/go-proxmox"
 	"github.com/lz-wang/pve-cli/v3/internal/output"
+	"math"
 	"net"
 	"net/url"
 	"regexp"
@@ -148,14 +152,10 @@ func (s *CreateService) CreateLXC(ctx context.Context, o LXCCreateOptions) (outp
 	if o.Net0 != "" && netValues["name"] == "" {
 		return result, fmt.Errorf("%w: net0 name is required", ErrInvalid)
 	}
-	for _, key := range []string{"ip", "ip6"} {
-		v := netValues[key]
-		if v != "" && v != "dhcp" && v != "manual" && v != "auto" {
-			if _, _, e := net.ParseCIDR(v); e != nil {
-				return result, fmt.Errorf("%w: invalid %s", ErrInvalid, key)
-			}
-		}
+	if err = validateLXCNetwork(netValues); err != nil {
+		return result, err
 	}
+
 	if err = s.preflight(ctx, o.ID, o.Node); err != nil {
 		return result, err
 	}
@@ -172,11 +172,21 @@ func (s *CreateService) CreateLXC(ctx context.Context, o LXCCreateOptions) (outp
 	}
 	if o.SSHKeys != "" {
 		for _, line := range strings.Split(strings.TrimSpace(o.SSHKeys), "\n") {
-			if !strings.HasPrefix(line, "ssh-") && !strings.HasPrefix(line, "ecdsa-") && !strings.HasPrefix(line, "sk-") {
+			fields := strings.Fields(line)
+			if len(fields) < 2 || (!strings.HasPrefix(fields[0], "ssh-") && !strings.HasPrefix(fields[0], "ecdsa-") && !strings.HasPrefix(fields[0], "sk-")) {
 				return result, fmt.Errorf("%w: SSH key file must contain public keys", ErrInvalid)
+			}
+			decoded, e := base64.StdEncoding.DecodeString(fields[1])
+			if e != nil || len(decoded) < 4 {
+				return result, fmt.Errorf("%w: invalid SSH public key", ErrInvalid)
+			}
+			length := int(binary.BigEndian.Uint32(decoded[:4]))
+			if length > len(decoded)-4 || string(decoded[4:4+length]) != fields[0] {
+				return result, fmt.Errorf("%w: invalid SSH public key type", ErrInvalid)
 			}
 		}
 	}
+
 	params := map[string]any{"ostemplate": o.Template, "rootfs": o.RootFS, "memory": o.Memory, "cores": o.Cores, "swap": o.Swap, "unprivileged": o.Unprivileged, "start": false}
 	if o.Hostname != "" {
 		params["hostname"] = o.Hostname
@@ -230,20 +240,29 @@ func (s *CreateService) submit(ctx context.Context, kind, node string, id int, p
 	return runner.Execute(ctx, task)
 }
 func (b *ProxmoxBackend) CreateGuest(ctx context.Context, kind, node string, id int, params map[string]any) (Task, error) {
-	apiKind := "qemu"
+	sdkNode := (&proxmox.Node{}).New(b.client, node)
+	var task *proxmox.Task
+	var err error
 	if kind == "lxc" {
-		apiKind = "lxc"
+		options := make([]proxmox.ContainerOption, 0, len(params))
+		for k, v := range params {
+			options = append(options, proxmox.ContainerOption{Name: k, Value: v})
+		}
+		task, err = sdkNode.NewContainer(ctx, id, options...)
+	} else {
+		options := make([]proxmox.VirtualMachineOption, 0, len(params))
+		for k, v := range params {
+			options = append(options, proxmox.VirtualMachineOption{Name: k, Value: v})
+		}
+		task, err = sdkNode.NewVirtualMachine(ctx, id, options...)
 	}
-	body := make(map[string]any, len(params)+1)
-	for k, v := range params {
-		body[k] = v
-	}
-	body["vmid"] = id
-	var upid string
-	if err := b.client.Post(ctx, "/nodes/"+url.PathEscape(node)+"/"+apiKind, body, &upid); err != nil {
+	if err != nil {
 		return nil, ClassifyError(err)
 	}
-	return b.TaskHandle(upid)
+	if task == nil {
+		return nil, fmt.Errorf("%w: creation accepted but no UPID returned", ErrTaskTimeout)
+	}
+	return wrapTask(task), nil
 }
 
 // redactedError retains the error chain for exit-code classification.
@@ -318,4 +337,58 @@ func (s *CreateService) CreateVM(ctx context.Context, o VMCreateOptions) (output
 		params["boot"] = "order=ide2;scsi0;net0"
 	}
 	return s.submit(ctx, "vm", o.Node, o.ID, params)
+}
+
+func validateLXCNetwork(v map[string]string) error {
+	invalid := func(key string) error { return fmt.Errorf("%w: invalid net0 %s", ErrInvalid, key) }
+	for _, key := range []string{"name", "bridge"} {
+		if value := v[key]; value != "" && (!resourceNamePattern.MatchString(value) || len(value) > 15) {
+			return invalid(key)
+		}
+	}
+	for _, key := range []string{"ip", "ip6"} {
+		value := v[key]
+		if value == "" || value == "manual" || value == "dhcp" || (key == "ip6" && value == "auto") {
+			continue
+		}
+		ip, _, err := net.ParseCIDR(value)
+		if err != nil || (key == "ip" && ip.To4() == nil) || (key == "ip6" && ip.To4() != nil) {
+			return invalid(key)
+		}
+	}
+	for _, key := range []string{"gw", "gw6"} {
+		if value := v[key]; value != "" {
+			ip := net.ParseIP(value)
+			if ip == nil || (key == "gw" && ip.To4() == nil) || (key == "gw6" && ip.To4() != nil) {
+				return invalid(key)
+			}
+		}
+	}
+	if value := v["hwaddr"]; value != "" {
+		mac, err := net.ParseMAC(value)
+		if err != nil || len(mac) != 6 {
+			return invalid("hwaddr")
+		}
+	}
+	for key, bounds := range map[string][2]int{"tag": {1, 4094}, "mtu": {64, 65535}} {
+		if value := v[key]; value != "" {
+			n, err := strconv.Atoi(value)
+			if err != nil || n < bounds[0] || n > bounds[1] {
+				return invalid(key)
+			}
+		}
+	}
+	if value := v["firewall"]; value != "" && value != "0" && value != "1" {
+		return invalid("firewall")
+	}
+	if value := v["type"]; value != "" && value != "veth" {
+		return invalid("type")
+	}
+	if value := v["rate"]; value != "" {
+		n, err := strconv.ParseFloat(value, 64)
+		if err != nil || n <= 0 || math.IsNaN(n) || math.IsInf(n, 0) {
+			return invalid("rate")
+		}
+	}
+	return nil
 }

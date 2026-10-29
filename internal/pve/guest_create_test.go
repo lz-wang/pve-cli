@@ -24,3 +24,13 @@ func TestVMCreateRejectsPropertyInjection(t *testing.T) {
 		}
 	}
 }
+
+func TestLXCNetworkValidationBeforeRequests(t *testing.T) {
+	s := NewCreateService(nil, TaskRunner{})
+	for _, network := range []string{"name=eth0,hwaddr=invalid", "name=eth0,ip=auto", "name=eth0,tag=4095", "name=eth0,gw=bad", "name=eth0,rate=NaN", "name=eth0,type=physical"} {
+		_, e := s.CreateLXC(context.Background(), LXCCreateOptions{ID: 201, Memory: 1024, Cores: 1, RootFS: "local:8", Net0: network})
+		if !errors.Is(e, ErrInvalid) {
+			t.Fatalf("%s: %v", network, e)
+		}
+	}
+}

@@ -3,6 +3,7 @@ package pve
 import (
 	"context"
 	"fmt"
+	proxmox "github.com/luthermonson/go-proxmox"
 	"github.com/lz-wang/pve-cli/v3/internal/output"
 	"net/url"
 	"path"
@@ -16,6 +17,7 @@ type AvailableTemplateReader interface {
 }
 
 func (b *ProxmoxBackend) AvailableTemplates(ctx context.Context, node string) ([]output.TemplateRow, error) {
+	// The SDK appliance model omits size, so retain it with a narrow response wrapper.
 	var templates []struct {
 		Template string `json:"template"`
 		Section  string `json:"section"`
@@ -96,11 +98,16 @@ type TemplateDownloader interface {
 }
 
 func (b *ProxmoxBackend) DownloadTemplate(ctx context.Context, node, storage, name string) (Task, error) {
-	var upid string
-	if err := b.client.Post(ctx, "/nodes/"+url.PathEscape(node)+"/aplinfo", map[string]string{"storage": storage, "template": name}, &upid); err != nil {
+	nodeAPI := (&proxmox.Node{}).New(b.client, node)
+	upid, err := nodeAPI.DownloadAppliance(ctx, name, storage)
+	if err != nil {
 		return nil, ClassifyError(err)
 	}
-	return b.TaskHandle(upid)
+	task, err := b.TaskHandle(upid)
+	if err != nil {
+		return nil, fmt.Errorf("%w: download accepted but invalid UPID returned", ErrTaskTimeout)
+	}
+	return task, nil
 }
 func (s *TemplateService) Download(ctx context.Context, node, storage, name string) (output.OperationResult, error) {
 	result := output.OperationResult{Resource: "lxc-template", Node: node, Status: "unknown"}

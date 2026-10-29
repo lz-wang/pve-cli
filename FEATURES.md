@@ -1,486 +1,89 @@
-# pve Features
-
-`pve` is a small, resource-oriented Proxmox VE CLI for personal HomeLab
-operations. It wraps the Proxmox VE API through `go-proxmox` and focuses on
-daily VM/QEMU and LXC workflows.
-
-## Global CLI Capabilities
-
-- Groups help commands into Dashboard, Guests, Infrastructure, and Local
-  categories that follow daily HomeLab use, with overview and health checks
-  first and local tools last. Nested help places inspection
-  and lifecycle commands first, with guest deletion and snapshot rollback last.
-- Uses the `pve` executable for local builds, installs, and release packages;
-  Homebrew installs it with `brew install lz-wang/tap/pve`.
-- Supports `table`, `json`, and `yaml` resource output via the per-command
-  `--output` or `-o` flag; local config inspection uses tables.
-- Supports profile selection with `--profile`.
-- Supports custom config paths with `--config`.
-- Supports API timeout override with global `--api-timeout`; `--timeout` on
-  `vm agent exec` bounds the guest command instead.
-- Supports task waiting with `--wait` and `--wait-timeout` on async operation
-  commands.
-- Supports TLS verification override with `--insecure`.
-- Keeps command results on stdout.
-- Keeps task IDs, wait progress, and logs on stderr.
-
-## Configuration
-
-`pve config` manages local YAML configuration and profile selection.
-
-The default config path is `~/.config/pve/config.yaml`. Existing config files
-can be moved there or selected with `--config`; no old-path fallback or
-automatic migration is performed. Token-secret environment variable names
-are user-defined; documentation uses `PVE_*` examples.
-
-- `config ls` prints only profile names and endpoints, sorted by profile name.
-- `config show` displays the current profile, `config show NAME` or global
-  `--profile NAME` selects one profile, and `config show --all` displays all
-  profiles. Combining selectors is rejected. Each profile has a `FIELD` /
-  `VALUE` table containing Profile, Current, Endpoint, Token ID, Token secret,
-  Token secret env, Skip TLS verify, Timeout, and Default output. The final line
-  gives `Config file: /absolute/path/config.yaml`.
-- `config add` interactively adds a profile, with hidden plaintext token input,
-  optional environment references, and defaults from global `--api-timeout` and
-  `--insecure`. It asks whether to make the profile current,
-  defaulting to yes when no current profile is configured and no otherwise.
-  Existing names are never overwritten; cancellation writes no changes.
-- `config set NAME` noninteractively creates or replaces a profile. Connection
-  writes require an endpoint, token ID, and at least one token source. Defaults
-  are timeout `30s` and output `table`; the first profile in an empty config
-  becomes current automatically, and later writes never change the current
-  profile.
-- `config use NAME` selects the current profile. It requires the profile to
-  exist and never rewrites its connection settings.
-- `config help` documents the available commands in the order `ls`, `show`,
-  `add`, `set`, `use`, `help`. Earlier config commands have been removed.
-
-`config show` masks tokens longer than six Unicode characters by retaining the
-first and last three characters around `*****`; tokens of six characters or
-fewer display only `*****`. Environment variable names remain visible without
-reading their values, and stored tokens are unchanged. The final config-file
-path is absolute after expanding `~` and environment variables, with line breaks
-escaped to keep it on one line.
-
-When the file is missing, `config ls` and `config show` offer guided initialization
-in a terminal. Declining or ending input leaves the file uncreated; nonterminal
-input receives an add/set setup hint without waiting. These cases exit
-successfully. Setup messages go to stderr and never overwrite an existing file.
-
-Config stores the Proxmox endpoint, token ID, TLS behavior, timeout, and default
-output format. Tokens can be stored directly as plaintext `token_secret` via
-`--token-secret`, or referenced by `token_secret_env` via `--token-secret-env`.
-A non-empty plaintext value takes precedence over the environment reference.
-Config files are saved with permissions `0600` on Unix, including existing files.
-
-## Diagnostics
-
-`pve doctor` validates the local configuration and, unless `--offline` is
-used, verifies Proxmox API connectivity.
-
-Checks include:
-
-- config path and file existence
-- YAML parsing
-- selected profile
-- required profile fields
-- plaintext token or token-secret environment variable presence
-- timeout and default output settings
-- endpoint shape and TLS mode
-- API connectivity
-- node listing permission
-- optional specific node validation with `--node`
-
-Doctor emits structured diagnostic rows and avoids printing token secrets.
-
-`doctor` checks whether `pve` itself can work; `check` (below) reports
-whether the HomeLab is healthy.
-
-## HomeLab Status
-
-`pve status` aggregates a compact HomeLab overview:
-
-- node summary (total/online/offline with per-node rows)
-- guest summary (total, running, stopped, VM and LXC counts)
-- storage summary (total, active, per-storage rows)
-- backup summary (count, latest backup age across backup-capable storages;
-  shared storages are queried on one node and counted once)
-- per-component `issues` for queries that failed, instead of failing the whole
-  command
-
-## HomeLab Health Check
-
-`pve check` inspects HomeLab health with cron-friendly exit semantics:
-
-- offline nodes report `fail`
-- inactive storages report `fail`, disabled storages report `warn`
-- storage usage over `--storage-warn` (default 85%) reports `warn`, over
-  `--storage-fail` (default 95%) reports `fail`
-- optional backup coverage check with `--backup-tag` and `--backup-max-age`
-  for guests carrying that tag; unqueryable backup storages report
-  `backup status unavailable` instead of `no backup found`
-- an unknown `--node` reports `fail` instead of an empty green run
-- `fail` exits non-zero; `--strict` makes warnings exit non-zero too
-
-## Version
-
-`pve version` prints build and runtime metadata without reading config or
-connecting to Proxmox VE.
-
-It supports the normal output formats:
-
-- `pve version`
-- `pve version -o json`
-- `pve version -o yaml`
-
-## Nodes
-
-`pve node ls` lists Proxmox VE nodes.
-
-The node output includes status, CPU, memory, disk, and uptime fields.
-
-`pve node get NODE` shows node details: status, CPU, memory, disk, uptime,
-PVE version, kernel version, load average, and CPU model/cores/sockets.
-
-## Task Inspection
-
-PVE tasks are first-class resources:
-
-- `task ls` lists recent tasks; without `--node` it aggregates across nodes
-  with partial-success behavior
-- `task ls --type vzdump`, `task ls --status running`, `task ls --limit N`
-- `task get UPID` shows one task's status
-- `task log UPID` and `task log UPID --tail N` show task log output
-- `task wait UPID --wait-timeout DURATION` blocks until completion
-
-Known task status values: `running`, `ok`, `error`, `unknown`.
-
-## Guest Aggregate View
-
-`pve guest` aggregates VM/QEMU and LXC guests.
-
-- `guest ls` lists all guests.
-- `guest ls --node NODE` filters by node.
-- `guest ls --type vm` filters to VMs.
-- `guest ls --type lxc` filters to containers.
-- `guest ls --status running` filters by guest status.
-- `guest ls --tag TAG` filters by tag; repeatable, with `--tag-match all|any`
-  (default `all`). Proxmox VE stores guest tags as one `;`-separated string;
-  `pve` decodes that format before matching.
-- `guest get VMID` resolves and shows a guest by ID.
-- `guest get VMID --type vm` or `--type lxc` disambiguates duplicate IDs.
-
-Guest output includes kind, VMID/CTID, name, node, status, CPU, memory, disk,
-uptime, and tags fields where available from Proxmox VE.
-
-### Bulk Guest Operations
-
-`guest start`, `guest shutdown`, `guest reboot`, and `guest stop` operate on
-every guest matching a selection:
-
-- selection requires at least one of `--node`, `--status`, or `--tag`
-- selection is the input to mutations and fails closed: when any node cannot
-  be queried, the operation is refused instead of running on a partial
-  cluster view
-- `--type all|vm|lxc` narrows the guest kind
-- `--dry-run` prints the affected guests and exits
-- operations hitting more than one guest require a local `yes` confirmation;
-  `--yes` skips it
-- `--jobs N` (default 2) bounds concurrency
-- `--wait`/`--wait-timeout` wait for each guest's task
-- one failing guest never aborts the run; per-guest results are written to
-  stdout as `BulkGuestResult` rows, progress goes to stderr, and the command
-  exits non-zero only when at least one guest failed
-
-## VM/QEMU Management
-
-`pve vm` manages QEMU virtual machines.
-
-Read operations:
-
-- `vm ls`
-- `vm ls --node NODE`
-- `vm get VMID`
-- `vm get VMID --node NODE`
-
-Lifecycle operations:
-
-- `vm start VMID`
-- `vm shutdown VMID`
-- `vm stop VMID`
-- `vm reboot VMID`
-
-Maintenance operations:
-
-- `vm clone SOURCE_VMID --name NAME --target NODE`
-- `vm config VMID --set key=value`
-- `vm migrate VMID --target NODE`
-- `vm resize VMID --disk DISK --size SIZE`
-- `vm backup VMID --storage STORAGE`
-- `vm delete VMID`
-
-When `--node` is omitted, the tool can resolve the VM location by traversing
-cluster nodes.
-
-## LXC Management
-
-`pve lxc` mirrors the VM command shape for LXC containers.
-
-Read operations:
-
-- `lxc ls`
-- `lxc ls --node NODE`
-- `lxc get CTID`
-- `lxc get CTID --node NODE`
-
-Lifecycle operations:
-
-- `lxc start CTID`
-- `lxc shutdown CTID`
-- `lxc stop CTID`
-- `lxc reboot CTID`
-
-Maintenance operations:
-
-- `lxc clone SOURCE_CTID --hostname HOSTNAME --target NODE`
-- `lxc config CTID --set key=value`
-- `lxc migrate CTID --target NODE`
-- `lxc resize CTID --disk DISK --size SIZE`
-- `lxc backup CTID --storage STORAGE`
-- `lxc delete CTID`
-
-When `--node` is omitted, the tool can resolve the container location by
-traversing cluster nodes.
-
-## Clone
-
-VM and LXC clone commands create a new guest from an existing guest.
-
-Common options:
-
-- `--node` selects the source node.
-- `--newid` sets the new VMID/CTID; omitting it lets Proxmox allocate one.
-- `--target` selects the target node and is required.
-- `--storage` selects target storage.
-- `--full` requests a full clone.
-- `--pool` sets the target resource pool.
-- `--snapname` clones from a snapshot.
-- `--description` sets a description.
-- `--wait` waits for task completion.
-- `--wait-timeout` sets task wait timeout.
-- `-o json` makes scripts able to capture `new_vmid`.
-
-VM-specific options:
-
-- `--name`
-- `--format`
-
-LXC-specific option:
-
-- `--hostname`
-
-## Guest Config Updates
-
-`vm config` and `lxc config` pass generic `key=value` options to the Proxmox
-guest config API.
-
-Examples:
-
-```bash
-pve vm config 101 --set memory=4096 --set cores=4 --wait
-pve lxc config 201 --set memory=2048 --set cores=2 --wait
-```
-
-## Resize
-
-`vm resize` and `lxc resize` resize a guest disk.
-
-Examples:
-
-```bash
-pve vm resize 101 --disk scsi0 --size +20G --wait
-pve lxc resize 201 --disk rootfs --size +10G --wait
-```
-
-## Migrate
-
-`vm migrate` and `lxc migrate` move a guest to another node.
-
-Supported options:
-
-- `--node` selects the source node.
-- `--target` selects the target node and is required.
-- `--online` requests online migration.
-- `--wait` waits for task completion.
-
-## Snapshots
-
-VM and LXC snapshot commands are grouped under `snapshot`.
-
-- `vm snapshot ls VMID`
-- `vm snapshot create VMID SNAPNAME`
-- `vm snapshot rollback VMID SNAPNAME`
-- `vm snapshot delete VMID SNAPNAME`
-- `lxc snapshot ls CTID`
-- `lxc snapshot create CTID SNAPNAME`
-- `lxc snapshot rollback CTID SNAPNAME`
-- `lxc snapshot delete CTID SNAPNAME`
-
-Rollback and delete are treated as dangerous operations and require local
-confirmation unless `--yes` is passed.
-
-## Backups
-
-Backup support is intentionally lightweight.
-
-`backup ls` lists backup files on a specific node and storage:
-
-- `backup ls --node NODE --storage STORAGE`
-- `backup ls --node NODE --storage STORAGE --vmid VMID`
-- `backup ls --node NODE --storage STORAGE --type vm`
-- `backup ls --node NODE --storage STORAGE --type lxc`
-- `backup ls --node NODE --storage STORAGE --latest`
-
-`vm backup` and `lxc backup` create one-off guest backups:
-
-- `--storage` is required.
-- `--mode` supports `snapshot`, `suspend`, and `stop`.
-- `--compress` supports `zstd`, `lzo`, `gzip`, and `none`.
-- `--notes-template` sets backup notes.
-- `--bwlimit` sets bandwidth limit in KiB/s.
-- `--protected` (a boolean) protects the backup from pruning.
-- `--wait` waits for completion.
-
-`vm restore` and `lxc restore` recover a vzdump backup archive into a new,
-non-existing VMID/CTID:
-
-- `--node` and `--vmid` are required
-- `--storage` optionally selects target storage
-- restores refuse existing VMIDs; there is no overwrite flag
-- the VMID preflight must see every node; if any node's guest inventory
-  cannot be queried, the restore aborts before starting
-- when a submitted task fails during `--wait`, the result row (including the
-  task ID) is still written to stdout before the command exits non-zero
-- archive kind (`vzdump-qemu-`/`vzdump-lxc-`) must match the command when the
-  archive name encodes it
-
-## VM QEMU Guest Agent (VM only)
-
-`vm agent` queries the QEMU guest agent. LXC containers do not expose it.
-
-- `--node` is optional for all agent commands; when omitted, the VM is
-  located across the cluster, matching other VMID-oriented commands
-- `vm agent ping VMID` verifies the agent answers
-- `vm agent network VMID` lists interfaces and addresses as seen inside the
-  guest (answers "which IP did this cloned VM get?")
-- `vm agent exec VMID -- COMMAND [ARG...]` runs executable+argv in the guest
-  without an implicit shell; supports `--input` for stdin data and `--timeout`
-  for the wait bound; the guest exit code is preserved and reflected in the
-  command exit status
-
-File write/read, fs freeze, and password reset are intentionally out of scope.
-
-## VM Cloud-init
-
-Cloud-init commands use PVE-native cloud-init configuration.
-
-- `--node` is optional for all cloud-init commands; when omitted, the VM is
-  located across the cluster
-- `vm cloud-init get VMID` shows the normalized cloud-init config; the password
-  is never echoed, only `password_configured`
-- `vm cloud-init set VMID` updates `--user`, `--ssh-key-file`,
-  `--ipconfig0..3`, `--nameserver`, `--searchdomain`, and `--password-env`
-- passwords are only accepted through an environment variable named by
-  `--password-env`, never as a flag value
-- `vm cloud-init regenerate VMID` regenerates the cloud-init image so the next
-  boot picks up pending changes
-- only `vm cloud-init get` accepts `-o`; `set` and `regenerate` write plain
-  confirmation text, not structured output
-
-## Network Inventory (read-only)
-
-`network` inspects node network interfaces.
-
-- `network ls --node NODE`
-- `network ls --type bridge`
-- `network ls --active`
-- `network ls` without `--node` aggregates across nodes with partial success
-- `network get IFACE --node NODE`
-
-Network mutation (create/update/delete/apply/reload) is a non-goal.
-
-## Firewall Inventory (read-only)
-
-`firewall` inspects firewall status and rules.
-
-- `firewall status --node NODE`
-- `firewall ls --node NODE`
-- `firewall status --node NODE --scope vm --vmid VMID`
-- `firewall ls --node NODE --scope vm --vmid VMID`
-- `firewall ls --scope lxc --vmid CTID` locates the guest when `--node` is
-  omitted, matching other VMID-oriented commands
-
-`--scope node` is the default and requires `--node`. Firewall rule mutation is
-a non-goal.
-
-## Storage Inventory
-
-Storage commands are read-only.
-
-`storage ls` lists storage status:
-
-- `storage ls`
-- `storage ls --node NODE`
-- `storage ls --content backup`
-- `storage ls --type dir`
-- `storage ls --active`
-- `storage ls --enabled`
-
-`storage usage` is a compact daily-use view reusing the `StorageRow` schema.
-
-`storage get STORAGE --node NODE` shows one storage on one node.
-
-`storage content ls` lists generic storage content:
-
-- `storage content ls --node NODE --storage STORAGE`
-- `storage content ls --node NODE --storage STORAGE --content iso`
-- `storage content ls --node NODE --storage STORAGE --content backup`
-- `storage content ls --node NODE --storage STORAGE --vmid VMID`
-
-## Dangerous Operations
-
-The following operations can change or destroy guest state and are intentionally
-explicit:
-
-- `vm delete`
-- `lxc delete`
-- `vm snapshot rollback`
-- `lxc snapshot rollback`
-- `vm snapshot delete`
-- `lxc snapshot delete`
-- bulk `guest start/shutdown/reboot/stop` hitting more than one guest
-
-Delete prompts require typing the exact VMID/CTID unless `--yes` is passed.
-Snapshot rollback and delete prompts require typing the exact snapshot name
-unless `--yes` is passed. Bulk operations require typing `yes` unless
-`--yes` is passed.
-
-`--yes` skips the local confirmation prompt.
-
-- v3 mutations expose submitted/succeeded/failed/unknown results; waiting never cancels remote tasks.
-- `task cancel UPID --yes` requests cancellation of a running task; inspect it again to verify termination.
-- Bulk lifecycle commands use 1–8 workers and default to at most 20 targets (`--max-targets`); all mutations require confirmation or `--yes`.
-- VM/LXC commands accept exact names, with explicit `--name` for numeric names; lists support name/status filters and six stable sort keys.
-- Profiles reference `token_secret_env` or a private `token_secret_file`; `config set --token-secret-stdin` and interactive hidden input store credentials separately.
-- `vm/lxc config get|set` reads native PVE keys under `config` and rejects duplicate update keys; credential values are redacted.
-- `completion bash|zsh|fish` supplies command, flag, enum and read-only dynamic node/storage/VMID completion, with silent offline fallback.
-- `lxc template ls` separates the downloadable system index (`--available`) from storage `vztmpl` volumes, with name filtering.
-- Template downloads preflight the index and storage, reject duplicate downloads, and verify storage content after `--wait`.
-- `lxc create CTID` preflights ID, template, storage and networking; supports private password sources/public keys and defaults to unprivileged, stopped containers.
-- `vm create VMID` provisions a stopped VM with CPU, memory, SCSI disk and bridge, optionally ISO boot and onboot; it does not install an OS.
-- `vm disk ls|add|remove|delete` distinguishes attached/system/unused devices. Remove preserves the unused volume; delete only accepts unused slots, requires exact confirmation, and verifies storage removal.
-- Health checks add CPU/memory thresholds and structured backup timestamps; inaccessible data is `unknown` and fails strict mode. Status reports expose completeness and component errors, with a PARTIAL table marker.
-- Storage `ls/usage` supports `--sort name|node|used-percent|total`, `--desc`, and `--min-used-percent`; unknown capacity sorts last and is excluded from threshold matches.
-- Snapshot rollback/delete support read-only `--dry-run`, verify snapshots and locks, and require `--yes` outside a terminal. VM rollback requires a stopped VM.
-- `node reboot/shutdown NODE` previews running guests and API impact, requires exact node confirmation or `--yes`, submits without waiting, and never stops guests automatically.
-- v3 command/output contracts are covered by JSON/YAML, HTTP failure, confirmation, no-retry and completion tests; native PVE configuration values retain the API's original types.
+# pve v3 features
+
+A resource-oriented, single-binary Proxmox VE CLI for a personal HomeLab.
+See [usage](docs/usage.md) for every command, flag, default and argument, and
+[output schema](docs/output-schema.md) for the JSON/YAML contract.
+
+## CLI and profiles
+
+- `pve` executable; `github.com/lz-wang/pve-cli/v3` Go module; urfave/cli/v2.
+- Dashboard, Guests, Infrastructure and Local help groups.
+- Per-command table/JSON/YAML results on stdout; progress and UPIDs on stderr.
+- Global config/profile, API timeout, TLS and verbose controls; local task waits.
+- `config ls/show/add/set/use`, guided setup, hidden token input, current-profile
+  selection, separate credential files and environment references. Config show
+  prints references and an absolute path without resolving secret values.
+- Strict YAML schema; exactly one token source; Unix private credential files
+  owned by the user; atomic writes and private managed directories.
+- Bash, Zsh and Fish static command/flag/enum completion and read-only dynamic
+  node, storage and VMID candidates, with bounded timeout and silent fallback.
+
+## Guest inspection and lifecycle
+
+- `vm/lxc ls/get` and aggregate `guest ls/get` with exact ID/name resolution,
+  explicit numeric names, ambiguity reporting and complete inventory checks.
+- Name/status/tag filters, all/any tag matching, and stable sorting by
+  VMID/name/node/status/memory/CPU; missing metrics remain last.
+- Single-guest start, shutdown, reboot and stop; tracked async operation results.
+- Mixed VM/LXC bulk start/shutdown/reboot/stop with selection guards, dry-run,
+  confirmation, 1–8 workers, default 20-target limit and per-guest outcomes.
+- Context cancellation prevents pending submissions; partial failures remain
+  independently visible and VMID ordering stays stable.
+
+## Deployment and maintenance
+
+- LXC downloadable system-template index and local `vztmpl` inventory, section
+  and name filtering, duplicate-safe downloads with post-wait file verification.
+- LXC creation checks ID availability, template, rootdir storage and networking;
+  defaults to unprivileged, stopped containers; supports SSH public keys and
+  environment-sourced passwords.
+- VM creation configures CPU, memory, SCSI disk, bridge, optional ISO boot and
+  onboot. It stays stopped and does not install an OS.
+- VM/LXC native config get/set preserves native keys/types under `config`,
+  redacts credential values and rejects duplicate update keys.
+- VM disks list system/attached/installer/unused roles; add checks allocation
+  slots and image storage; remove retains a volume in an unused slot; delete
+  only destroys explicitly unused volumes with exact confirmation and storage
+  verification. Existing resize remains available.
+- VM/LXC clone, resize and migration; snapshots list/create/rollback/delete.
+- Snapshot rollback/delete preflight existence and locks, support read-only
+  dry-run, and require confirmation. VM rollback requires a stopped VM.
+- VM cloud-init get/set/regenerate using native PVE configuration; clone a
+  prepared template for cloud-init deployment.
+- VM QEMU agent ping, network inventory and executable/argv-based exec.
+- Backup inventory with filters/latest selection; one-off VM/LXC backups and
+  restore into a new unoccupied VMID. No automatic destructive overwrite.
+
+## Infrastructure and health
+
+- Node list/details and guarded reboot/shutdown with running-guest counts,
+  exact node confirmation and impact text; no automatic guest stop or wait.
+- Storage inventory/details/content/usage with content/type/state filters,
+  name/node/used-percent/total sorting and usage thresholds. Unknown capacity
+  sorts last; shared rows remain per-node without duplicate capacity sums.
+- Read-only node network inventory and node/VM/LXC firewall status/rule views.
+- Task list/get/log/wait, status/type filters, bounded log tail and cancellation
+  requests checked against running state. Cancellation returns cancel_requested.
+- Uniform submitted/succeeded/failed/unknown operation states, recoverable UPIDs,
+  Context-bound waits and no automatic resubmission of non-idempotent requests.
+- Doctor validates local setup, credentials and API connectivity without secrets.
+- Health checks cover node state, CPU/memory thresholds, storage warn/fail
+  thresholds and tagged backup freshness with a structured latest timestamp.
+  Inaccessible checks are unknown; strict mode fails on warning/unknown results.
+- Status aggregates nodes/guests/storage/backups with complete/component_errors,
+  observed counts and a PARTIAL table indicator for incomplete reports.
+
+## Contracts and delivery
+
+- Exit codes 0 success, 1 operation/health failure, 2 input/configuration,
+  3 API access, 4 resolution/conflict, 5 unknown outcome.
+- `--yes` skips local confirmation only; nonterminal dangerous operations require
+  it. Dry-run performs no mutation; waiting never cancels the remote task.
+- Typed and secret-safe HTTP failures; no raw credential response bodies.
+- Mock service, command, HTTP contract, JSON/YAML golden and race tests.
+- Generated command/schema references checked against source definitions.
+- Linux/macOS/Windows amd64/arm64 release builds, checksums, GitHub Release notes
+  from Changelog and Homebrew formula publication.
+
+The scope stays small: no daemon, Web UI, multi-user control plane, arbitrary
+REST passthrough, scheduled backup policy, or full HA/Ceph/SDN management.

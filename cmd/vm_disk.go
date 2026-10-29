@@ -83,7 +83,7 @@ func newVMDiskCommand(deps Dependencies) *cli.Command {
 					return e
 				}
 			}
-			result, e := svc.Unlink(c.Context, id, target.Node, slot, deleteVolume)
+			result, e := svc.Unlink(c.Context, id, target.Node, slot, target.Volume, deleteVolume)
 			if result.Volume != "" {
 				if err := output.WriteDiskResult(rt.stdout, rt.format, result); err != nil {
 					return err

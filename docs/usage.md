@@ -1,767 +1,1606 @@
-# pve Usage
+# pve v3 usage
 
-`pve` is a personal HomeLab Proxmox VE CLI for daily VM/QEMU and LXC
-operations.
+`pve RESOURCE ACTION` manages a personal Proxmox VE HomeLab. The reference
+below is generated from the command tree and includes all supported flags.
+Use an API token with permissions for each selected operation.
 
-## Help Command Order
-
-`pve --help` groups commands into categories that follow daily HomeLab use,
-from overview and health checks to local tools:
-
-| Category | Commands, in display order |
-| --- | --- |
-| Dashboard | `status`, `check`, `doctor` |
-| Guests | `guest`, `vm`, `lxc` |
-| Infrastructure | `node`, `task`, `storage`, `backup`, `network`, `firewall` |
-| Local | `config`, `version` |
-
-Nested help keeps list/detail queries first, then lifecycle
-operations, configuration and maintenance, backup/recovery, and destructive
-operations. VM/LXC lifecycle commands use `start`, `shutdown`, `reboot`, `stop`
-in that order. VM guest-agent tools follow lifecycle commands, and cloud-init
-is next to `config`. `delete` is the last VM/LXC operation; snapshot help lists
-`ls`, `create`, `delete`, `rollback`, placing rollback last.
-
-Config help lists `ls`, `show`, `add`, `set`, `use`, `help` to prioritize
-inspection before configuration changes. The built-in `help` command remains
-last at each level.
-
-## Configuration
-
-The default config file is `~/.config/pve/config.yaml`. Use `--config PATH`
-to select another file. After the rename from `pvectl`, move an existing
-config file to the new path or select it explicitly; the old directory is
-not searched or migrated automatically.
-
-For a typical HomeLab setup, add a profile interactively and run a diagnostic
-check:
+## Profiles and credentials
 
 ```bash
 pve config add
 pve config ls
-pve config show
-pve doctor
-```
-
-### List and Show Profiles
-
-`config ls` prints a table with only the profile name and endpoint, sorted by
-profile name. `config show` displays the current profile by default. Pass a name
-or use the global `--profile` flag to select a profile, or use `--all` to display
-every profile:
-
-```bash
-pve config ls
-pve config show
-pve config show lab
-pve --profile lab config show
 pve config show --all
-```
-
-Profile selectors cannot be combined: a positional name together with
-`--profile`, or `--all` together with either selector, produces an error.
-`config ls` and `config show` always display tables. Show renders a two-column
-`FIELD` / `VALUE` table for each profile, separated by a blank line when showing
-multiple profiles. Its fields are `Profile`, `Current`, `Endpoint`, `Token ID`,
-`Token secret`, `Token secret env`, `Skip TLS verify`, `Timeout`, and
-`Default output`.
-
-Each non-empty `Token secret` is a summary. Values longer than six Unicode
-characters show the first three and last three characters with `*****` between
-them, such as `dd1*****ef4`; values of six characters or fewer show only `*****`.
-This display does not change the stored token or authentication. `Token secret
-env` displays the configured environment variable name without reading its value.
-
-The final line of `config show` gives the absolute config-file path after
-expanding `~` and environment variables. Line breaks in file names are escaped
-to keep the path on one line:
-
-```text
-Config file: /home/user/.config/pve/config.yaml
-```
-
-### Add Profiles Interactively
-
-`config add` prompts for the profile name, PVE API endpoint, token ID, a plaintext
-token or environment variable reference, and whether to skip TLS verification.
-Plaintext token input is hidden in the terminal. The default timeout is `30s`,
-the default output is `table`, and TLS verification is enabled. Global
-`--api-timeout` and `--insecure` supply defaults when provided.
-
-The profile name defaults to global `--profile` or `home`. The wizard asks whether to
-make the added profile current. The default answer is yes when no current
-profile is configured and no otherwise. An existing profile of the same name
-is never overwritten. Ending input cancels without writing changes. Prompts
-and setup results go to stderr.
-
-If the file is missing, `config ls` and `config show` report that it does not
-exist and offer the same guided initialization in a terminal. With nonterminal
-stdin, they display a `config add` / `config set` setup hint and exit
-successfully without waiting for input. Declining or ending input also exits
-successfully. Stdout stays empty during setup; run `config ls` or `config show`
-again after creation. Initialization never overwrites a file that appeared while
-entering the values. Invalid YAML and file-access failures still produce errors.
-
-### Set Profiles Noninteractively
-
-`config set NAME` creates or replaces a named profile using flags. Connection
-writes require `--endpoint`, `--token-id`, and at least one of `--token-secret`
-or `--token-secret-env`:
-
-```bash
-pve config set lab \
-  --endpoint https://pve-lab.lan:8006/api2/json \
-  --token-id 'automation@pve!pve' \
-  --token-secret-env PVE_LAB_TOKEN_SECRET \
-  --timeout 30s \
-  --default-output table
-```
-
-Profiles default to timeout `30s` and output `table`. `config set` never
-changes which profile is current; the first profile written into an empty
-config becomes current automatically.
-
-### Switch Profiles
-
-```bash
 pve config use home
 ```
 
-`config use NAME` only selects the current profile. It requires the named
-profile to exist and never rewrites its connection settings.
+Noninteractive configuration uses one credential source:
 
-`config` exposes only `ls`, `show`, `add`, `set`, and `use`.
+```bash
+pve config set home --endpoint https://pve.example:8006/api2/json \
+  --token-id 'automation@pve!cli' --token-secret-env PVE_HOME_TOKEN
+pve config use home
+pve --profile home doctor
+```
 
-### Stored Configuration
-
-Config schema:
+Alternatively use `--token-secret-file PATH`, or pipe a secret from your secret
+manager into `pve config set ... --token-secret-stdin`. Never put token values
+in command arguments. Interactive input is hidden. Managed credentials use
+0600 files in a 0700 directory and atomic publication; Unix readers require a
+private regular file owned by the current user. Windows relies on file ACLs.
 
 ```yaml
 current_profile: home
 profiles:
   home:
-    endpoint: https://pve.lan:8006/api2/json
-    token_id: automation@pve!pve
-    token_secret: your-token-secret
-    insecure_skip_verify: true
+    endpoint: https://pve.example:8006/api2/json
+    token_id: automation@pve!cli
+    token_secret_env: PVE_HOME_TOKEN
     timeout: 30s
     default_output: table
 ```
 
-`token_secret` stores the token value directly in plaintext. It can be set by
-editing the YAML file, entering it in `config add`, or passing `--token-secret`
-to `config set NAME`.
+A file-based profile uses `token_secret_file: /private/path/token` instead of
+the environment reference. Exactly one source is allowed. Unknown YAML fields
+are rejected. `config show` displays references without reading secret values,
+and ends with the absolute config path. Config writes use 0600 permissions on
+Unix. `config set` does not switch an existing current profile. Missing config
+files offer interactive setup; interrupted prompts preserve existing files.
 
-For environment-based configuration, replace `token_secret` with
-`token_secret_env: PVE_HOME_TOKEN_SECRET` in YAML, or pass
-`--token-secret-env PVE_HOME_TOKEN_SECRET` instead of `--token-secret`:
+## Queries and resource resolution
 
 ```bash
-export PVE_HOME_TOKEN_SECRET='your-token-secret'
+pve guest ls --status running --tag infra --sort vmid
+pve vm ls --name debian --sort memory --desc
+pve vm get debian-test
+pve vm get --name 123
+pve vm start debian-test --wait
+pve storage usage --sort used-percent --desc --min-used-percent 80
 ```
 
-A non-empty `token_secret` takes precedence over `token_secret_env`; the
-environment variable is read only when the plaintext value is empty or absent.
-Environment variable names are user-defined. Config files are saved with
-permissions `0600` on Unix, including when replacing an existing file.
-Doctor reports the credential source without printing its value.
+List names use case-insensitive substring matching; positional names use exact
+matching. Numeric positionals mean VMIDs. `--name` on single-target commands
+selects exact numeric names; clone's `--name` names its destination. Name
+conflicts list candidate node/VMIDs and fail. Unspecified nodes use cluster
+inventory. Resolution refuses incomplete inventory instead of selecting a
+possibly ambiguous target. Explicit nodes are checked directly.
 
-## Diagnostics
+Guest sorting accepts `vmid/name/node/status/memory/cpu`; memory sorts allocated
+memory. Missing metrics stay last in both directions. Storage sorting accepts
+`name/node/used-percent/total`, with unknown capacity last. Unknown capacity
+never matches a positive usage threshold. Shared storage rows remain per node;
+there is no summed cluster-capacity view that double-counts shared disks.
+
+## LXC deployment
 
 ```bash
-pve doctor
-pve doctor --offline
-pve doctor --node pve1
-pve doctor -o json
+pve lxc template ls --available --node pve1 --section system --name debian
+pve lxc template ls --node pve1 --storage local
+pve lxc template download EXACT_FILENAME --node pve1 --storage local --wait
+pve lxc create 201 --node pve1 --hostname debian-test \
+  --template local:vztmpl/EXACT_FILENAME --rootfs local-lvm:8 \
+  --memory 2048 --cores 2 --net0 'name=eth0,bridge=vmbr0,ip=dhcp' --wait
+pve lxc start 201 --wait
 ```
 
-`doctor` checks the config path, config file, YAML parsing, selected profile,
-required profile fields, plaintext token or token-secret environment variable, timeout,
-default output, endpoint shape, Proxmox API connectivity, and node listing
-permission. It never prints token secret values.
+Use the exact filename returned by the available index. Only traditional
+`system` templates are supported. Download rejects duplicates and verifies the
+storage file after waiting. LXC creation checks cluster ID uniqueness, template
+readability, active rootdir storage and network bridge before submitting once.
+Defaults are 1024 MiB memory, one core, 512 MiB swap, unprivileged and stopped.
+`--ssh-key-file` reads public keys; `--password-env` reads a password without
+putting it on the command line. Explicit `--unprivileged=false` requests a
+privileged container. No automatic retry occurs after task submission.
 
-Use `--offline` to skip Proxmox API calls. Use `--node` to verify a specific
-node exists during online checks. Doctor rows are written to stdout and support
-the same `table`, `json`, and `yaml` output formats as resource commands.
-
-## Version
+## VM creation and configuration
 
 ```bash
-pve version
-pve version -o json
-pve --version
+pve vm create 101 --node pve1 --name debian-vm --storage local-lvm \
+  --disk-size 32G --memory 4096 --cores 4 --bridge vmbr0 \
+  --iso local:iso/debian.iso --wait
+pve vm config get 101 -o json
+pve vm config set 101 --set memory=8192 --set cores=4 --wait -o json
+pve lxc config get 201 -o yaml
+pve lxc config set 201 --set memory=2048 -o json
 ```
 
-`pve version` writes build and runtime metadata. It does not read the config
-file or connect to Proxmox VE. `pve --version` keeps the compact CLI version
-print from the underlying CLI framework.
+VM creation checks ID, node, image storage, bridge and optional ISO. Disk sizes
+use positive GiB values such as `32G`. The VM stays stopped; an ISO changes boot
+order, but no OS is installed automatically. Without ISO, the empty VM boots
+from its disk/network. Cloud-init deployments use a prepared template with
+`vm clone` followed by `vm cloud-init set`; an empty disk is not an OS image.
 
-## Daily Commands
+Native configuration appears under a dynamic `config` object. Keys and values
+retain the API's original types, including numeric strings returned by PVE.
+Credential fields are redacted. Repeated `--set key=value` rejects empty or
+duplicate keys. Successful synchronous changes return `succeeded` without a
+UPID; asynchronous changes return a task result.
 
-### HomeLab Status and Health
-
-`status` answers "is my PVE basically fine right now?" with a compact overview.
-It tolerates partial failures: sections that cannot be queried are reported in
-`issues` instead of failing the whole command.
-
-```bash
-pve status
-pve status -o json
-```
-
-`check` reports HomeLab health with a per-check exit-code contract: `fail`
-makes the command exit non-zero, `warn` does not. With `--strict`, warnings
-also fail. This makes it suitable for cron, systemd timers, and automation.
+## Disk maintenance and destructive operations
 
 ```bash
-pve check
-pve check --node pve1
-pve check --storage-warn 85 --storage-fail 95
-pve check --backup-tag backup --backup-max-age 36h
-pve check --strict
-```
-
-The backup coverage check only runs when both `--backup-tag` and
-`--backup-max-age` are set; guests without that tag are never judged. An
-unknown `--node` fails the check instead of reporting an empty green run, and
-backup storages that cannot be queried report `backup status unavailable`
-rather than `no backup found`.
-
-`doctor` stays separate: it checks whether `pve` itself works, not whether
-the HomeLab is healthy.
-
-### Nodes
-
-```bash
-pve node ls
-pve node get pve1
-pve node get pve1 -o json
-```
-
-`node get` adds PVE version, kernel, load average, and CPU details on top of
-the `node ls` row data.
-
-### Task Inspection
-
-Tasks are first-class resources. Every mutating command prints its task ID on
-stderr; `task` commands let you inspect them afterwards.
-
-```bash
-pve task ls
-pve task ls --node pve1
-pve task ls --type vzdump
-pve task ls --status running
-pve task ls --limit 20
-
-pve task get UPID:pve1:0000F2A3:00000000:6839F4A1:vzdump:100:root@pam:
-
-pve task log UPID:pve1:0000F2A3:00000000:6839F4A1:vzdump:100:root@pam:
-pve task log UPID:pve1:0000F2A3:00000000:6839F4A1:vzdump:100:root@pam: --tail 100
-
-pve task wait UPID:pve1:0000F2A3:00000000:6839F4A1:vzdump:100:root@pam: --wait-timeout 20m
-```
-
-`task ls` without `--node` aggregates across all nodes and tolerates nodes
-that fail to answer as long as one succeeds. Known status values are
-`running`, `ok`, `error`, and `unknown`.
-
-### Guest Aggregate View
-
-`guest` aggregates VM/QEMU and LXC guests and hosts the bulk lifecycle
-operations.
-
-```bash
-pve guest ls
-pve guest ls --node pve1
-pve guest ls --type vm
-pve guest ls --type lxc
-pve guest ls --status running
-pve guest ls --tag infra
-pve guest ls --tag docker --tag production --tag-match all
-pve guest ls --tag docker --tag production --tag-match any
-pve guest get 100
-pve guest get 100 --type vm
-pve guest get 200 --type lxc
-```
-
-Tag values are matched case-insensitively. `--tag` is repeatable; the default
-`--tag-match all` requires every listed tag, `any` requires at least one.
-Proxmox VE stores guest tags as one semicolon-separated string (for example
-`infra;production`); `pve` decodes that format before matching.
-
-#### Bulk Guest Operations
-
-```bash
-pve guest start --tag lab --dry-run
-pve guest start --tag lab
-pve guest shutdown --tag infra
-pve guest reboot --node pve1 --status running
-pve guest stop --tag legacy --yes
-```
-
-Selection flags: `--node`, `--type all|vm|lxc`, `--status`, `--tag`,
-`--tag-match`. At least one of `--node`, `--status`, or `--tag` is required so
-a bare command never sweeps the whole cluster.
-
-Safety and execution:
-
-- `--dry-run` prints the affected guests and exits without changing anything.
-- Operations hitting more than one guest require a local `yes` confirmation;
-  `--yes` skips it.
-- `--jobs N` (default 2) bounds concurrency; `--wait`/`--wait-timeout` wait
-  for each task.
-- One failing guest never aborts the run: every per-guest result is written to
-  stdout, progress goes to stderr, and the command exits non-zero only if at
-  least one guest failed.
-
-Use `guest` for inventory and inspection. Use `vm` and `lxc` commands for
-lifecycle and maintenance operations.
-
-`guest ls` defaults to `--type all`. `guest get` defaults to `--type auto` and
-searches both VM/QEMU and LXC guests. If both a VM and an LXC exist with the
-same ID, specify `--type vm` or `--type lxc`.
-
-### VM/QEMU
-
-```bash
-pve vm ls
-pve vm ls --node pve1
-pve vm get 100
-pve vm get 100 --node pve1 -o json
-pve vm start 100 --wait
-pve vm shutdown 100 --wait
-pve vm reboot 100 --wait
-pve vm stop 100
-```
-
-When `--node` is omitted, `pve` traverses all nodes returned by the cluster
-and resolves the VMID automatically.
-
-### LXC
-
-```bash
-pve lxc ls
-pve lxc ls --node pve1
-pve lxc get 200
-pve lxc get 200 --node pve1 -o json
-pve lxc start 200 --wait
-pve lxc shutdown 200 --wait
-pve lxc reboot 200 --wait
-pve lxc stop 200
-```
-
-When `--node` is omitted, `pve` traverses all nodes returned by the cluster
-and resolves the CTID automatically.
-
-## Backup Commands
-
-Backup commands are intentionally lightweight. They list backup files on a
-specific node/storage and create one-off guest backups.
-
-### List Backups
-
-```bash
-pve backup ls --node pve1 --storage backup
-pve backup ls --node pve1 --storage backup --vmid 100
-pve backup ls --node pve1 --storage backup --type vm
-pve backup ls --node pve1 --storage backup --type lxc
-pve backup ls --node pve1 --storage backup --latest
-pve backup ls --node pve1 --storage backup -o json
-```
-
-`backup ls` requires both `--node` and `--storage`. Supported backup types are
-`all`, `vm`, and `lxc`. Use `--latest` to keep only the newest backup per
-guest.
-
-### Create One-off Guest Backups
-
-```bash
-pve vm backup 100 --storage backup --mode snapshot --wait
-pve lxc backup 200 --storage backup --mode snapshot --wait
-```
-
-Common options:
-
-```bash
-pve vm backup 100 \
-  --storage backup \
-  --mode snapshot \
-  --compress zstd \
-  --notes-template "{{guestname}}" \
-  --bwlimit 102400 \
-  --protected \
-  --wait
-```
-
-Supported modes are `snapshot`, `suspend`, and `stop`. Supported compression
-values are `zstd`, `lzo`, `gzip`, and `none`.
-
-When `--node` is omitted, `pve` resolves the VMID/CTID automatically before
-triggering the backup. Backup results are written to stdout and include the
-task ID; task IDs and wait progress are also written to stderr.
-
-One-off VM/LXC backup restore is in scope as a disaster-recovery workflow:
-restoring a vzdump archive into a new, non-existing VMID. Overwriting an
-existing VMID is not supported; delete the guest first, then restore.
-
-### Restore a Backup Archive
-
-```bash
-pve vm restore backup:backup/vzdump-qemu-100-2026_06_06-00_00_00.vma.zst \
-  --node pve1 \
-  --vmid 101 \
-  --storage local-lvm \
-  --wait
-
-pve lxc restore backup:backup/vzdump-lxc-200-2026_06_06-00_00_00.tar.zst \
-  --node pve1 \
-  --vmid 201 \
-  --storage local-lvm \
-  --wait
-```
-
-`--node` and `--vmid` are required. The restore refuses to run when the target
-VMID already exists anywhere in the cluster; there is no `--yes` overwrite.
-The VMID check must see every node, so it aborts before starting when any
-node's guest inventory cannot be queried. Results are written to stdout and
-include the task ID; wait progress goes to stderr. When a submitted task
-fails during `--wait`, the result row is still written to stdout before the
-command exits non-zero. When the archive name encodes a vzdump kind (`vzdump-qemu-` or
-`vzdump-lxc-`), the kind must match the command.
-
-`pve` does not manage scheduled backup jobs, prune policies, backup
-deletion, PBS datastores, or PBS verification.
-
-## Storage Commands
-
-Storage commands are read-only inventory helpers for storage status and generic
-storage content.
-
-### List Storages
-
-```bash
-pve storage ls
-pve storage ls --node pve1
-pve storage ls --content backup
-pve storage ls --type dir
-pve storage ls --active
-pve storage ls --enabled
-pve storage ls -o json
-```
-
-When `--node` is omitted, `pve` traverses all nodes returned by the cluster
-and lists storage status on each node. Use `--content` for a single content
-capability such as `backup`, `iso`, `images`, or `vztmpl`. Use `--type` for a
-single storage type such as `dir`, `lvmthin`, `nfs`, or `pbs`.
-
-### Storage Usage
-
-```bash
-pve storage usage
-pve storage usage --node pve1
-pve storage usage --content backup
-```
-
-`storage usage` is a compact daily-use view of the same data as `storage ls`;
-structured output reuses the `StorageRow` schema.
-
-### Show Storage Status
-
-```bash
-pve storage get local --node pve1
-pve storage get backup --node pve1 -o json
-```
-
-`storage get` requires `--node` because the same storage name may be visible on
-multiple nodes.
-
-### List Storage Content
-
-```bash
-pve storage content ls --node pve1 --storage local
-pve storage content ls --node pve1 --storage local --content iso
-pve storage content ls --node pve1 --storage backup --content backup
-pve storage content ls --node pve1 --storage local-lvm --content images
-pve storage content ls --node pve1 --storage backup --vmid 100
-pve storage content ls --node pve1 --storage local -o json
-```
-
-`storage content ls` shows generic storage contents such as ISO images, LXC
-templates, backup files, VM disks, and container root disks. If you only care
-about backup files, prefer `backup ls`; it uses backup-specific fields and
-supports `--type` and `--latest`.
-
-`pve` does not create, update, delete, upload, download, prune, or otherwise
-mutate storages or storage content. It also does not manage PBS datastores.
-
-## Maintenance Commands
-
-### Clone
-
-```bash
-pve vm clone 9000 --newid 101 --name app-vm --target pve1 --wait
-pve vm clone 9000 --name app-vm --target pve1 --storage local-lvm --full --wait
-
-pve lxc clone 900 --newid 201 --hostname app-lxc --target pve1 --wait
-pve lxc clone 900 --hostname app-lxc --target pve1 --storage local-lvm --full --wait
-```
-
-Omit `--newid` to let Proxmox allocate the next available VMID/CTID. Clone
-results are written to stdout and include `new_vmid`, so scripts can capture
-the allocated ID:
-
-```bash
-pve vm clone 9000 --name app-vm --target pve1 -o json
-```
-
-### Config
-
-```bash
-pve vm config 101 --set memory=4096 --set cores=4 --wait
-pve lxc config 201 --set memory=2048 --set cores=2 --wait
-```
-
-`config` passes generic `key=value` options to the Proxmox guest config API.
-
-### Resize
-
-```bash
+pve vm disk ls 101
+pve vm disk add 101 --slot scsi1 --storage local-lvm --size 20G --wait
+pve vm disk remove 101 scsi1
+pve vm disk delete 101 unused0 --yes
 pve vm resize 101 --disk scsi0 --size +20G --wait
-pve lxc resize 201 --disk rootfs --size +10G --wait
 ```
 
-### Migrate
+`disk ls` distinguishes system, attached, installer and unused devices.
+`remove` detaches an attached disk and verifies that its volume is retained in
+an unused slot. It refuses `unusedN`. `delete` only accepts an explicit unused
+slot, destroys that volume, and verifies absence from storage. Interactive
+confirmation includes VMID, slot, node and volume; a changed volume target is
+refused before submission. Type `VMID SLOT` exactly.
+`--yes` skips only local confirmation. API safety checks still apply. API disk
+unlink uses `force=false`; an unused-slot unlink itself performs deletion.
 
 ```bash
-pve vm migrate 101 --target pve2 --online --wait
-pve lxc migrate 201 --target pve2 --online --wait
-```
-
-## Snapshot Commands
-
-```bash
-pve vm snapshot ls 101
 pve vm snapshot create 101 before-upgrade --wait
-pve vm snapshot delete 101 before-upgrade --wait
-
-pve lxc snapshot ls 201
-pve lxc snapshot create 201 before-upgrade --wait
-pve lxc snapshot delete 201 before-upgrade --wait
-```
-
-Snapshot rollback and snapshot delete are dangerous operations and are
-documented separately below.
-
-## VM Agent Commands (QEMU Guest Agent)
-
-Agent commands only work on VMs with the QEMU guest agent installed and
-enabled. LXC containers do not expose the agent API. The first release
-intentionally limits itself to `ping`, `network`, and `exec`.
-
-```bash
-pve vm agent ping 100 --node pve1
-pve vm agent network 100 -o json
-pve vm agent exec 100 --node pve1 -- /usr/bin/uname -a
-```
-
-Like other VMID-oriented commands, `--node` is optional here: when omitted,
-`pve` locates the VM across the cluster first.
-
-`vm agent network` answers "which IP did this cloned VM get?". `vm agent exec`
-takes `executable + argv` after `--` and never wraps the command in a shell
-implicitly; choose `/bin/sh -c ...` yourself if you want shell semantics. The
-guest command's exit code is preserved in the structured result, and the
-command exits non-zero when the guest command failed.
-
-## VM Cloud-init Commands
-
-Cloud-init commands use PVE's native cloud-init configuration; `pve` never
-builds ISOs itself. As with the agent commands, `--node` is optional and an
-omitted node is resolved by locating the VM across the cluster.
-
-```bash
-pve vm cloud-init get 100 -o json
-
-pve vm cloud-init set 100 \
-  --user debian \
-  --ssh-key-file ~/.ssh/id_ed25519.pub \
-  --ipconfig0 ip=dhcp \
-  --nameserver 192.168.2.67 \
-  --searchdomain lan \
-  --wait
-
-pve vm cloud-init regenerate 100
-```
-
-Passwords are never accepted as a command-line flag; pass the environment
-variable name instead so the secret stays out of shell history and process
-lists:
-
-```bash
-export VM_PASSWORD=...
-pve vm cloud-init set 100 --password-env VM_PASSWORD
-```
-
-`cloud-init get` never echoes the password; it only reports
-`password_configured`. `cloud-init regenerate` regenerates the cloud-init
-image so the next boot picks up pending changes. `--ssh-key-file` expects one
-full OpenSSH public key per line; each line is preserved as-is, and empty or
-`#` comment lines are skipped.
-
-## Network Commands (read-only)
-
-```bash
-pve network ls --node pve1
-pve network ls --type bridge
-pve network ls --active
-pve network get vmbr0 --node pve1
-```
-
-Without `--node`, `network ls` aggregates across all nodes with the usual
-partial-success behavior. Network mutation (create/update/delete/apply) is a
-non-goal because a remote mistake can take down the whole node.
-
-## Firewall Commands (read-only)
-
-```bash
-pve firewall status --node pve1
-pve firewall ls --node pve1
-
-pve firewall status --node pve1 --scope vm --vmid 100
-pve firewall ls --node pve1 --scope vm --vmid 100
-
-pve firewall ls --node pve1 --scope lxc --vmid 200
-```
-
-`--scope node` is the default and requires `--node`. For `vm` and `lxc`
-scopes, `--vmid` is required and `--node` is optional: when omitted, `pve`
-locates the guest across the cluster like other VMID-oriented commands.
-Firewall rule mutation is a non-goal.
-
-## Dangerous Operations
-
-### Delete
-
-Delete commands require a local confirmation prompt unless `--yes` is passed:
-
-```bash
-pve vm delete 101
-pve lxc delete 201
-```
-
-The prompt requires typing the exact VMID/CTID. The `--yes` flag only skips
-this local prompt; it is not passed to the Proxmox LXC delete API.
-
-Use `--wait` when scripts need completion status:
-
-```bash
-pve vm delete 101 --yes --wait
-pve lxc delete 201 --yes --wait
-```
-
-### Snapshot Rollback
-
-Snapshot rollback commands require typing the exact snapshot name unless
-`--yes` is passed:
-
-```bash
-pve vm snapshot rollback 101 before-upgrade
-pve lxc snapshot rollback 201 before-upgrade
-```
-
-The `--yes` flag only skips this local prompt. Rollback is an asynchronous
-PVE task, so use `--wait` when scripts need completion status:
-
-```bash
+pve vm snapshot rollback 101 before-upgrade --dry-run -o json
 pve vm snapshot rollback 101 before-upgrade --yes --wait
-pve lxc snapshot rollback 201 before-upgrade --yes --wait
+pve lxc snapshot delete 201 old-snapshot --dry-run
+pve vm delete 101 --yes --wait
 ```
 
-### Snapshot Delete
+Snapshot rollback/delete preview the exact target, snapshot and impact using
+read APIs only. Both verify existence and locks. VM rollback requires a stopped
+VM. Confirmation is required outside dry-run; nonterminal dangerous operations
+must specify `--yes`. Deletion and rollback are separate from daily lifecycle
+commands and can lose data.
 
-Snapshot delete commands require typing the exact snapshot name unless
-`--yes` is passed:
+## Tasks, bulk operations and automation
 
 ```bash
-pve vm snapshot delete 101 before-upgrade
-pve lxc snapshot delete 201 before-upgrade
+pve guest shutdown --tag infra --dry-run -o json
+pve guest shutdown --tag infra --yes --jobs 2 --max-targets 20 --wait -o json
+pve task ls --status running
+pve task get 'UPID:...'
+pve task log 'UPID:...' --tail 100
+pve task wait 'UPID:...' --wait-timeout 10m -o json
+pve task cancel 'UPID:...' --yes -o json
 ```
 
-Like rollback, delete is an asynchronous PVE task, so use `--wait` when scripts
-need completion status.
+Bulk operations require at least one constraining node/status/tag selector,
+a complete selection, 1–8 workers and at most 20 targets by default. Increase
+`--max-targets` explicitly for larger selections. Every mutation requires
+confirmation or `--yes`, including one target. Results are ordered by VMID;
+one failure does not prevent other guests from completing. Context cancellation
+prevents pending operations from being submitted.
 
-## Output Formats
+Operation statuses are `submitted`, `succeeded`, `failed`, `unknown`, and
+`cancel_requested`. UPIDs survive failed waits. `--wait-timeout` defaults to
+30 minutes for backup/restore/clone/migrate, 15 minutes for template download,
+10 minutes for creation, and five minutes otherwise; override it as needed. Ctrl+C or a
+wait timeout cancels only local waiting. Use `task get/log/wait` to recover
+tracking. Cancellation checks that the task is running and requests termination;
+it does not claim the task already stopped. Non-idempotent requests are never
+automatically resubmitted.
 
-Supported output formats are `table`, `json`, and `yaml`. `-o`/`--output` is a
-per-command flag on commands that produce structured output; local `config`
-commands always print tables.
+Results use stdout, progress and diagnostics use stderr. Use JSON/YAML for
+scripts; table layout can change. Exit codes: 0 success, 1 confirmed operation
+or strict-health failure, 2 argument/configuration error, 3 API access failure,
+4 missing/ambiguous/conflicting target, 5 unknown final outcome.
+
+## Health and node maintenance
 
 ```bash
-pve node ls -o table
-pve guest ls -o json
-pve vm get 100 -o json
-pve lxc get 200 -o yaml
+pve check --node pve1 --cpu-warn 85 --memory-warn 90 --strict
+pve check --backup-tag backup --backup-max-age 48h
+pve status -o json
+pve node reboot pve1
+pve node shutdown pve1 --yes
 ```
 
-Use `table` for interactive use, `json` for scripts and agents, and `yaml` as
-an optional human-readable structured format.
+`doctor` checks CLI setup; `check` checks HomeLab health; `status` aggregates
+observed data. Storage retains warn/fail thresholds. Backup checks include a
+structured latest timestamp. Inaccessible checks become `unknown`; strict mode
+fails on warnings and unknowns. Partial status reports expose `complete=false`
+and `component_errors`; their counts describe observed resources only. Tables
+mark them `PARTIAL`, so missing queries must not be read as zero resources.
 
-JSON and YAML field names and field types are stable within v2.x. Table output
-is intended for humans and should not be parsed by scripts. See
-[`output-schema.md`](output-schema.md) and
-[`compatibility.md`](compatibility.md).
+Node reboot/shutdown preflight node state and running VM/LXC counts, show API
+and guest impact, and require the exact node name or `--yes`. They never stop
+guests automatically and intentionally do not offer `--wait`: API loss cannot
+prove a node reboot succeeded. Routine validation uses mock APIs.
 
-## Scripting Notes
-
-Global flags only control the connection context:
+## Shell completion
 
 ```bash
-pve \
-  --config ~/.config/pve/config.yaml \
-  --profile home \
-  --api-timeout 30s \
-  --insecure \
-  --verbose \
-  <resource> <action>
+source <(pve completion bash)
+# Zsh: save `pve completion zsh` as _pve in a directory on fpath, then compinit.
+# Fish: save `pve completion fish` under ~/.config/fish/completions/pve.fish.
 ```
 
-Behavior flags belong to the command itself: `-o`/`--output` is only accepted
-by commands with structured output, and `--wait`/`--wait-timeout` only by
-async operation commands.
+Completion covers commands, flags, common enumerations and read-only dynamic
+node/storage/VMID candidates. A short Context timeout and silent static fallback
+keep unavailable clusters from blocking the shell. Completion never modifies
+PVE resources or prints tokens.
 
-Timeouts keep separate roles: global `--api-timeout` bounds PVE API requests,
-`--timeout` on `vm agent exec` bounds the guest command, and `--wait-timeout`
-bounds async task waits.
+<!-- GENERATED_REFERENCE -->
 
-Async guest operations support:
+## Global flags
 
-```bash
-pve vm reboot 100 --wait --wait-timeout 5m
+Place global flags before the resource command. `--help` is available on every command.
+
+| Flag | Description and default |
+|---|---|
+| `--config` | --config value config file path (default: "~/.config/pve/config.yaml") |
+| `--profile` | --profile value profile name |
+| `--api-timeout` | --api-timeout value PVE API request timeout (default: 0s) |
+| `--insecure` | --insecure skip TLS certificate verification (default: false) |
+| `--verbose` | --verbose enable verbose logging (default: false) |
+
+## Command reference
+
+Generated from the registered command tree; flags may follow positional IDs.
+
+### `pve status`
+
+Show HomeLab status overview across nodes, guests, storage, and backups
+
+```text
+pve status
 ```
 
-Task IDs and wait progress are written to stderr. Command results are written
-to stdout.
+| Flag | Description and default |
+|---|---|
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
 
-### Cancel a task
+### `pve check`
 
-`pve task cancel UPID [--yes] [-o json]` checks that the task is running,
-requires confirmation, and returns `cancel_requested`. It never claims that
-the remote task has already stopped. Noninteractive use requires `--yes`.
+Check HomeLab health (nodes, storage usage, optional backup coverage)
 
-### Guest query options (v3)
+```text
+pve check
+```
 
-VM/LXC `ls` supports `--name` (case-insensitive substring), `--status`,
-`--sort vmid|name|node|status|memory|cpu`, and `--desc`. Missing metrics sort
-last. `get` and lifecycle commands accept exact names; ambiguous names fail
-with candidate node/VMID pairs. Numeric positionals always mean VMIDs;
-`get --name 123` selects a numeric name. Clone's `--name` names the new VM;
-its source can be an ID or nonnumeric exact name.
+| Flag | Description and default |
+|---|---|
+| `--cpu-warn` | --cpu-warn value CPU warn percent (default: 85) |
+| `--memory-warn` | --memory-warn value memory warn percent (default: 90) |
+| `--node` | --node value limit checks to one PVE node |
+| `--storage-warn` | --storage-warn value storage usage warn threshold in percent (default: 85) |
+| `--storage-fail` | --storage-fail value storage usage fail threshold in percent (default: 95) |
+| `--backup-tag` | --backup-tag value check backup coverage for guests with this tag |
+| `--backup-max-age` | --backup-max-age value maximum accepted backup age for tagged guests, for example 36h (default: 0s) |
+| `--strict` | --strict treat warnings as failures for the exit code (default: false) |
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
 
-### v3 credential sources
+### `pve guest ls`
 
-`config set NAME` requires exactly one of `--token-secret-env VAR`,
-`--token-secret-file PATH`, or `--token-secret-stdin`. Credential files must
-be regular private files (0600); managed files live in a 0700 credentials
-directory. Standard-input and interactive tokens are written atomically to
-independent files, with only their paths stored in YAML. Configuration
-rejects unknown fields and never loads legacy plaintext `token_secret`.
+List VM/QEMU and LXC guests
+
+```text
+pve guest ls
+```
+
+| Flag | Description and default |
+|---|---|
+| `--name` | --name value name substring |
+| `--sort` | --sort value vmid,name,node,status,memory,cpu (default: "vmid") |
+| `--desc` | --desc (default: false) |
+| `--node` | --node value PVE node name |
+| `--type` | --type value guest type: all,vm,lxc (default: "all") |
+| `--status` | --status value guest status filter, for example running or stopped |
+| `--tag` | --tag value [ --tag value ] filter guests by tag, repeatable |
+| `--tag-match` | --tag-match value tag match mode: all,any (default: "all") |
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+
+### `pve guest get`
+
+Show VM/QEMU or LXC guest details
+
+```text
+pve guest get VMID
+```
+
+| Flag | Description and default |
+|---|---|
+| `--name` | --name value exact name, including numeric names |
+| `--node` | --node value PVE node name |
+| `--type` | --type value guest type: auto,vm,lxc (default: "auto") |
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+
+### `pve guest start`
+
+Start matching guests in bulk
+
+```text
+pve guest start
+```
+
+| Flag | Description and default |
+|---|---|
+| `--node` | --node value limit to one PVE node |
+| `--type` | --type value guest type: all,vm,lxc (default: "all") |
+| `--status` | --status value guest status filter, for example running or stopped |
+| `--tag` | --tag value [ --tag value ] filter guests by tag, repeatable |
+| `--tag-match` | --tag-match value tag match mode: all,any (default: "all") |
+| `--max-targets` | --max-targets value maximum selected guests (default: 20) |
+| `--jobs` | --jobs value number of guests to operate on concurrently (default: 2) |
+| `--dry-run` | --dry-run show the guests that would be affected and exit (default: false) |
+| `--yes` | --yes skip local bulk confirmation (default: false) |
+| `--wait` | --wait wait for async task completion (default: false) |
+| `--wait-timeout` | --wait-timeout value task wait timeout (default: 0s) |
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+
+### `pve guest shutdown`
+
+Shutdown matching guests in bulk
+
+```text
+pve guest shutdown
+```
+
+| Flag | Description and default |
+|---|---|
+| `--node` | --node value limit to one PVE node |
+| `--type` | --type value guest type: all,vm,lxc (default: "all") |
+| `--status` | --status value guest status filter, for example running or stopped |
+| `--tag` | --tag value [ --tag value ] filter guests by tag, repeatable |
+| `--tag-match` | --tag-match value tag match mode: all,any (default: "all") |
+| `--max-targets` | --max-targets value maximum selected guests (default: 20) |
+| `--jobs` | --jobs value number of guests to operate on concurrently (default: 2) |
+| `--dry-run` | --dry-run show the guests that would be affected and exit (default: false) |
+| `--yes` | --yes skip local bulk confirmation (default: false) |
+| `--wait` | --wait wait for async task completion (default: false) |
+| `--wait-timeout` | --wait-timeout value task wait timeout (default: 0s) |
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+
+### `pve guest reboot`
+
+Reboot matching guests in bulk
+
+```text
+pve guest reboot
+```
+
+| Flag | Description and default |
+|---|---|
+| `--node` | --node value limit to one PVE node |
+| `--type` | --type value guest type: all,vm,lxc (default: "all") |
+| `--status` | --status value guest status filter, for example running or stopped |
+| `--tag` | --tag value [ --tag value ] filter guests by tag, repeatable |
+| `--tag-match` | --tag-match value tag match mode: all,any (default: "all") |
+| `--max-targets` | --max-targets value maximum selected guests (default: 20) |
+| `--jobs` | --jobs value number of guests to operate on concurrently (default: 2) |
+| `--dry-run` | --dry-run show the guests that would be affected and exit (default: false) |
+| `--yes` | --yes skip local bulk confirmation (default: false) |
+| `--wait` | --wait wait for async task completion (default: false) |
+| `--wait-timeout` | --wait-timeout value task wait timeout (default: 0s) |
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+
+### `pve guest stop`
+
+Stop matching guests in bulk
+
+```text
+pve guest stop
+```
+
+| Flag | Description and default |
+|---|---|
+| `--node` | --node value limit to one PVE node |
+| `--type` | --type value guest type: all,vm,lxc (default: "all") |
+| `--status` | --status value guest status filter, for example running or stopped |
+| `--tag` | --tag value [ --tag value ] filter guests by tag, repeatable |
+| `--tag-match` | --tag-match value tag match mode: all,any (default: "all") |
+| `--max-targets` | --max-targets value maximum selected guests (default: 20) |
+| `--jobs` | --jobs value number of guests to operate on concurrently (default: 2) |
+| `--dry-run` | --dry-run show the guests that would be affected and exit (default: false) |
+| `--yes` | --yes skip local bulk confirmation (default: false) |
+| `--wait` | --wait wait for async task completion (default: false) |
+| `--wait-timeout` | --wait-timeout value task wait timeout (default: 0s) |
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+
+### `pve vm ls`
+
+List virtual machines
+
+```text
+pve vm ls
+```
+
+| Flag | Description and default |
+|---|---|
+| `--node` | --node value PVE node name |
+| `--name` | --name value case-insensitive name substring |
+| `--status` | --status value guest status |
+| `--sort` | --sort value vmid,name,node,status,memory,cpu (default: "vmid") |
+| `--desc` | --desc sort descending; missing metrics remain last (default: false) |
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+
+### `pve vm get`
+
+Show guest details
+
+```text
+pve vm get VMID
+```
+
+| Flag | Description and default |
+|---|---|
+| `--node` | --node value PVE node name |
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+| `--name` | --name value exact guest name (including numeric names) |
+
+### `pve vm start`
+
+Start a guest
+
+```text
+pve vm start VMID
+```
+
+| Flag | Description and default |
+|---|---|
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+| `--node` | --node value PVE node name |
+| `--wait` | --wait wait for async task completion (default: false) |
+| `--wait-timeout` | --wait-timeout value task wait timeout (default: 0s) |
+| `--name` | --name value exact guest name (including numeric names) |
+
+### `pve vm shutdown`
+
+Shutdown a guest gracefully
+
+```text
+pve vm shutdown VMID
+```
+
+| Flag | Description and default |
+|---|---|
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+| `--node` | --node value PVE node name |
+| `--wait` | --wait wait for async task completion (default: false) |
+| `--wait-timeout` | --wait-timeout value task wait timeout (default: 0s) |
+| `--name` | --name value exact guest name (including numeric names) |
+
+### `pve vm reboot`
+
+Reboot a guest
+
+```text
+pve vm reboot VMID
+```
+
+| Flag | Description and default |
+|---|---|
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+| `--node` | --node value PVE node name |
+| `--wait` | --wait wait for async task completion (default: false) |
+| `--wait-timeout` | --wait-timeout value task wait timeout (default: 0s) |
+| `--name` | --name value exact guest name (including numeric names) |
+
+### `pve vm stop`
+
+Stop a guest immediately
+
+```text
+pve vm stop VMID
+```
+
+| Flag | Description and default |
+|---|---|
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+| `--node` | --node value PVE node name |
+| `--wait` | --wait wait for async task completion (default: false) |
+| `--wait-timeout` | --wait-timeout value task wait timeout (default: 0s) |
+| `--name` | --name value exact guest name (including numeric names) |
+
+### `pve vm agent ping`
+
+Check that the guest agent answers
+
+```text
+pve vm agent ping VMID
+```
+
+| Flag | Description and default |
+|---|---|
+| `--node` | --node value PVE node name |
+| `--name` | --name value exact guest name (including numeric names) |
+
+### `pve vm agent network`
+
+Show network interfaces reported by the guest agent
+
+```text
+pve vm agent network VMID
+```
+
+| Flag | Description and default |
+|---|---|
+| `--node` | --node value PVE node name |
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+| `--name` | --name value exact guest name (including numeric names) |
+
+### `pve vm agent exec`
+
+Run executable+argv inside the guest via the agent
+
+```text
+pve vm agent exec VMID -- COMMAND [ARG...]
+```
+
+| Flag | Description and default |
+|---|---|
+| `--node` | --node value PVE node name |
+| `--input` | --input value stdin data passed to the command |
+| `--timeout` | --timeout value how long to wait for the command to exit (default: 0s) |
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+
+### `pve vm create`
+
+Create a stopped VM with optional installer ISO
+
+```text
+pve vm create VMID
+```
+
+| Flag | Description and default |
+|---|---|
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+| `--node` | --node value PVE node name |
+| `--wait` | --wait wait for async task completion (default: false) |
+| `--wait-timeout` | --wait-timeout value task wait timeout (default: 0s) |
+| `--name` | --name value |
+| `--storage` | --storage value **Required.** |
+| `--disk-size` | --disk-size value (default: "32G") |
+| `--memory` | --memory value (default: 1024) |
+| `--cores` | --cores value (default: 1) |
+| `--bridge` | --bridge value (default: "vmbr0") |
+| `--iso` | --iso value |
+| `--onboot` | --onboot (default: false) |
+
+### `pve vm disk ls`
+
+List attached and unused disks
+
+```text
+pve vm disk ls VMID
+```
+
+| Flag | Description and default |
+|---|---|
+| `--node` | --node value PVE node name |
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+| `--name` | --name value exact guest name (including numeric names) |
+
+### `pve vm disk add`
+
+Allocate and attach a new disk
+
+```text
+pve vm disk add VMID
+```
+
+| Flag | Description and default |
+|---|---|
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+| `--node` | --node value PVE node name |
+| `--wait` | --wait wait for async task completion (default: false) |
+| `--wait-timeout` | --wait-timeout value task wait timeout (default: 0s) |
+| `--slot` | --slot value **Required.** |
+| `--storage` | --storage value **Required.** |
+| `--size` | --size value **Required.** |
+| `--name` | --name value exact guest name (including numeric names) |
+
+### `pve vm disk remove`
+
+Detach a disk while retaining its volume
+
+```text
+pve vm disk remove VMID SLOT
+```
+
+| Flag | Description and default |
+|---|---|
+| `--node` | --node value PVE node name |
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+| `--yes` | --yes skip local confirmation (default: false) |
+
+### `pve vm disk delete`
+
+Destroy an explicitly unused disk volume
+
+```text
+pve vm disk delete VMID SLOT
+```
+
+| Flag | Description and default |
+|---|---|
+| `--node` | --node value PVE node name |
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+| `--yes` | --yes skip local confirmation (default: false) |
+
+### `pve vm config get`
+
+Read native PVE configuration (credentials redacted)
+
+```text
+pve vm config get VMID
+```
+
+| Flag | Description and default |
+|---|---|
+| `--node` | --node value PVE node name |
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+| `--name` | --name value exact guest name (including numeric names) |
+
+### `pve vm config set`
+
+Set native PVE configuration
+
+```text
+pve vm config set VMID
+```
+
+| Flag | Description and default |
+|---|---|
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+| `--node` | --node value PVE node name |
+| `--wait` | --wait wait for async task completion (default: false) |
+| `--wait-timeout` | --wait-timeout value task wait timeout (default: 0s) |
+| `--set` | --set value [ --set value ] repeatable key=value |
+| `--name` | --name value exact guest name (including numeric names) |
+
+### `pve vm cloud-init get`
+
+Show cloud-init settings
+
+```text
+pve vm cloud-init get VMID
+```
+
+| Flag | Description and default |
+|---|---|
+| `--node` | --node value PVE node name |
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+| `--name` | --name value exact guest name (including numeric names) |
+
+### `pve vm cloud-init set`
+
+Update cloud-init settings
+
+```text
+pve vm cloud-init set VMID
+```
+
+| Flag | Description and default |
+|---|---|
+| `--node` | --node value PVE node name |
+| `--user` | --user value cloud-init user (ciuser) |
+| `--password-env` | --password-env value environment variable holding the cloud-init password; never pass passwords as flags |
+| `--ssh-key-file` | --ssh-key-file value file with public SSH keys (sshkeys) |
+| `--nameserver` | --nameserver value DNS server (nameserver) |
+| `--searchdomain` | --searchdomain value DNS search domain (searchdomain) |
+| `--wait` | --wait wait for async task completion (default: false) |
+| `--wait-timeout` | --wait-timeout value task wait timeout (default: 0s) |
+| `--ipconfig0` | --ipconfig0 value ipconfig0 value, for example ip=dhcp |
+| `--ipconfig1` | --ipconfig1 value ipconfig1 value |
+| `--ipconfig2` | --ipconfig2 value ipconfig2 value |
+| `--ipconfig3` | --ipconfig3 value ipconfig3 value |
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+| `--name` | --name value exact guest name (including numeric names) |
+
+### `pve vm cloud-init regenerate`
+
+Regenerate the cloud-init image so the next boot picks up pending changes
+
+```text
+pve vm cloud-init regenerate VMID
+```
+
+| Flag | Description and default |
+|---|---|
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+| `--node` | --node value PVE node name |
+| `--name` | --name value exact guest name (including numeric names) |
+
+### `pve vm resize`
+
+Resize a guest disk
+
+```text
+pve vm resize VMID
+```
+
+| Flag | Description and default |
+|---|---|
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+| `--node` | --node value PVE node name |
+| `--disk` | --disk value disk identifier **Required.** |
+| `--size` | --size value new size or increment, for example +20G **Required.** |
+| `--wait` | --wait wait for async task completion (default: false) |
+| `--wait-timeout` | --wait-timeout value task wait timeout (default: 0s) |
+| `--name` | --name value exact guest name (including numeric names) |
+
+### `pve vm migrate`
+
+Migrate a guest to another node
+
+```text
+pve vm migrate VMID
+```
+
+| Flag | Description and default |
+|---|---|
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+| `--node` | --node value source PVE node name |
+| `--target` | --target value target PVE node name **Required.** |
+| `--online` | --online request online migration (default: false) |
+| `--wait` | --wait wait for async task completion (default: false) |
+| `--wait-timeout` | --wait-timeout value task wait timeout (default: 0s) |
+| `--name` | --name value exact guest name (including numeric names) |
+
+### `pve vm clone`
+
+Clone a guest
+
+```text
+pve vm clone SOURCE_VMID
+```
+
+| Flag | Description and default |
+|---|---|
+| `--node` | --node value source PVE node name |
+| `--newid` | --newid value new VMID/CTID; omitted means automatic NextID (default: 0) |
+| `--target` | --target value target PVE node name **Required.** |
+| `--storage` | --storage value target storage |
+| `--full` | --full perform a full clone (default: false) |
+| `--pool` | --pool value target resource pool |
+| `--snapname` | --snapname value snapshot name to clone from |
+| `--description` | --description value description for the cloned guest |
+| `--wait` | --wait wait for async task completion (default: false) |
+| `--wait-timeout` | --wait-timeout value task wait timeout (default: 0s) |
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+| `--name` | --name value name for the cloned VM **Required.** |
+| `--format` | --format value target disk format |
+
+### `pve vm snapshot ls`
+
+List snapshots
+
+```text
+pve vm snapshot ls VMID
+```
+
+| Flag | Description and default |
+|---|---|
+| `--node` | --node value PVE node name |
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+| `--name` | --name value exact guest name (including numeric names) |
+
+### `pve vm snapshot create`
+
+Create a snapshot
+
+```text
+pve vm snapshot create VMID SNAPNAME
+```
+
+| Flag | Description and default |
+|---|---|
+| `--output`, `-o` | --output value, -o value table,json,yaml |
+| `--node` | --node value PVE node name |
+| `--wait` | --wait wait for async task completion (default: false) |
+| `--wait-timeout` | --wait-timeout value task wait timeout (default: 0s) |
+
+### `pve vm snapshot delete`
+
+Delete a snapshot
+
+```text
+pve vm snapshot delete VMID SNAPNAME
+```
+
+| Flag | Description and default |
+|---|---|
+| `--output`, `-o` | --output value, -o value table,json,yaml |
+| `--node` | --node value PVE node name |
+| `--dry-run` | --dry-run preview with zero mutation requests (default: false) |
+| `--yes` | --yes skip local snapshot delete confirmation (default: false) |
+| `--wait` | --wait wait for async task completion (default: false) |
+| `--wait-timeout` | --wait-timeout value task wait timeout (default: 0s) |
+
+### `pve vm snapshot rollback`
+
+Rollback to a snapshot
+
+```text
+pve vm snapshot rollback VMID SNAPNAME
+```
+
+| Flag | Description and default |
+|---|---|
+| `--output`, `-o` | --output value, -o value table,json,yaml |
+| `--node` | --node value PVE node name |
+| `--dry-run` | --dry-run preview with zero mutation requests (default: false) |
+| `--yes` | --yes skip local rollback confirmation (default: false) |
+| `--wait` | --wait wait for async task completion (default: false) |
+| `--wait-timeout` | --wait-timeout value task wait timeout (default: 0s) |
+
+### `pve vm backup`
+
+Create a backup for a guest
+
+```text
+pve vm backup VMID
+```
+
+| Flag | Description and default |
+|---|---|
+| `--node` | --node value PVE node name |
+| `--storage` | --storage value backup storage name **Required.** |
+| `--mode` | --mode value backup mode: snapshot,suspend,stop (default: "snapshot") |
+| `--compress` | --compress value compression: zstd,lzo,gzip,none (default: "zstd") |
+| `--notes-template` | --notes-template value backup notes template |
+| `--bwlimit` | --bwlimit value bandwidth limit in KiB/s (default: 0) |
+| `--protected` | --protected protect the backup from pruning (default: false) |
+| `--wait` | --wait wait for async task completion (default: false) |
+| `--wait-timeout` | --wait-timeout value task wait timeout (default: 0s) |
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+| `--name` | --name value exact guest name (including numeric names) |
+
+### `pve vm restore`
+
+Restore a backup archive into a new, non-existing guest
+
+```text
+pve vm restore ARCHIVE
+```
+
+| Flag | Description and default |
+|---|---|
+| `--node` | --node value target PVE node name **Required.** |
+| `--vmid` | --vmid value new VMID/CTID; it must not exist yet (default: 0) **Required.** |
+| `--storage` | --storage value target storage for guest disks |
+| `--wait` | --wait wait for async task completion (default: false) |
+| `--wait-timeout` | --wait-timeout value task wait timeout (default: 0s) |
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+
+### `pve vm delete`
+
+Delete a guest
+
+```text
+pve vm delete VMID
+```
+
+| Flag | Description and default |
+|---|---|
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+| `--node` | --node value PVE node name |
+| `--yes` | --yes skip local delete confirmation (default: false) |
+| `--wait` | --wait wait for async task completion (default: false) |
+| `--wait-timeout` | --wait-timeout value task wait timeout (default: 0s) |
+| `--name` | --name value exact guest name (including numeric names) |
+
+### `pve lxc ls`
+
+List containers
+
+```text
+pve lxc ls
+```
+
+| Flag | Description and default |
+|---|---|
+| `--node` | --node value PVE node name |
+| `--name` | --name value case-insensitive name substring |
+| `--status` | --status value guest status |
+| `--sort` | --sort value vmid,name,node,status,memory,cpu (default: "vmid") |
+| `--desc` | --desc sort descending; missing metrics remain last (default: false) |
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+
+### `pve lxc get`
+
+Show guest details
+
+```text
+pve lxc get VMID
+```
+
+| Flag | Description and default |
+|---|---|
+| `--node` | --node value PVE node name |
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+| `--name` | --name value exact guest name (including numeric names) |
+
+### `pve lxc start`
+
+Start a guest
+
+```text
+pve lxc start VMID
+```
+
+| Flag | Description and default |
+|---|---|
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+| `--node` | --node value PVE node name |
+| `--wait` | --wait wait for async task completion (default: false) |
+| `--wait-timeout` | --wait-timeout value task wait timeout (default: 0s) |
+| `--name` | --name value exact guest name (including numeric names) |
+
+### `pve lxc shutdown`
+
+Shutdown a guest gracefully
+
+```text
+pve lxc shutdown VMID
+```
+
+| Flag | Description and default |
+|---|---|
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+| `--node` | --node value PVE node name |
+| `--wait` | --wait wait for async task completion (default: false) |
+| `--wait-timeout` | --wait-timeout value task wait timeout (default: 0s) |
+| `--name` | --name value exact guest name (including numeric names) |
+
+### `pve lxc reboot`
+
+Reboot a guest
+
+```text
+pve lxc reboot VMID
+```
+
+| Flag | Description and default |
+|---|---|
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+| `--node` | --node value PVE node name |
+| `--wait` | --wait wait for async task completion (default: false) |
+| `--wait-timeout` | --wait-timeout value task wait timeout (default: 0s) |
+| `--name` | --name value exact guest name (including numeric names) |
+
+### `pve lxc stop`
+
+Stop a guest immediately
+
+```text
+pve lxc stop VMID
+```
+
+| Flag | Description and default |
+|---|---|
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+| `--node` | --node value PVE node name |
+| `--wait` | --wait wait for async task completion (default: false) |
+| `--wait-timeout` | --wait-timeout value task wait timeout (default: 0s) |
+| `--name` | --name value exact guest name (including numeric names) |
+
+### `pve lxc template download`
+
+Download a system template
+
+```text
+pve lxc template download NAME
+```
+
+| Flag | Description and default |
+|---|---|
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+| `--node` | --node value PVE node name |
+| `--wait` | --wait wait for async task completion (default: false) |
+| `--wait-timeout` | --wait-timeout value task wait timeout (default: 0s) |
+| `--storage` | --storage value **Required.** |
+
+### `pve lxc template ls`
+
+List available or downloaded system templates
+
+```text
+pve lxc template ls
+```
+
+| Flag | Description and default |
+|---|---|
+| `--node` | --node value PVE node **Required.** |
+| `--storage` | --storage value storage for downloaded templates |
+| `--available` | --available query downloadable index (default: false) |
+| `--section` | --section value (default: "system") |
+| `--name` | --name value name substring |
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+
+### `pve lxc create`
+
+Create a stopped system container
+
+```text
+pve lxc create CTID
+```
+
+| Flag | Description and default |
+|---|---|
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+| `--node` | --node value PVE node name |
+| `--wait` | --wait wait for async task completion (default: false) |
+| `--wait-timeout` | --wait-timeout value task wait timeout (default: 0s) |
+| `--template` | --template value **Required.** |
+| `--rootfs` | --rootfs value **Required.** |
+| `--hostname` | --hostname value |
+| `--memory` | --memory value (default: 1024) |
+| `--cores` | --cores value (default: 1) |
+| `--swap` | --swap value (default: 512) |
+| `--net0` | --net0 value |
+| `--unprivileged` | --unprivileged (default: true) |
+| `--ssh-key-file` | --ssh-key-file value |
+| `--password-env` | --password-env value |
+
+### `pve lxc config get`
+
+Read native PVE configuration (credentials redacted)
+
+```text
+pve lxc config get VMID
+```
+
+| Flag | Description and default |
+|---|---|
+| `--node` | --node value PVE node name |
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+| `--name` | --name value exact guest name (including numeric names) |
+
+### `pve lxc config set`
+
+Set native PVE configuration
+
+```text
+pve lxc config set VMID
+```
+
+| Flag | Description and default |
+|---|---|
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+| `--node` | --node value PVE node name |
+| `--wait` | --wait wait for async task completion (default: false) |
+| `--wait-timeout` | --wait-timeout value task wait timeout (default: 0s) |
+| `--set` | --set value [ --set value ] repeatable key=value |
+| `--name` | --name value exact guest name (including numeric names) |
+
+### `pve lxc resize`
+
+Resize a guest disk
+
+```text
+pve lxc resize VMID
+```
+
+| Flag | Description and default |
+|---|---|
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+| `--node` | --node value PVE node name |
+| `--disk` | --disk value disk identifier **Required.** |
+| `--size` | --size value new size or increment, for example +20G **Required.** |
+| `--wait` | --wait wait for async task completion (default: false) |
+| `--wait-timeout` | --wait-timeout value task wait timeout (default: 0s) |
+| `--name` | --name value exact guest name (including numeric names) |
+
+### `pve lxc migrate`
+
+Migrate a guest to another node
+
+```text
+pve lxc migrate VMID
+```
+
+| Flag | Description and default |
+|---|---|
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+| `--node` | --node value source PVE node name |
+| `--target` | --target value target PVE node name **Required.** |
+| `--online` | --online request online migration (default: false) |
+| `--wait` | --wait wait for async task completion (default: false) |
+| `--wait-timeout` | --wait-timeout value task wait timeout (default: 0s) |
+| `--name` | --name value exact guest name (including numeric names) |
+
+### `pve lxc clone`
+
+Clone a guest
+
+```text
+pve lxc clone SOURCE_VMID
+```
+
+| Flag | Description and default |
+|---|---|
+| `--node` | --node value source PVE node name |
+| `--newid` | --newid value new VMID/CTID; omitted means automatic NextID (default: 0) |
+| `--target` | --target value target PVE node name **Required.** |
+| `--storage` | --storage value target storage |
+| `--full` | --full perform a full clone (default: false) |
+| `--pool` | --pool value target resource pool |
+| `--snapname` | --snapname value snapshot name to clone from |
+| `--description` | --description value description for the cloned guest |
+| `--wait` | --wait wait for async task completion (default: false) |
+| `--wait-timeout` | --wait-timeout value task wait timeout (default: 0s) |
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+| `--hostname` | --hostname value hostname for the cloned container **Required.** |
+
+### `pve lxc snapshot ls`
+
+List snapshots
+
+```text
+pve lxc snapshot ls VMID
+```
+
+| Flag | Description and default |
+|---|---|
+| `--node` | --node value PVE node name |
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+| `--name` | --name value exact guest name (including numeric names) |
+
+### `pve lxc snapshot create`
+
+Create a snapshot
+
+```text
+pve lxc snapshot create VMID SNAPNAME
+```
+
+| Flag | Description and default |
+|---|---|
+| `--output`, `-o` | --output value, -o value table,json,yaml |
+| `--node` | --node value PVE node name |
+| `--wait` | --wait wait for async task completion (default: false) |
+| `--wait-timeout` | --wait-timeout value task wait timeout (default: 0s) |
+
+### `pve lxc snapshot delete`
+
+Delete a snapshot
+
+```text
+pve lxc snapshot delete VMID SNAPNAME
+```
+
+| Flag | Description and default |
+|---|---|
+| `--output`, `-o` | --output value, -o value table,json,yaml |
+| `--node` | --node value PVE node name |
+| `--dry-run` | --dry-run preview with zero mutation requests (default: false) |
+| `--yes` | --yes skip local snapshot delete confirmation (default: false) |
+| `--wait` | --wait wait for async task completion (default: false) |
+| `--wait-timeout` | --wait-timeout value task wait timeout (default: 0s) |
+
+### `pve lxc snapshot rollback`
+
+Rollback to a snapshot
+
+```text
+pve lxc snapshot rollback VMID SNAPNAME
+```
+
+| Flag | Description and default |
+|---|---|
+| `--output`, `-o` | --output value, -o value table,json,yaml |
+| `--node` | --node value PVE node name |
+| `--dry-run` | --dry-run preview with zero mutation requests (default: false) |
+| `--yes` | --yes skip local rollback confirmation (default: false) |
+| `--wait` | --wait wait for async task completion (default: false) |
+| `--wait-timeout` | --wait-timeout value task wait timeout (default: 0s) |
+
+### `pve lxc backup`
+
+Create a backup for a guest
+
+```text
+pve lxc backup VMID
+```
+
+| Flag | Description and default |
+|---|---|
+| `--node` | --node value PVE node name |
+| `--storage` | --storage value backup storage name **Required.** |
+| `--mode` | --mode value backup mode: snapshot,suspend,stop (default: "snapshot") |
+| `--compress` | --compress value compression: zstd,lzo,gzip,none (default: "zstd") |
+| `--notes-template` | --notes-template value backup notes template |
+| `--bwlimit` | --bwlimit value bandwidth limit in KiB/s (default: 0) |
+| `--protected` | --protected protect the backup from pruning (default: false) |
+| `--wait` | --wait wait for async task completion (default: false) |
+| `--wait-timeout` | --wait-timeout value task wait timeout (default: 0s) |
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+| `--name` | --name value exact guest name (including numeric names) |
+
+### `pve lxc restore`
+
+Restore a backup archive into a new, non-existing guest
+
+```text
+pve lxc restore ARCHIVE
+```
+
+| Flag | Description and default |
+|---|---|
+| `--node` | --node value target PVE node name **Required.** |
+| `--vmid` | --vmid value new VMID/CTID; it must not exist yet (default: 0) **Required.** |
+| `--storage` | --storage value target storage for guest disks |
+| `--wait` | --wait wait for async task completion (default: false) |
+| `--wait-timeout` | --wait-timeout value task wait timeout (default: 0s) |
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+
+### `pve lxc delete`
+
+Delete a guest
+
+```text
+pve lxc delete VMID
+```
+
+| Flag | Description and default |
+|---|---|
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+| `--node` | --node value PVE node name |
+| `--yes` | --yes skip local delete confirmation (default: false) |
+| `--wait` | --wait wait for async task completion (default: false) |
+| `--wait-timeout` | --wait-timeout value task wait timeout (default: 0s) |
+| `--name` | --name value exact guest name (including numeric names) |
+
+### `pve node reboot`
+
+reboot a node after explicit confirmation
+
+```text
+pve node reboot NODE
+```
+
+| Flag | Description and default |
+|---|---|
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+| `--yes` | --yes skip local node-name confirmation (default: false) |
+
+### `pve node shutdown`
+
+shutdown a node after explicit confirmation
+
+```text
+pve node shutdown NODE
+```
+
+| Flag | Description and default |
+|---|---|
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+| `--yes` | --yes skip local node-name confirmation (default: false) |
+
+### `pve node ls`
+
+List nodes
+
+```text
+pve node ls
+```
+
+| Flag | Description and default |
+|---|---|
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+
+### `pve node get`
+
+Show node details
+
+```text
+pve node get NODE
+```
+
+| Flag | Description and default |
+|---|---|
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+
+### `pve task ls`
+
+List recent tasks across nodes
+
+```text
+pve task ls
+```
+
+| Flag | Description and default |
+|---|---|
+| `--node` | --node value PVE node name |
+| `--type` | --type value filter by task type, for example vzdump |
+| `--status` | --status value filter by task status: running,ok,error |
+| `--limit` | --limit value show only the N most recent tasks (default: 0) |
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+
+### `pve task get`
+
+Show task status
+
+```text
+pve task get UPID
+```
+
+| Flag | Description and default |
+|---|---|
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+
+### `pve task log`
+
+Show task log output
+
+```text
+pve task log UPID
+```
+
+| Flag | Description and default |
+|---|---|
+| `--tail` | --tail value show only the last N log lines (default: 0) |
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+
+### `pve task wait`
+
+Wait for a task to complete
+
+```text
+pve task wait UPID
+```
+
+| Flag | Description and default |
+|---|---|
+| `--wait-timeout` | --wait-timeout value task wait timeout (default: 0s) |
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+
+### `pve task cancel`
+
+Request cancellation of a running task
+
+```text
+pve task cancel UPID
+```
+
+| Flag | Description and default |
+|---|---|
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+| `--yes` | --yes skip local confirmation (default: false) |
+
+### `pve storage ls`
+
+List storage status
+
+```text
+pve storage ls
+```
+
+| Flag | Description and default |
+|---|---|
+| `--node` | --node value PVE node name |
+| `--content` | --content value filter by content type, for example backup or iso |
+| `--type` | --type value filter by storage type, for example dir or lvmthin |
+| `--active` | --active show only active storages (default: false) |
+| `--enabled` | --enabled show only enabled storages (default: false) |
+| `--sort` | --sort value name,node,used-percent,total |
+| `--desc` | --desc (default: false) |
+| `--min-used-percent` | --min-used-percent value minimum known usage percent (default: 0) |
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+
+### `pve storage usage`
+
+Show storage usage across nodes
+
+```text
+pve storage usage
+```
+
+| Flag | Description and default |
+|---|---|
+| `--node` | --node value PVE node name |
+| `--content` | --content value filter by content type, for example backup or iso |
+| `--type` | --type value filter by storage type, for example dir or lvmthin |
+| `--active` | --active show only active storages (default: false) |
+| `--enabled` | --enabled show only enabled storages (default: false) |
+| `--sort` | --sort value name,node,used-percent,total |
+| `--desc` | --desc (default: false) |
+| `--min-used-percent` | --min-used-percent value minimum known usage percent (default: 0) |
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+
+### `pve storage get`
+
+Show storage status on a node
+
+```text
+pve storage get STORAGE
+```
+
+| Flag | Description and default |
+|---|---|
+| `--node` | --node value PVE node name **Required.** |
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+
+### `pve storage content ls`
+
+List content on a storage
+
+```text
+pve storage content ls
+```
+
+| Flag | Description and default |
+|---|---|
+| `--node` | --node value PVE node name **Required.** |
+| `--storage` | --storage value storage name **Required.** |
+| `--content` | --content value filter by content type, for example backup or iso |
+| `--vmid` | --vmid value filter by VMID/CTID (default: 0) |
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+
+### `pve backup ls`
+
+List backup files on a storage
+
+```text
+pve backup ls
+```
+
+| Flag | Description and default |
+|---|---|
+| `--node` | --node value PVE node name **Required.** |
+| `--storage` | --storage value backup storage name **Required.** |
+| `--vmid` | --vmid value filter by VMID/CTID (default: 0) |
+| `--type` | --type value backup type: all,vm,lxc (default: "all") |
+| `--latest` | --latest show only latest backup per guest (default: false) |
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+
+### `pve network ls`
+
+List network interfaces
+
+```text
+pve network ls
+```
+
+| Flag | Description and default |
+|---|---|
+| `--node` | --node value PVE node name |
+| `--type` | --type value filter by interface type, for example bridge, bond, or vlan |
+| `--active` | --active show only active interfaces (default: false) |
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+
+### `pve network get`
+
+Show network interface details
+
+```text
+pve network get IFACE
+```
+
+| Flag | Description and default |
+|---|---|
+| `--node` | --node value PVE node name **Required.** |
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+
+### `pve firewall status`
+
+Show whether the firewall is enabled for a scope
+
+```text
+pve firewall status
+```
+
+| Flag | Description and default |
+|---|---|
+| `--node` | --node value PVE node name; required for --scope node, located automatically for vm and lxc |
+| `--scope` | --scope value firewall scope: node,vm,lxc (default: "node") |
+| `--vmid` | --vmid value VMID/CTID; required when --scope is vm or lxc (default: 0) |
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+
+### `pve firewall ls`
+
+List firewall rules for a scope
+
+```text
+pve firewall ls
+```
+
+| Flag | Description and default |
+|---|---|
+| `--node` | --node value PVE node name; required for --scope node, located automatically for vm and lxc |
+| `--scope` | --scope value firewall scope: node,vm,lxc (default: "node") |
+| `--vmid` | --vmid value VMID/CTID; required when --scope is vm or lxc (default: 0) |
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+
+### `pve config ls`
+
+List profile names and endpoints
+
+```text
+pve config ls
+```
+
+### `pve config show`
+
+Show the current or named profile, or all profiles, as tables
+
+```text
+pve config show [NAME]
+```
+
+| Flag | Description and default |
+|---|---|
+| `--all` | --all show all profiles (default: false) |
+
+### `pve config add`
+
+Interactively add a profile
+
+```text
+pve config add
+```
+
+### `pve config set`
+
+Create or replace a profile
+
+```text
+pve config set NAME
+```
+
+| Flag | Description and default |
+|---|---|
+| `--endpoint` | --endpoint value PVE API endpoint, for example https://pve.lan:8006/api2/json |
+| `--token-id` | --token-id value PVE API token id, for example automation@pve!pve |
+| `--token-secret-file` | --token-secret-file value private credential file |
+| `--token-secret-stdin` | --token-secret-stdin read token from stdin and store in a private file (default: false) |
+| `--token-secret-env` | --token-secret-env value environment variable containing the PVE API token secret |
+| `--insecure` | --insecure skip TLS certificate verification for this profile (default: false) |
+| `--timeout` | --timeout value PVE API request timeout for this profile (default: "30s") |
+| `--default-output` | --default-output value default output format: table,json,yaml (default: "table") |
+
+### `pve config use`
+
+Select the current profile
+
+```text
+pve config use NAME
+```
+
+### `pve doctor`
+
+Diagnose pve config and Proxmox API connectivity
+
+```text
+pve doctor
+```
+
+| Flag | Description and default |
+|---|---|
+| `--offline` | --offline check local config only without connecting to Proxmox VE (default: false) |
+| `--node` | --node value verify that a node exists during online checks |
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+
+### `pve version`
+
+Show pve build and runtime version information
+
+```text
+pve version
+```
+
+| Flag | Description and default |
+|---|---|
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+
+### `pve completion bash`
+
+Print bash completions
+
+```text
+pve completion bash
+```
+
+### `pve completion zsh`
+
+Print zsh completions
+
+```text
+pve completion zsh
+```
+
+### `pve completion fish`
+
+Print fish completions
+
+```text
+pve completion fish
+```

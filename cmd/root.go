@@ -249,7 +249,7 @@ func buildRuntime(c *cli.Context, deps Dependencies) (*runtime, error) {
 	}
 	waitTimeout := durationFlag(c, "wait-timeout")
 	if waitTimeout <= 0 {
-		waitTimeout = 5 * time.Minute
+		waitTimeout = defaultWaitTimeout(c.Command.Name)
 	}
 
 	return &runtime{
@@ -362,4 +362,17 @@ func taskResultWriter(c *cli.Context) io.Writer {
 		return nil
 	}
 	return c.App.Writer
+}
+
+func defaultWaitTimeout(action string) time.Duration {
+	switch action {
+	case "backup", "restore", "clone", "migrate":
+		return 30 * time.Minute
+	case "download":
+		return 15 * time.Minute
+	case "create":
+		return 10 * time.Minute
+	default:
+		return 5 * time.Minute
+	}
 }
