@@ -260,3 +260,62 @@ func redactError(err error, secret string) error {
 	}
 	return redactedError{err, strings.ReplaceAll(err.Error(), secret, "[REDACTED]")}
 }
+
+// VMCreateOptions configures a stopped VM, with an optional installer ISO.
+type VMCreateOptions struct {
+	ID                                         int
+	Node, Name, Storage, DiskSize, Bridge, ISO string
+	Memory, Cores                              int
+	Onboot                                     bool
+}
+
+var diskSizePattern = regexp.MustCompile(`^[0-9]+(?:\.[0-9]+)?G$`)
+
+func diskGiB(value string) (string, error) {
+	if !diskSizePattern.MatchString(value) {
+		return "", fmt.Errorf("%w: disk size must be positive GiB, for example 32G", ErrInvalid)
+	}
+	gib := strings.TrimSuffix(value, "G")
+	n, err := strconv.ParseFloat(gib, 64)
+	if err != nil || n <= 0 {
+		return "", fmt.Errorf("%w: disk size must be positive", ErrInvalid)
+	}
+	return gib, nil
+}
+func (s *CreateService) CreateVM(ctx context.Context, o VMCreateOptions) (output.OperationResult, error) {
+	result := output.OperationResult{Resource: "vm", VMID: o.ID, Node: o.Node, Status: "unknown"}
+	size, err := diskGiB(o.DiskSize)
+	if err != nil {
+		return result, err
+	}
+	if o.Memory < 16 || o.Cores < 1 || (o.Name != "" && !hostnamePattern.MatchString(o.Name)) {
+		return result, fmt.Errorf("%w: invalid VM memory, cores or name", ErrInvalid)
+	}
+	// Validate every interpolated property before any mutation.
+	if !resourceNamePattern.MatchString(o.Storage) || !resourceNamePattern.MatchString(o.Bridge) || strings.ContainsAny(o.ISO, ",=\r\n\x00") {
+		return result, fmt.Errorf("%w: invalid storage, bridge or ISO volume", ErrInvalid)
+	}
+	if err = s.preflight(ctx, o.ID, o.Node); err != nil {
+		return result, err
+	}
+	if err = s.storage(ctx, o.Node, o.Storage, "images"); err != nil {
+		return result, err
+	}
+	if err = s.bridge(ctx, o.Node, o.Bridge); err != nil {
+		return result, err
+	}
+	if o.ISO != "" {
+		if err = s.volume(ctx, o.Node, o.ISO, "iso"); err != nil {
+			return result, err
+		}
+	}
+	params := map[string]any{"memory": o.Memory, "cores": o.Cores, "scsihw": "virtio-scsi-single", "scsi0": o.Storage + ":" + size, "net0": "virtio,bridge=" + o.Bridge, "onboot": o.Onboot, "start": false, "boot": "order=scsi0;net0"}
+	if o.Name != "" {
+		params["name"] = o.Name
+	}
+	if o.ISO != "" {
+		params["ide2"] = o.ISO + ",media=cdrom"
+		params["boot"] = "order=ide2;scsi0;net0"
+	}
+	return s.submit(ctx, "vm", o.Node, o.ID, params)
+}

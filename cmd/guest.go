@@ -24,7 +24,7 @@ func newGuestCommand(kind, usage string, deps Dependencies) *cli.Command {
 		guestControlCommand(kind, "stop", "Stop a guest immediately", deps),
 	}
 	if kind == "vm" {
-		commands = append(commands, newVMAgentCommand(deps))
+		commands = append(commands, newVMAgentCommand(deps), vmCreateCommand(deps))
 	}
 	if kind == "lxc" {
 		commands = append(commands, newLXCTemplateCommand(deps), lxcCreateCommand(deps))
@@ -49,7 +49,7 @@ func newGuestCommand(kind, usage string, deps Dependencies) *cli.Command {
 				addName(item.Subcommands)
 				continue
 			}
-			if item.ArgsUsage == "VMID" || item.ArgsUsage == "VMID SNAPSHOT" {
+			if item.Name != "create" && (item.ArgsUsage == "VMID" || item.ArgsUsage == "VMID SNAPSHOT") {
 				item.Flags = append(item.Flags, &cli.StringFlag{Name: "name", Usage: "exact guest name (including numeric names)"})
 			}
 		}

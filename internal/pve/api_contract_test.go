@@ -60,3 +60,25 @@ func TestCreateLXCHTTPContract(t *testing.T) {
 		t.Fatal(e)
 	}
 }
+
+func TestCreateVMHTTPContract(t *testing.T) {
+	b := contractBackend(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" || r.URL.Path != "/nodes/n/qemu" {
+			t.Errorf("%s %s", r.Method, r.URL.Path)
+		}
+		var body map[string]any
+		if e := json.NewDecoder(r.Body).Decode(&body); e != nil {
+			t.Error(e)
+		}
+		if body["vmid"] != float64(101) || body["scsi0"] != "local-lvm:32" || body["start"] != false {
+			t.Errorf("%+v", body)
+		}
+		if _, e := w.Write([]byte(`{"data":"UPID:n:0001:0000:6839F4A1:qmcreate:101:root@pam:"}`)); e != nil {
+			t.Error(e)
+		}
+	})
+	_, e := b.CreateGuest(context.Background(), "vm", "n", 101, map[string]any{"start": false, "scsi0": "local-lvm:32"})
+	if e != nil {
+		t.Fatal(e)
+	}
+}

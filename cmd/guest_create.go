@@ -47,3 +47,28 @@ func lxcCreateCommand(deps Dependencies) *cli.Command {
 		return err
 	}}
 }
+
+func vmCreateCommand(deps Dependencies) *cli.Command {
+	return &cli.Command{Name: "create", Usage: "Create a stopped VM with optional installer ISO", ArgsUsage: "VMID", Flags: append(commonControlFlags(),
+		&cli.StringFlag{Name: "name"}, &cli.StringFlag{Name: "storage", Required: true}, &cli.StringFlag{Name: "disk-size", Value: "32G"}, &cli.IntFlag{Name: "memory", Value: 1024}, &cli.IntFlag{Name: "cores", Value: 1}, &cli.StringFlag{Name: "bridge", Value: "vmbr0"}, &cli.StringFlag{Name: "iso"}, &cli.BoolFlag{Name: "onboot"},
+	), Action: func(c *cli.Context) error {
+		if err := requireNoExtraArgs(c, 1); err != nil {
+			return err
+		}
+		id, err := parseVMID(c.Args().First())
+		if err != nil {
+			return err
+		}
+		rt, err := buildRuntime(c, deps)
+		if err != nil {
+			return err
+		}
+		result, err := pve.NewCreateService(rt.backend, rt.tasks).CreateVM(c.Context, pve.VMCreateOptions{ID: id, Node: c.String("node"), Name: c.String("name"), Storage: c.String("storage"), DiskSize: c.String("disk-size"), Memory: c.Int("memory"), Cores: c.Int("cores"), Bridge: c.String("bridge"), ISO: c.String("iso"), Onboot: c.Bool("onboot")})
+		if result.Task != "" {
+			if e := output.WriteOperation(rt.stdout, rt.format, result); e != nil {
+				return e
+			}
+		}
+		return err
+	}}
+}

@@ -37,6 +37,7 @@ var structuredOutputCommands = map[string]bool{
 	"vm config set":         true,
 	"lxc config get":        true,
 	"lxc config set":        true,
+	"vm create":             true,
 	"vm ls":                 true,
 	"vm get":                true,
 	"vm agent network":      true,

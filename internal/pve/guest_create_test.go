@@ -15,3 +15,12 @@ func TestLXCCreateRejectsInvalidBeforeAPI(t *testing.T) {
 		}
 	}
 }
+
+func TestVMCreateRejectsPropertyInjection(t *testing.T) {
+	s := NewCreateService(nil, TaskRunner{})
+	for _, o := range []VMCreateOptions{{DiskSize: "0G"}, {DiskSize: "32G", Memory: 1024, Cores: 1, Storage: "local", Bridge: "vmbr0,firewall=0"}, {DiskSize: "32G", Memory: 1024, Cores: 1, Storage: "local", Bridge: "vmbr0", ISO: "local:a,media=disk"}} {
+		if _, e := s.CreateVM(context.Background(), o); !errors.Is(e, ErrInvalid) {
+			t.Fatalf("invalid property accepted: %v", e)
+		}
+	}
+}
