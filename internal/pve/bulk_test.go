@@ -117,7 +117,7 @@ func TestBulkServiceExecuteRowsReturnsPerGuestResults(t *testing.T) {
 	results, err := svc.ExecuteRows(context.Background(), BulkActionShutdown, []output.GuestRow{
 		{Kind: "vm", VMID: 100, Node: "pve1", Name: "a"},
 		{Kind: "vm", VMID: 101, Node: "pve1", Name: "b"},
-	}, BulkExecuteOptions{})
+	}, BulkExecuteOptions{Jobs: 2})
 	if err == nil {
 		t.Fatal("expected aggregated failure")
 	}
@@ -127,7 +127,7 @@ func TestBulkServiceExecuteRowsReturnsPerGuestResults(t *testing.T) {
 	if results[0].Status != BulkResultStatusError || results[0].Error == "" {
 		t.Fatalf("result[0] = %#v", results[0])
 	}
-	if results[1].Status != BulkResultStatusOK || results[1].Task != "UPID:pve1:bulk101" {
+	if results[1].Status != "submitted" || results[1].Task != "UPID:pve1:bulk101" {
 		t.Fatalf("result[1] = %#v", results[1])
 	}
 }
@@ -177,3 +177,19 @@ func TestBulkServiceExecuteRowsSerializesProgressWrites(t *testing.T) {
 type errBulkBoom struct{}
 
 func (errBulkBoom) Error() string { return "boom" }
+
+func TestBulkLimitsAndCancelledContext(t *testing.T) {
+	s := NewBulkService(&fakeBackend{}, TaskRunner{}, nil, false)
+	rows := []output.GuestRow{{Kind: "vm", VMID: 100, Node: "pve1"}}
+	for _, jobs := range []int{0, -1, 9} {
+		if _, err := s.ExecuteRows(context.Background(), "start", rows, BulkExecuteOptions{Jobs: jobs}); err == nil {
+			t.Fatalf("jobs %d accepted", jobs)
+		}
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	result, err := s.ExecuteRows(ctx, "start", rows, BulkExecuteOptions{Jobs: 1})
+	if err == nil || len(result) != 1 || result[0].Status != "unknown" || result[0].Task != "" {
+		t.Fatalf("%+v %v", result, err)
+	}
+}

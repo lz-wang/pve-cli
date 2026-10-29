@@ -469,3 +469,5 @@ unless `--yes` is passed. Bulk operations require typing `yes` unless
 
 - v3 mutations expose submitted/succeeded/failed/unknown results; waiting never cancels remote tasks.
 - `task cancel UPID --yes` requests cancellation of a running task; inspect it again to verify termination.
+- Bulk lifecycle commands use 1–8 workers and default to at most 20 targets (`--max-targets`); all mutations require confirmation or `--yes`.
+- VM/LXC commands accept exact names, with explicit `--name` for numeric names; lists support name/status filters and six stable sort keys.

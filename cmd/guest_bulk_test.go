@@ -120,11 +120,11 @@ func TestGuestBulkExecutesAfterConfirmation(t *testing.T) {
 	}
 }
 
-func TestGuestBulkSingleGuestSkipsConfirmation(t *testing.T) {
+func TestGuestBulkSingleGuestRequiresConfirmation(t *testing.T) {
 	cfgPath := writeTestConfig(t, "table")
 	backend := bulkTestBackend()
 	deps := testDeps(&bytes.Buffer{}, backend)
-	deps.Stdin = strings.NewReader("")
+	deps.Stdin = strings.NewReader("yes\n")
 
 	err := RunWithDependencies([]string{
 		"pve", "--config", cfgPath,
@@ -156,10 +156,10 @@ func TestGuestBulkPartialFailureWritesAllResultsAndFails(t *testing.T) {
 	}
 
 	out := stdout.String()
-	if !strings.Contains(out, `"vmid": 100`) || !strings.Contains(out, `"status": "error"`) {
+	if !strings.Contains(out, `"vmid": 100`) || !strings.Contains(out, `"status": "failed"`) {
 		t.Fatalf("missing failed result: %s", out)
 	}
-	if !strings.Contains(out, `"vmid": 200`) || !strings.Contains(out, `"status": "ok"`) {
+	if !strings.Contains(out, `"vmid": 200`) || !strings.Contains(out, `"status": "submitted"`) {
 		t.Fatalf("missing successful result: %s", out)
 	}
 }

@@ -23,6 +23,7 @@ func guestBulkCommand(action, usage string, deps Dependencies) *cli.Command {
 				&cli.StringFlag{Name: "status", Usage: "guest status filter, for example running or stopped"},
 				&cli.StringSliceFlag{Name: "tag", Usage: "filter guests by tag, repeatable"},
 				&cli.StringFlag{Name: "tag-match", Value: pve.TagMatchAll, Usage: "tag match mode: all,any"},
+				&cli.IntFlag{Name: "max-targets", Value: 20, Usage: "maximum selected guests"},
 				&cli.IntFlag{Name: "jobs", Value: 2, Usage: "number of guests to operate on concurrently"},
 				&cli.BoolFlag{Name: "dry-run", Usage: "show the guests that would be affected and exit"},
 				&cli.BoolFlag{Name: "yes", Usage: "skip local bulk confirmation"},
@@ -35,7 +36,7 @@ func guestBulkCommand(action, usage string, deps Dependencies) *cli.Command {
 			if err := requireNoExtraArgs(c, 0); err != nil {
 				return err
 			}
-			if jobs := c.Int("jobs"); jobs < 0 {
+			if jobs := c.Int("jobs"); jobs < 1 || jobs > 8 {
 				return fmt.Errorf("invalid jobs %d", jobs)
 			}
 			guestType, err := pve.ParseGuestListType(c.String("type"))
@@ -64,18 +65,22 @@ func guestBulkCommand(action, usage string, deps Dependencies) *cli.Command {
 				return err
 			}
 
+			if c.Int("max-targets") < 1 || len(rows) > c.Int("max-targets") {
+				return fmt.Errorf("invalid target count: increase --max-targets explicitly")
+			}
 			if c.Bool("dry-run") {
 				return output.WriteBulkPlan(rt.stdout, rt.format, rows)
 			}
 			if len(rows) == 0 {
 				return fmt.Errorf("no guests match the selection")
 			}
-			if len(rows) > 1 && !c.Bool("yes") {
+			if !c.Bool("yes") {
 				if err := confirmBulkAction(deps.withDefaults().Stdin, rt.stderr, action, rows); err != nil {
 					return err
 				}
 			}
 			results, execErr := svc.ExecuteRows(c.Context, action, rows, pve.BulkExecuteOptions{
+				MaxTargets:  c.Int("max-targets"),
 				Action:      action,
 				Jobs:        c.Int("jobs"),
 				Wait:        boolFlag(c, "wait"),

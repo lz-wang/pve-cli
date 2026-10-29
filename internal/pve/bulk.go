@@ -2,9 +2,11 @@ package pve
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -22,8 +24,8 @@ const (
 
 // Bulk result statuses.
 const (
-	BulkResultStatusOK    = "ok"
-	BulkResultStatusError = "error"
+	BulkResultStatusOK    = "succeeded"
+	BulkResultStatusError = "failed"
 )
 
 // GuestSelector describes which guests a bulk operation targets. At least one
@@ -115,6 +117,7 @@ type BulkExecuteOptions struct {
 	Wait        bool
 	WaitTimeout time.Duration
 	ErrWriter   io.Writer
+	MaxTargets  int
 }
 
 // syncWriter serializes progress writes. Every guest runs in its own
@@ -153,9 +156,23 @@ func (s *BulkService) ExecuteRows(ctx context.Context, action string, rows []out
 	}
 
 	jobs := options.Jobs
-	if jobs <= 0 {
-		jobs = 2
+	if jobs < 1 || jobs > 8 {
+		return nil, fmt.Errorf("%w: jobs must be between 1 and 8", ErrInvalid)
 	}
+	maxTargets := options.MaxTargets
+	if maxTargets == 0 {
+		maxTargets = 20
+	}
+	if maxTargets < 1 || len(rows) > maxTargets {
+		return nil, fmt.Errorf("%w: target count %d exceeds --max-targets %d", ErrInvalid, len(rows), maxTargets)
+	}
+	rows = append([]output.GuestRow(nil), rows...)
+	sort.SliceStable(rows, func(i, j int) bool {
+		if rows[i].VMID != rows[j].VMID {
+			return rows[i].VMID < rows[j].VMID
+		}
+		return rows[i].Node < rows[j].Node
+	})
 
 	// Concurrent TaskRunner handles share one progress writer; serialize it
 	// so bulk progress stays race-free even for non-thread-safe writers.
@@ -167,17 +184,26 @@ func (s *BulkService) ExecuteRows(ctx context.Context, action string, rows []out
 	execOptions.ErrWriter = errWriter
 
 	outcomes := make([]bulkGuestOutcome, len(rows))
-	sem := make(chan struct{}, jobs)
+	work := make(chan int)
 	var wg sync.WaitGroup
-	for i, row := range rows {
+	for w := 0; w < jobs; w++ {
 		wg.Add(1)
-		go func(i int, row output.GuestRow) {
+		go func() {
 			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
-			outcomes[i] = s.executeOne(ctx, action, row, execOptions)
-		}(i, row)
+			for i := range work {
+				if err := ctx.Err(); err != nil {
+					outcomes[i] = bulkGuestOutcome{row: rows[i], err: fmt.Errorf("%w: not submitted: %w", ErrTaskTimeout, err)}
+					continue
+				}
+				outcomes[i] = s.executeOne(ctx, action, rows[i], execOptions)
+			}
+		}()
 	}
+	for i := range rows {
+		work <- i
+	}
+	close(work)
+
 	wg.Wait()
 
 	results := make([]output.BulkGuestResult, len(outcomes))
@@ -192,9 +218,15 @@ func (s *BulkService) ExecuteRows(ctx context.Context, action string, rows []out
 			Status: BulkResultStatusOK,
 			Task:   outcome.taskUpid,
 		}
+		if !options.Wait && outcome.taskUpid != "" {
+			result.Status = "submitted"
+		}
 		if outcome.err != nil {
 			failed++
 			result.Status = BulkResultStatusError
+			if errors.Is(outcome.err, ErrTaskTimeout) {
+				result.Status = "unknown"
+			}
 			result.Error = outcome.err.Error()
 			s.progress(errWriter, "%s %d %s: error: %v\n", outcome.row.Kind, outcome.row.VMID, outcome.row.Name, outcome.err)
 		} else {
