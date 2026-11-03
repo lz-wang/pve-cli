@@ -890,6 +890,8 @@ type commandBackend struct {
 	cloudInitRegenerated int
 	networkRows          map[string][]output.NetworkRow
 	networkErrs          map[string]error
+	guestConfigs         map[int]map[string]any
+	guestConfigReads     int
 	firewallStatus       map[string]output.FirewallStatusRow
 	firewallRules        map[string][]output.FirewallRuleRow
 	backupTask           pve.Task
@@ -1075,6 +1077,32 @@ func (b *commandBackend) Network(_ context.Context, node, iface string) (output.
 		}
 	}
 	return output.NetworkRow{}, pve.ErrNotFound
+}
+
+// GuestConfig simulates the native config read: the first read returns the
+// configured state, later reads overlay values the guest already submitted
+// (writes are applied), mirroring a live server. Guests without a configured
+// config read as empty (no locks), matching what the fakes need for plans.
+func (b *commandBackend) GuestConfig(_ context.Context, kind, node string, id int) (map[string]any, error) {
+	cfg := b.guestConfigs[id]
+	result := make(map[string]any, len(cfg))
+	for k, v := range cfg {
+		result[k] = v
+	}
+	b.guestConfigReads++
+	if b.guestConfigReads > 1 && kind == "lxc" {
+		if guests := b.lxcGuests[node]; guests != nil {
+			if g := guests[id]; g != nil && g.configValues != nil {
+				for k, v := range g.configValues {
+					if k == "digest" {
+						continue
+					}
+					result[k] = v
+				}
+			}
+		}
+	}
+	return result, nil
 }
 
 func (b *commandBackend) FirewallStatus(_ context.Context, scope pve.FirewallScope) (output.FirewallStatusRow, error) {

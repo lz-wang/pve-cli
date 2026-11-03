@@ -159,16 +159,23 @@ func (s *GuestService) Config(ctx context.Context, vmid int, node string, values
 	if err != nil {
 		return err
 	}
-	guestNode := guest.Row().Node
+	return s.submitAndVerify(ctx, guest, vmid, guest.Row().Node, values, values)
+}
+
+// submitAndVerify runs the shared write flow: submit the values, then verify
+// the keys in verifyValues by re-reading the configuration. submitValues may
+// carry extra request parameters (for example a concurrency digest) that are
+// not part of the verified state.
+func (s *GuestService) submitAndVerify(ctx context.Context, guest Guest, vmid int, guestNode string, submitValues, verifyValues map[string]string) error {
 	runner := s.tasks
 	runner.Resource = s.kind
 	runner.VMID = vmid
 	runner.Node = guestNode
 
 	var submitErr error
-	task, err := guest.Config(ctx, values)
+	task, err := guest.Config(ctx, submitValues)
 	if err != nil {
-		for key, value := range values {
+		for key, value := range submitValues {
 			if sensitiveConfigKey(key) {
 				err = redactError(err, value)
 			}
@@ -192,7 +199,7 @@ func (s *GuestService) Config(ctx context.Context, vmid int, node string, values
 		}
 	}
 
-	outcome := s.verifyConfigWrite(ctx, guestNode, vmid, values)
+	outcome := s.verifyConfigWrite(ctx, guestNode, vmid, verifyValues)
 	finalErr := applyVerification(&operation, priorErr, outcome)
 	return s.finishConfig(runner, operation, finalErr)
 }

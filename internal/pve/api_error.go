@@ -129,7 +129,8 @@ func kindForHTTPStatus(status int) error {
 		return ErrPermissionDenied
 	case http.StatusNotFound:
 		return ErrNotFound
-	case http.StatusConflict:
+	case http.StatusConflict, http.StatusPreconditionFailed:
+		// 412 is PVE's optimistic-concurrency digest mismatch.
 		return ErrConflict
 	default:
 		return ErrUnavailable

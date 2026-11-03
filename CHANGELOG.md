@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### Added
+
+- `pve lxc net set` for safe partial updates of LXC network devices: reads
+  the complete device configuration, modifies only the requested attributes
+  (`--bridge`, `--iface`, `--ip`, `--gw`, `--tag`, `--rate`), verifies the
+  target bridge exists on the node, and submits the merged value with the
+  configuration digest so concurrent modifications fail as conflicts (HTTP
+  412 now maps to the conflict exit code) instead of overwriting each other.
+  Unspecified attributes (name, ip, gw, hwaddr, ...) are preserved, and the
+  result shares the `verified`/`api_error` post-write semantics of
+  `config set`.
+
 ### Fixed
 
 - Backup results no longer report the request parameter as the executed mode.

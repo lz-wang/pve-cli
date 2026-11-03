@@ -115,6 +115,15 @@ Credential fields are redacted. Repeated `--set key=value` rejects empty or
 duplicate keys. Successful synchronous changes return `succeeded` without a
 UPID; asynchronous changes return a task result.
 
+`config set` assigns whole native fields. For LXC network devices use
+`lxc net set` instead: it reads the complete device configuration, changes
+only the requested attributes (`--bridge`, `--iface`, `--ip`, `--gw`,
+`--tag`, `--rate`) and submits the merged value, so unspecified attributes
+such as `name`, `ip`, `gw` or `hwaddr` are preserved. The target bridge is
+verified to exist on the node before writing, and the write carries the
+configuration `digest` so concurrent modifications fail as a conflict
+instead of silently overwriting each other.
+
 `config set` verifies mutation outcomes once the write settles (synchronous
 return or completed `--wait`): the CLI re-reads the configuration and compares
 requested values after normalization (`"0"` equals `0`; PVE option strings
@@ -123,7 +132,8 @@ appends are tolerated). The structured result carries `verified: true/false`
 plus `api_error` when the request failed but the values are confirmed in
 effect — the result never masks such anomalies. Values that cannot be
 compared reliably (for example hashed credentials) stay unverified, and
-uncertain writes are never automatically retried.
+uncertain writes are never automatically retried. `lxc net set` shares the
+same verification semantics.
 
 ## Disk maintenance and destructive operations
 
@@ -1045,6 +1055,29 @@ pve lxc create CTID
 | `--unprivileged` | --unprivileged (default: true) |
 | `--ssh-key-file` | --ssh-key-file value |
 | `--password-env` | --password-env value |
+
+### `pve lxc net set`
+
+Safely update one LXC network device attribute-wise
+
+```text
+pve lxc net set VMID
+```
+
+| Flag | Description and default |
+|---|---|
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+| `--node` | --node value PVE node name |
+| `--wait` | --wait wait for async task completion (default: false) |
+| `--wait-timeout` | --wait-timeout value task wait timeout (default: 0s) |
+| `--device` | --device value network device slot (net0, net1, ...) **Required.** |
+| `--bridge` | --bridge value set bridge= attribute after verifying it exists on the node |
+| `--iface` | --iface value set name= attribute (interface name inside the container) |
+| `--ip` | --ip value set ip= attribute (dhcp or CIDR) |
+| `--gw` | --gw value set gw= attribute (gateway address) |
+| `--tag` | --tag value set tag= attribute (VLAN tag) |
+| `--rate` | --rate value set rate= attribute (MB/s limit) |
+| `--name` | --name value exact guest name (including numeric names) |
 
 ### `pve lxc config get`
 
