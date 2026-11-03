@@ -4,6 +4,12 @@
 
 ### Added
 
+- `pve backup copy-restore` composing backup → transfer (checksum verify)
+  → preflighted restore → post-check between two independent PVE hosts.
+  Each stage reports its own status/task; a failing stage stops the
+  pipeline with no automatic rollback. Resume is explicit and limited: an
+  existing target guest skips to the post-check, and `--archive` restarts
+  from an existing backup. `--wait` is required.
 - Restore preflight for `vm/lxc restore`: target VMID availability, archive
   readability on its storage, target storage existence/activation/capacity
   against the archive size, and `--bridge-map source=target` target-bridge

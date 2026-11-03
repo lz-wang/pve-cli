@@ -123,6 +123,25 @@ publishing is an atomic rename. Transfer progress (`transferred N`) goes to
 stderr; the result reports bytes, the verified `sha256` and the `resumed`
 flag.
 
+### Composed backup-copy-restore workflow
+
+```bash
+pve backup copy-restore 101 --from n150 --to pve8845 \
+  --backup-storage local --target-storage backup-dst \
+  --target-node pve8845 --target-vmid 201 --wait
+```
+
+`backup copy-restore` chains the stages built in this section — backup,
+transfer (with checksum verify), restore (preflighted), post-check — and
+reports every stage with its own status (`succeeded`/`skipped`/`failed`)
+and task ID. A failing stage stops the pipeline; nothing rolls back
+automatically, both sides stay as they are. Resume is deliberately limited:
+an existing target guest means the earlier stages already completed (only
+the post-check runs), and `--archive VOLID` restarts from an existing
+backup instead of taking a new one. `--wait` is required because the
+pipeline is meaningless without confirming each task; bridge mappings apply
+after the restore like in plain `restore`.
+
 ### Cross-profile migration
 
 ```bash
@@ -1687,6 +1706,28 @@ pve backup copy VOLID
 | `--to` | --to value target profile name **Required.** |
 | `--target-storage` | --target-storage value target dir storage name **Required.** |
 | `--node` | --node value source PVE node name (defaults to the source profile's ssh host) |
+
+### `pve backup copy-restore`
+
+Backup, copy, verify, restore and post-check a guest on another PVE host
+
+```text
+pve backup copy-restore VMID
+```
+
+| Flag | Description and default |
+|---|---|
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+| `--from` | --from value source profile name **Required.** |
+| `--to` | --to value target profile name **Required.** |
+| `--backup-storage` | --backup-storage value source dir storage for the backup stage |
+| `--archive` | --archive value existing source archive volid; skips the backup stage (resume) |
+| `--target-storage` | --target-storage value target dir storage name **Required.** |
+| `--target-node` | --target-node value target PVE node name **Required.** |
+| `--target-vmid` | --target-vmid value target VMID (defaults to the source VMID) (default: 0) |
+| `--bridge-map` | --bridge-map value [ --bridge-map value ] repeatable source=target bridge rewrite applied after the restore |
+| `--wait` | --wait wait for async task completion (required for the pipeline) (default: false) **Required.** |
+| `--wait-timeout` | --wait-timeout value task wait timeout (default: 0s) |
 
 ### `pve network ls`
 

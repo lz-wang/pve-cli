@@ -17,6 +17,11 @@
   `remote_migrate` execution with credential-transfer notices and target
   token redaction (`lxc migrate remote`), and post-migration validation of
   both sides (`lxc migrate check`); no automatic rollback.
+- Backup transfer and restore (P3): cross-profile backup archive streaming
+  with checksum verification and limited resume (`backup copy`), preflighted
+  restores with bridge mapping (`vm/lxc restore`), and the composed
+  backup→transfer→verify→restore→post-check pipeline (`backup
+  copy-restore`) with per-stage results and documented resume rules.
 
 - Cluster-aware unique resource resolution and typed failures.
 - Exact guest names, filtered/sorted inventory and native configuration.

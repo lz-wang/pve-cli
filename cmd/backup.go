@@ -14,6 +14,7 @@ func newBackupCommand(deps Dependencies) *cli.Command {
 		Subcommands: []*cli.Command{
 			backupListCommand(deps),
 			backupCopyCommand(deps),
+			backupCopyRestoreCommand(deps),
 		},
 	}
 }
