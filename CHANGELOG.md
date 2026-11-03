@@ -4,6 +4,18 @@
 
 ### Added
 
+- `pve lxc migrate plan` cross-profile migration preflight between two
+  independent PVE profiles (`--from` defaults to the current profile,
+  `--to` required): read-only checks covering both connections and the
+  target node, target-VMID availability across the target cluster, storage
+  mapping (existence, activation, capacity from declared volume sizes),
+  bridge mapping, autostart risk, bind mounts/device passthrough, and the
+  source running state. Checks that the API cannot observe — MAC/IP
+  conflicts from DHCP or guest-internal configuration — report `unknown`
+  instead of implying safety. The overall plan exits 1 on any failing
+  check. `lxc migrate VMID --target` keeps its intra-cluster behavior;
+  `--target` is now validated in the command action so the new
+  subcommands do not inherit the requirement.
 - `pve lxc exec` for SSH-backed command execution inside LXC containers via
   `pct exec`: `--stdin` forwards standard input, `--timeout` bounds the run,
   text mode passes the standard streams through live, and JSON mode returns

@@ -90,6 +90,28 @@ actual exit code as the process exit status; SSH connection or protocol
 failures exit with 3 instead. The guest is resolved through the API before
 the host command is issued.
 
+### Cross-profile migration
+
+```bash
+pve lxc migrate plan 101 --from n150 --to pve8845 \
+  --target-node pve8845 --target-vmid 201 \
+  --storage-map local-lvm=local-lvm --bridge-map vmbr2=vmbr0
+```
+
+`lxc migrate plan` performs a read-only preflight between two independent
+PVE profiles (`--from` defaults to the current profile, `--to` selects the
+target) and mutates nothing. It checks both connections and the target node,
+target-VMID availability across the whole target cluster, storage mapping
+(existence, activation and capacity from declared volume sizes), bridge
+mapping, autostart risk, bind mounts and device passthrough, and the source
+running state (offline migration implies a stop and downtime window).
+MAC/IP conflict visibility is reported as `unknown` by design: DHCP leases
+and guest-internal addresses cannot be observed through the API, so verify
+after the first boot instead of trusting a green check. The per-check table
+or JSON plan lists every dimension with `ok`/`warning`/`unknown`/`fail`; a
+failed plan exits 1, warnings and unknowns exit 0. The plain
+`lxc migrate VMID --target NODE` command keeps migrating within one cluster.
+
 ## Queries and resource resolution
 
 ```bash
@@ -788,7 +810,7 @@ pve vm resize VMID
 
 ### `pve vm migrate`
 
-Migrate a guest to another node
+Migrate a guest to another node (cross-profile: see the plan/remote/check subcommands)
 
 ```text
 pve vm migrate VMID
@@ -798,7 +820,7 @@ pve vm migrate VMID
 |---|---|
 | `--output`, `-o` | --output value, -o value output format: table,json,yaml |
 | `--node` | --node value source PVE node name |
-| `--target` | --target value target PVE node name **Required.** |
+| `--target` | --target value target PVE node name |
 | `--online` | --online request online migration (default: false) |
 | `--wait` | --wait wait for async task completion (default: false) |
 | `--wait-timeout` | --wait-timeout value task wait timeout (default: 0s) |
@@ -1187,22 +1209,23 @@ pve lxc resize VMID
 | `--wait-timeout` | --wait-timeout value task wait timeout (default: 0s) |
 | `--name` | --name value exact guest name (including numeric names) |
 
-### `pve lxc migrate`
+### `pve lxc migrate plan`
 
-Migrate a guest to another node
+Read-only cross-profile migration preflight (no mutations)
 
 ```text
-pve lxc migrate VMID
+pve lxc migrate plan VMID
 ```
 
 | Flag | Description and default |
 |---|---|
 | `--output`, `-o` | --output value, -o value output format: table,json,yaml |
-| `--node` | --node value source PVE node name |
-| `--target` | --target value target PVE node name **Required.** |
-| `--online` | --online request online migration (default: false) |
-| `--wait` | --wait wait for async task completion (default: false) |
-| `--wait-timeout` | --wait-timeout value task wait timeout (default: 0s) |
+| `--from` | --from value source profile name (defaults to the current profile) |
+| `--to` | --to value target profile name **Required.** |
+| `--target-node` | --target-node value target PVE node name **Required.** |
+| `--target-vmid` | --target-vmid value target VMID (defaults to the source VMID) (default: 0) |
+| `--storage-map` | --storage-map value [ --storage-map value ] repeatable source=target storage mapping |
+| `--bridge-map` | --bridge-map value [ --bridge-map value ] repeatable source=target bridge mapping |
 | `--name` | --name value exact guest name (including numeric names) |
 
 ### `pve lxc clone`

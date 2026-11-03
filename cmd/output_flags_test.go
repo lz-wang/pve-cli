@@ -73,6 +73,7 @@ var structuredOutputCommands = map[string]bool{
 	"lxc get":               true,
 	"lxc clone":             true,
 	"lxc net set":           true,
+	"lxc migrate plan":      true,
 	"lxc exec":              true,
 	"lxc snapshot ls":       true,
 	"lxc backup":            true,
@@ -108,7 +109,12 @@ func TestOutputFlagOnlyOnStructuredCommands(t *testing.T) {
 			leaf := append(append([]string{}, path...), command.Name)
 			if len(command.Subcommands) > 0 {
 				walk(leaf, command.Subcommands)
-				continue
+				// Hybrid commands (direct action plus subcommands, such as
+				// `lxc migrate VMID` with cross-profile subcommands) accept
+				// args themselves and count as executable leaves.
+				if command.ArgsUsage == "" {
+					continue
+				}
 			}
 			name := strings.Join(leaf, " ")
 			seen[name] = true

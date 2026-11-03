@@ -1,6 +1,9 @@
 package cmd
 
 import (
+	"fmt"
+	"strings"
+
 	"github.com/urfave/cli/v2"
 
 	"github.com/lz-wang/pve-cli/v3/internal/pve"
@@ -9,11 +12,13 @@ import (
 func guestMigrateCommand(kind string, deps Dependencies) *cli.Command {
 	return &cli.Command{
 		Name:      "migrate",
-		Usage:     "Migrate a guest to another node",
+		Usage:     "Migrate a guest to another node (cross-profile: see the plan/remote/check subcommands)",
 		ArgsUsage: "VMID",
 		Flags: append(commonOutputFlags(), []cli.Flag{
 			&cli.StringFlag{Name: "node", Usage: "source PVE node name"},
-			&cli.StringFlag{Name: "target", Usage: "target PVE node name", Required: true},
+			// --target is validated in the Action instead of the flag layer
+			// so the cross-profile subcommands do not inherit the requirement.
+			&cli.StringFlag{Name: "target", Usage: "target PVE node name"},
 			&cli.BoolFlag{Name: "online", Usage: "request online migration"},
 			&cli.BoolFlag{Name: "wait", Usage: "wait for async task completion"},
 			&cli.DurationFlag{Name: "wait-timeout", Usage: "task wait timeout"},
@@ -21,6 +26,10 @@ func guestMigrateCommand(kind string, deps Dependencies) *cli.Command {
 		Action: func(c *cli.Context) error {
 			if err := requireNoExtraArgs(c, 1); err != nil {
 				return err
+			}
+			target := strings.TrimSpace(c.String("target"))
+			if target == "" {
+				return fmt.Errorf("%w: --target is required", pve.ErrInvalid)
 			}
 			vmid, err := resolveGuestID(c, kind, deps, c.Args().First())
 			if err != nil {
@@ -31,7 +40,7 @@ func guestMigrateCommand(kind string, deps Dependencies) *cli.Command {
 				return err
 			}
 			return guestService(kind, rt).Migrate(c.Context, vmid, c.String("node"), pve.MigrateOptions{
-				Target: c.String("target"),
+				Target: target,
 				Online: c.Bool("online"),
 			})
 		},

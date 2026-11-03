@@ -144,7 +144,10 @@ func NewAppWithBuildInfoAndDependencies(info BuildInfo, deps Dependencies) *cli.
 	configure = func(commands []*cli.Command) {
 		for _, command := range commands {
 			command.OnUsageError = app.OnUsageError
-			if len(command.Subcommands) > 0 {
+			// Commands that keep a direct action while also exposing
+			// subcommands (lxc migrate) keep theirs; everything else with
+			// subcommands shows help.
+			if len(command.Subcommands) > 0 && command.Action == nil {
 				command.Action = func(c *cli.Context) error {
 					if c.NArg() > 0 {
 						return fmt.Errorf("%w: unknown command %s", pve.ErrInvalid, c.Args().First())

@@ -42,6 +42,15 @@ func newGuestCommand(kind, usage string, deps Dependencies) *cli.Command {
 		guestRestoreCommand(kind, deps),
 		guestDeleteCommand(kind, deps),
 	)
+	if kind == "lxc" {
+		// Cross-profile migration commands attach to `lxc migrate` while the
+		// direct VMID action keeps its intra-cluster behavior.
+		for _, command := range commands {
+			if command.Name == "migrate" {
+				command.Subcommands = newLXCMigrateSubcommands(deps)
+			}
+		}
+	}
 	var addName func([]*cli.Command)
 	addName = func(items []*cli.Command) {
 		for _, item := range items {
