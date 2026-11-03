@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net"
 	"strings"
+
+	proxmox "github.com/luthermonson/go-proxmox"
 )
 
 var (
@@ -19,7 +21,10 @@ var (
 	ErrInvalid          = errors.New("invalid arguments or configuration")
 )
 
-// ClassifyError preserves typed errors and classifies SDK transport responses.
+// ClassifyError preserves typed errors (including *APIError from the HTTP
+// transport, which already carries its semantic kind) and classifies
+// transport-level failures. HTTP status codes are classified by the
+// structured transport; bare numbers are never matched in message text.
 func ClassifyError(err error) error {
 	if err == nil {
 		return nil
@@ -29,6 +34,10 @@ func ClassifyError(err error) error {
 			return err
 		}
 	}
+	var apiErr *APIError
+	if errors.As(err, &apiErr) {
+		return err
+	}
 	var network net.Error
 	msg := strings.ToLower(err.Error())
 	kind := ErrUnavailable
@@ -37,12 +46,12 @@ func ClassifyError(err error) error {
 		kind = ErrUnavailable
 	case errors.As(err, &network):
 		kind = ErrUnavailable
-	case strings.Contains(msg, "401"), strings.Contains(msg, "403"), strings.Contains(msg, "permission"), strings.Contains(msg, "unauthorized"):
+	case errors.Is(err, proxmox.ErrNotAuthorized):
 		kind = ErrPermissionDenied
-	case strings.Contains(msg, "404"), strings.Contains(msg, "not found"), strings.Contains(msg, "does not exist"):
+	case strings.Contains(msg, "permission"), strings.Contains(msg, "unauthorized"), strings.Contains(msg, "not authorized"):
+		kind = ErrPermissionDenied
+	case strings.Contains(msg, "not found"), strings.Contains(msg, "does not exist"), strings.Contains(msg, "no such "):
 		kind = ErrNotFound
-	case strings.Contains(msg, "409"):
-		kind = ErrConflict
 	}
 	return fmt.Errorf("%w: %w", kind, err)
 }

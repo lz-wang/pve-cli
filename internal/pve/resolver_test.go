@@ -3,8 +3,11 @@ package pve
 import (
 	"context"
 	"errors"
-	"github.com/lz-wang/pve-cli/v3/internal/output"
+	"fmt"
 	"testing"
+
+	proxmox "github.com/luthermonson/go-proxmox"
+	"github.com/lz-wang/pve-cli/v3/internal/output"
 )
 
 type inventoryBackend struct {
@@ -29,7 +32,9 @@ func TestResolverCluster(t *testing.T) {
 	if _, err = s.Resolve(context.Background(), "999", "", false); !errors.Is(err, ErrNotFound) {
 		t.Fatal(err)
 	}
-	s = NewVMService(inventoryBackend{err: errors.New("403 forbidden")}, TaskRunner{}, nil, false)
+	// HTTP statuses are classified structurally at the transport; SDK auth
+	// failures surface as ErrNotAuthorized and map to permission denied.
+	s = NewVMService(inventoryBackend{err: fmt.Errorf("cluster inventory: %w", proxmox.ErrNotAuthorized)}, TaskRunner{}, nil, false)
 	if _, err = s.Resolve(context.Background(), "100", "", false); !errors.Is(err, ErrPermissionDenied) {
 		t.Fatal(err)
 	}

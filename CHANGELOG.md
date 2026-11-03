@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- HTTP error responses now preserve sanitized PVE details instead of
+  discarding the body: `APIError` carries the HTTP status, CLI semantic
+  category, sanitized server message, field-level validation errors, and the
+  operation context (operation, resource, node, phase). Error bodies are
+  parsed with size limits, credentials (token secrets, echoed guest
+  credentials, URL userinfo, opaque long tokens) are redacted before anything
+  is surfaced, and sensitive-named field errors are reported as redacted.
+  Classification no longer depends on the HTTP status-line description text;
+  5xx bodies whose parsed message states a missing resource map to not-found.
+  Numeric HTTP status matching was removed from string-based classification;
+  SDK auth failures map through `ErrNotAuthorized`.
+
 ## v3.0.0 - 2026-10-29
 
 ### Added
