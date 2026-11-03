@@ -1,6 +1,7 @@
 # v3.0.0 validation record
 
 Validation date: 2026-10-29. Ordinary tests do not require real credentials.
+Post-v3 capability validation (P0–P4, unreleased) is recorded at the end.
 
 ## Local verification
 
@@ -46,3 +47,32 @@ contracts, without creating a real download/cancellation workload. Node reboot
 and shutdown were deliberately verified only with mock APIs; no physical host
 power operation was performed. Backup/restore/clone exceptional paths are
 covered locally; no destructive production recovery drill was performed.
+
+## Offline maintenance lifecycle acceptance (P4)
+
+Local lifecycle tests validate the full state machine against a simulated
+host: mount → read a file through the mount → lock observable in the guest
+config while mounted → unmount → lock released; interrupted mounts report
+failure with the manual-cleanup hint and recover through `pct unmount`;
+unmounts that claim success while the mount persists report `unknown` and a
+retry completes the release; double mounts are refused without touching the
+mounted state.
+
+The real-PVE acceptance procedure below must run on a **dedicated test
+container only** — mount holds container locks and interrupted mounts can
+need host-side cleanup. Never run it against production guests.
+
+1. Create a disposable stopped LXC (for example from a system template).
+2. `pve lxc mount 201 --node <node>` — expect `succeeded`, the reported
+   host path, `mounted: true`; on the host, read a file through the path
+   (for example `cat <path>/etc/hostname`).
+3. While mounted, `pve lxc get 201` must show the container locked; a
+   start attempt must fail until unmounted.
+4. `pve lxc mount 201 --node <node>` again — expect the double-mount
+   refusal (exit 4) with the mounted state untouched.
+5. Interrupt a run (Ctrl+C during mount) — expect an `unknown`/`failed`
+   outcome with the manual-cleanup hint; recover with
+   `pve lxc unmount 201 --node <node>` until it reports released.
+6. `pve lxc unmount 201 --node <node>` — expect `succeeded`,
+   `mounted: false`, the lock gone, and the container startable again.
+7. Delete the test container and confirm its volumes are gone.

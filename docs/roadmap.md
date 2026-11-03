@@ -22,6 +22,10 @@
   restores with bridge mapping (`vm/lxc restore`), and the composed
   backup→transfer→verify→restore→post-check pipeline (`backup
   copy-restore`) with per-stage results and documented resume rules.
+- Offline emergency maintenance (P4): controlled `lxc mount`/`lxc unmount`
+  over the host SSH transport with stop/double-mount guards, re-verified
+  mount state, unknown-outcome reporting with manual-cleanup hints, and a
+  lifecycle acceptance procedure reserved for dedicated test containers.
 
 - Cluster-aware unique resource resolution and typed failures.
 - Exact guest names, filtered/sorted inventory and native configuration.

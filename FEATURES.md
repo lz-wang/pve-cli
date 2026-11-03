@@ -40,6 +40,13 @@ See [usage](docs/usage.md) for every command, flag, default and argument, and
   capacity and bridge-map verification plus post-restore bridge rewriting;
   and the composed `backup copy-restore` pipeline with independent
   per-stage results, no automatic rollback and documented resume rules.
+- Offline emergency maintenance `lxc mount`/`lxc unmount` over the host SSH
+  transport: stopped-container guard, double-mount refusal, real host path
+  reporting and re-verified mount state per operation — unconfirmable
+  outcomes report `unknown` with manual-cleanup hints instead of faked
+  success; idempotent unmount; lifecycle acceptance (mount, read, lock,
+  interrupted-run recovery) validated locally and documented for dedicated
+  test containers only.
 - Name/status/tag filters, all/any tag matching, and stable sorting by
   VMID/name/node/status/memory/CPU; missing metrics remain last.
 - Single-guest start, shutdown, reboot and stop; tracked async operation results.
