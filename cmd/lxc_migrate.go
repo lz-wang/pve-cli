@@ -18,7 +18,7 @@ import (
 // The parent `lxc migrate VMID` keeps its intra-cluster behavior; these
 // subcommands target independent PVE hosts.
 func newLXCMigrateSubcommands(deps Dependencies) []*cli.Command {
-	return []*cli.Command{lxcMigratePlanCommand(deps), lxcMigrateRemoteCommand(deps)}
+	return []*cli.Command{lxcMigratePlanCommand(deps), lxcMigrateRemoteCommand(deps), lxcMigrateCheckCommand(deps)}
 }
 
 func crossProfileMigrationFlags() []cli.Flag {
@@ -49,6 +49,9 @@ func lxcMigratePlanCommand(deps Dependencies) *cli.Command {
 			options, err := parseCrossProfileOptions(c)
 			if err != nil {
 				return err
+			}
+			if options.targetNode == "" {
+				return fmt.Errorf("%w: --target-node is required", pve.ErrInvalid)
 			}
 
 			sides, err := buildCrossProfileSides(c, deps, options)
@@ -98,6 +101,9 @@ func lxcMigrateRemoteCommand(deps Dependencies) *cli.Command {
 			options, err := parseCrossProfileOptions(c)
 			if err != nil {
 				return err
+			}
+			if options.targetNode == "" {
+				return fmt.Errorf("%w: --target-node is required", pve.ErrInvalid)
 			}
 
 			sides, err := buildCrossProfileSides(c, deps, options)
@@ -174,6 +180,53 @@ func buildTargetEndpointBundle(profile config.Profile, fingerprint string) (stri
 	return bundle, nil
 }
 
+func lxcMigrateCheckCommand(deps Dependencies) *cli.Command {
+	return &cli.Command{
+		Name:      "check",
+		Usage:     "Validate both sides after a cross-profile migration (read-only)",
+		ArgsUsage: "TARGET-VMID",
+		Flags: append(commonOutputFlags(),
+			&cli.StringFlag{Name: "from", Usage: "source profile name (defaults to the current profile)"},
+			&cli.StringFlag{Name: "to", Usage: "target profile name", Required: true},
+			&cli.StringFlag{Name: "target-node", Usage: "target PVE node name"},
+			&cli.IntFlag{Name: "source-vmid", Usage: "source VMID (defaults to the target VMID)"},
+		),
+		Action: func(c *cli.Context) error {
+			if err := requireNoExtraArgs(c, 1); err != nil {
+				return err
+			}
+			vmid, err := parseMigrationVMID(c.Args().First())
+			if err != nil {
+				return err
+			}
+			options, err := parseCrossProfileOptions(c)
+			if err != nil {
+				return err
+			}
+			sides, err := buildCrossProfileSides(c, deps, options)
+			if err != nil {
+				return err
+			}
+			plan, err := pve.NewLXCService(sides.sourceBackend, pve.TaskRunner{}, nil, false).
+				CheckRemoteMigration(c.Context, vmid, pve.RemoteMigrationCheckOptions{
+					SourceVMID: c.Int("source-vmid"),
+					Target:     sides.targetBackend,
+					TargetNode: options.targetNode,
+				})
+			if err != nil {
+				return err
+			}
+			if err := output.WriteMigrationPlan(c.App.Writer, output.NormalizeFormat(c.String("output")), plan); err != nil {
+				return err
+			}
+			if plan.Status == "failed" {
+				return fmt.Errorf("post-migration validation failed; both sides are preserved — repair manually and re-run")
+			}
+			return nil
+		},
+	}
+}
+
 func parseMigrationVMID(value string) (int, error) {
 	vmid, err := strconv.Atoi(strings.TrimSpace(value))
 	if err != nil || vmid <= 0 {
@@ -200,9 +253,6 @@ func parseCrossProfileOptions(c *cli.Context) (crossProfileMigrationRequest, err
 	}
 	if request.to == "" {
 		return request, fmt.Errorf("%w: --to is required", pve.ErrInvalid)
-	}
-	if request.targetNode == "" {
-		return request, fmt.Errorf("%w: --target-node is required", pve.ErrInvalid)
 	}
 	var err error
 	if request.storageMap, err = parseMigrationMap(c.StringSlice("storage-map")); err != nil {

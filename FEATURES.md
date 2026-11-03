@@ -28,6 +28,12 @@ See [usage](docs/usage.md) for every command, flag, default and argument, and
   transport (`pct exec`): stream passthrough in text mode, bounded JSON
   results with truncation markers, preserved remote exit codes and distinct
   SSH connection failures.
+- Cross-profile LXC migration between independent PVE hosts: read-only
+  preflight across eight dimensions with honest `unknown` for unobservable
+  facts, native `remote_migrate` execution (offline default, source kept,
+  target not started, target token redacted everywhere, `--yes` gated with
+  credential-transfer notices), and post-migration validation of both
+  sides without automatic rollback.
 - Name/status/tag filters, all/any tag matching, and stable sorting by
   VMID/name/node/status/memory/CPU; missing metrics remain last.
 - Single-guest start, shutdown, reboot and stop; tracked async operation results.

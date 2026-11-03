@@ -4,6 +4,12 @@
 
 ### Added
 
+- `pve lxc migrate check` post-migration validation across both clusters:
+  source presence/running state, target guest existence, target storage and
+  bridge wiring, startability (locks), observable duplicate MACs (a running
+  source sharing the target's MAC fails), and bind mounts/device
+  passthrough requiring manual handling. Read-only; failures preserve both
+  sides for manual repair — no automatic rollback.
 - `pve lxc migrate remote` executing cross-cluster migrations through PVE's
   native `remote_migrate` API on top of the plan preflight (failing checks
   abort before any mutation). Defaults to offline migration; never deletes

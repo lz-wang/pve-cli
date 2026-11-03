@@ -12,6 +12,11 @@
   optional per-profile SSH transport over the system OpenSSH client;
   `lxc exec` running container commands via `pct exec` with remote exit
   codes preserved and SSH connection failures distinguished.
+- Cross-profile migration (P2): read-only migration preflight
+  (`lxc migrate plan`) across independent PVE profiles, native
+  `remote_migrate` execution with credential-transfer notices and target
+  token redaction (`lxc migrate remote`), and post-migration validation of
+  both sides (`lxc migrate check`); no automatic rollback.
 
 - Cluster-aware unique resource resolution and typed failures.
 - Exact guest names, filtered/sorted inventory and native configuration.

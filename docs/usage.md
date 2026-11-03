@@ -125,6 +125,16 @@ source PVE receives target API credentials for the transfer, and upstream
 remote migration is experimental with no automatic resume after
 interruption — use `task get/log/wait` to recover.
 
+`lxc migrate check TARGET-VMID` validates both sides after a migration
+(read-only): whether the source guest is still present or running, whether
+the target guest exists with working storage and bridge wiring, whether it
+may be started now (not locked), whether an observable duplicate MAC exists
+(a running source sharing the target's hardware address is the classic
+split-brain failure and fails the check), and which bind mounts or device
+passthroughs still need manual attention. Everything the API cannot see —
+DHCP leases, guest-internal IPs — stays `unknown`. Failures never roll back
+automatically: both sides are preserved so you can repair and re-run.
+
 ## Queries and resource resolution
 
 ```bash
@@ -1265,6 +1275,22 @@ pve lxc migrate remote VMID
 | `--wait` | --wait wait for async task completion (default: false) |
 | `--wait-timeout` | --wait-timeout value task wait timeout (default: 0s) |
 | `--name` | --name value exact guest name (including numeric names) |
+
+### `pve lxc migrate check`
+
+Validate both sides after a cross-profile migration (read-only)
+
+```text
+pve lxc migrate check TARGET-VMID
+```
+
+| Flag | Description and default |
+|---|---|
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+| `--from` | --from value source profile name (defaults to the current profile) |
+| `--to` | --to value target profile name **Required.** |
+| `--target-node` | --target-node value target PVE node name |
+| `--source-vmid` | --source-vmid value source VMID (defaults to the target VMID) (default: 0) |
 
 ### `pve lxc clone`
 
