@@ -155,6 +155,7 @@ func TestStructuredOutputContracts(t *testing.T) {
 			value: BackupResult{
 				Resource: "vm", Status: "succeeded", Error: "example",
 				Kind: "vm", VMID: 100, Node: "pve1", Storage: "backup", Mode: "snapshot", Task: "UPID:pve1:backup",
+				RequestedMode: "snapshot", EffectiveMode: "suspend", EffectiveModeSource: "task_log",
 			},
 			fields: []contractField{
 				{"resource", stringType}, {"status", stringType}, {"error", stringType},
@@ -163,6 +164,9 @@ func TestStructuredOutputContracts(t *testing.T) {
 				{"node", stringType},
 				{"storage", stringType},
 				{"mode", stringType},
+				{"requested_mode", stringType},
+				{"effective_mode", stringType},
+				{"effective_mode_source", stringType},
 				{"task", stringType},
 			},
 		},

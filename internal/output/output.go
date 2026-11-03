@@ -125,8 +125,20 @@ type BackupResult struct {
 	VMID    uint64 `json:"vmid" yaml:"vmid"`
 	Node    string `json:"node" yaml:"node"`
 	Storage string `json:"storage" yaml:"storage"`
-	Mode    string `json:"mode" yaml:"mode"`
-	Task    string `json:"task,omitempty" yaml:"task,omitempty"`
+	// Mode is the requested backup mode (legacy alias of RequestedMode).
+	Mode string `json:"mode" yaml:"mode"`
+	// RequestedMode always records what the operator asked for.
+	RequestedMode string `json:"requested_mode" yaml:"requested_mode"`
+	// EffectiveMode reports the mode the task actually used. It is only set
+	// from reliable task-log evidence ("snapshot"/"suspend"/"stop") and is
+	// "unknown" whenever the task did not finish, the log was unreadable,
+	// or the log has no unambiguous mode marker. Success is never used to
+	// infer the mode.
+	EffectiveMode string `json:"effective_mode" yaml:"effective_mode"`
+	// EffectiveModeSource names where EffectiveMode came from; empty when
+	// the mode is unknown. Currently "task_log".
+	EffectiveModeSource string `json:"effective_mode_source,omitempty" yaml:"effective_mode_source,omitempty"`
+	Task                string `json:"task,omitempty" yaml:"task,omitempty"`
 }
 
 type RestoreResult struct {
@@ -909,17 +921,18 @@ func WriteBackupRows(w io.Writer, format string, rows []BackupRow) error {
 func WriteBackupResult(w io.Writer, format string, result BackupResult) error {
 	return Write(w, format, result, func(w io.Writer) error {
 		tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-		if _, err := fmt.Fprintln(tw, "KIND\tVMID\tNODE\tSTORAGE\tMODE\tTASK"); err != nil {
+		if _, err := fmt.Fprintln(tw, "KIND\tVMID\tNODE\tSTORAGE\tREQUESTED\tEFFECTIVE\tTASK"); err != nil {
 			return err
 		}
 		if _, err := fmt.Fprintf(
 			tw,
-			"%s\t%d\t%s\t%s\t%s\t%s\n",
+			"%s\t%d\t%s\t%s\t%s\t%s\t%s\n",
 			result.Kind,
 			result.VMID,
 			result.Node,
 			result.Storage,
-			result.Mode,
+			result.RequestedMode,
+			result.EffectiveMode,
 			empty(result.Task),
 		); err != nil {
 			return err

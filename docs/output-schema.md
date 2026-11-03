@@ -12,6 +12,13 @@ wait timeout/interruption and failed post-operation verification. A task ID is
 preserved whenever PVE returned one. `cancel_requested` does not imply stopped.
 Task inventory retains its own `running/ok/error/unknown` vocabulary.
 
+Configuration mutations additionally carry optional `verified` (post-write
+state check, tri-state) and `api_error` (preserved sanitized API failure when
+the write errored but the requested values were confirmed in effect); see
+`OperationResult` below. Backup results separate the requested mode from the
+mode the task actually used (`requested_mode`/`effective_mode`, sourced from
+the task log when determinable, `unknown` otherwise); see `BackupResult`.
+
 `StatusReport.complete=false` means component queries failed. Component errors
 are grouped by name and also appear as issue rows. Counts in such reports are
 observed counts, not authoritative cluster totals. Unknown resource capacity
@@ -87,19 +94,8 @@ The following reference is generated from the actual output structs.
 | `task` | `string` | yes |
 | `status` | `string` | no |
 | `error` | `string` | yes |
-| `verified` | `bool` | yes |
+| `verified` | `*bool` | yes |
 | `api_error` | `string` | yes |
-
-`verified` is only set for configuration mutations with a write-after-read
-state check: `true` means every requested value was confirmed in effect;
-`false` means at least one requested value definitely differs. Omitted means
-the outcome was not verified (async submission still pending, unverifiable
-value such as a hashed credential, or no readable configuration backend).
-
-`api_error` preserves the original sanitized API failure when a write errored
-(or its wait timed out) but the follow-up state check still confirmed the
-requested values; `status` then reports `succeeded` with `verified: true`
-instead of masking the anomaly.
 
 ## CloneResult
 
@@ -173,6 +169,9 @@ instead of masking the anomaly.
 | `node` | `string` | no |
 | `storage` | `string` | no |
 | `mode` | `string` | no |
+| `requested_mode` | `string` | no |
+| `effective_mode` | `string` | no |
+| `effective_mode_source` | `string` | yes |
 | `task` | `string` | yes |
 
 ## RestoreResult
@@ -477,5 +476,7 @@ instead of masking the anomaly.
 | `task` | `string` | yes |
 | `status` | `string` | no |
 | `error` | `string` | yes |
+| `verified` | `*bool` | yes |
+| `api_error` | `string` | yes |
 | `slot` | `string` | no |
 | `volume` | `string` | yes |

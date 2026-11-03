@@ -51,6 +51,13 @@
 - 退出码：0 成功，1 操作/健康失败，2 参数/配置错误，3 API 访问失败，4 定位/冲突，5 结果未知。
 - `--yes` 仅跳过本地确认；非终端危险操作必须显式提供。Dry-run 零修改，等待超时不取消远端任务。
 - 类型化且不回显凭据的 HTTP 错误，不输出可能包含密码的原始错误响应。
+- 结构化 `APIError` 保留 HTTP 状态码、CLI 语义分类、脱敏后的服务端消息、
+  字段级校验错误与操作上下文（操作、资源、节点、阶段）；错误分类不再依赖
+  HTTP 状态行描述文本。
+- `config set` 写入后回读状态核验：新增 `verified`/`api_error` 字段区分
+  已确认、不一致与结果未知；不确定状态绝不自动重试。
+- 备份结果区分 `requested_mode` 与 `effective_mode`，实际模式仅来自任务
+  日志证据，无法判定时为 `unknown`。
 - Mock Service、命令、HTTP 契约、JSON/YAML Golden 和竞态测试。
 - 从源码生成命令/Schema 参考并检查同步。
 - Linux/macOS/Windows amd64/arm64 构建、校验和、基于 Changelog 的 GitHub Release 与 Homebrew Formula 发布。

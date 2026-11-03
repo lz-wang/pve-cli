@@ -4,6 +4,15 @@
 
 ### Fixed
 
+- Backup results no longer report the request parameter as the executed mode.
+  `BackupResult` gains `requested_mode`, `effective_mode` and
+  `effective_mode_source`: the requested mode is always echoed, while the
+  effective mode is determined solely from explicit vzdump task-log markers
+  (last marker wins after a fallback) once the task completed with `--wait`;
+  it is `unknown` for pending tasks, unreadable logs, ambiguous logs and
+  failed tasks, and is never inferred from success. The table output now
+  shows REQUESTED and EFFECTIVE columns.
+
 - `vm/lxc config set` now verifies mutation outcomes by re-reading the
   configuration after the write settles. `OperationResult` gains additive
   `verified` (tri-state) and `api_error` fields: a write that errors but is

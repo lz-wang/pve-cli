@@ -57,6 +57,11 @@ func TestCommandJSONGoldenOutputs(t *testing.T) {
 			goldenFile: "backup_ls.json",
 		},
 		{
+			name:       "vm backup",
+			args:       []string{"pve", "--config", cfgPath, "vm", "backup", "100", "--storage", "backup", "-o", "json"},
+			goldenFile: "vm_backup.json",
+		},
+		{
 			name:       "storage ls",
 			args:       []string{"pve", "--config", cfgPath, "storage", "ls", "-o", "json"},
 			goldenFile: "storage_ls.json",

@@ -115,6 +115,16 @@ Credential fields are redacted. Repeated `--set key=value` rejects empty or
 duplicate keys. Successful synchronous changes return `succeeded` without a
 UPID; asynchronous changes return a task result.
 
+`config set` verifies mutation outcomes once the write settles (synchronous
+return or completed `--wait`): the CLI re-reads the configuration and compares
+requested values after normalization (`"0"` equals `0`; PVE option strings
+such as `net0` compare attribute-wise, so generated `hwaddr`/`digest`
+appends are tolerated). The structured result carries `verified: true/false`
+plus `api_error` when the request failed but the values are confirmed in
+effect — the result never masks such anomalies. Values that cannot be
+compared reliably (for example hashed credentials) stay unverified, and
+uncertain writes are never automatically retried.
+
 ## Disk maintenance and destructive operations
 
 ```bash
@@ -175,6 +185,12 @@ wait timeout cancels only local waiting. Use `task get/log/wait` to recover
 tracking. Cancellation checks that the task is running and requests termination;
 it does not claim the task already stopped. Non-idempotent requests are never
 automatically resubmitted.
+
+Backup results distinguish the requested mode from the mode the task actually
+used: `requested_mode` always echoes the request, while `effective_mode` is
+only reported from task-log evidence after a completed `--wait` (PVE may fall
+back from `snapshot` to `suspend` depending on storage capabilities) and is
+`unknown` otherwise — success alone never implies the requested mode ran.
 
 Results use stdout, progress and diagnostics use stderr. Use JSON/YAML for
 scripts; table layout can change. Exit codes: 0 success, 1 confirmed operation

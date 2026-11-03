@@ -145,11 +145,12 @@ func (s *BackupService) BackupGuest(ctx context.Context, options BackupCreateOpt
 	}
 
 	result := output.BackupResult{
-		Kind:    kind,
-		VMID:    uint64(options.VMID),
-		Node:    row.Node,
-		Storage: options.Storage,
-		Mode:    mode,
+		Kind:          kind,
+		VMID:          uint64(options.VMID),
+		Node:          row.Node,
+		Storage:       options.Storage,
+		Mode:          mode,
+		RequestedMode: mode,
 	}
 	if task != nil {
 		result.Task = task.UPID()
@@ -163,6 +164,13 @@ func (s *BackupService) BackupGuest(ctx context.Context, options BackupCreateOpt
 	result.Resource = operation.Resource
 	result.Status = operation.Status
 	result.Error = operation.Error
+
+	// The effective mode is only determinable from a finished task's log;
+	// it is never inferred from the request or from success.
+	result.EffectiveMode, result.EffectiveModeSource = BackupModeUnknown, ""
+	if result.Status == "succeeded" {
+		result.EffectiveMode, result.EffectiveModeSource = s.effectiveBackupMode(ctx, task)
+	}
 	return result, err
 }
 

@@ -80,6 +80,14 @@ See [usage](docs/usage.md) for every command, flag, default and argument, and
 - `--yes` skips local confirmation only; nonterminal dangerous operations require
   it. Dry-run performs no mutation; waiting never cancels the remote task.
 - Typed and secret-safe HTTP failures; no raw credential response bodies.
+  Structured `APIError` preserves HTTP status, CLI category, sanitized server
+  message, field-level validation errors and operation context (operation,
+  resource, node, phase); classification never depends on status-line text.
+- `config set` verifies write outcomes by re-reading state: additive
+  `verified`/`api_error` fields distinguish confirmed, mismatched and unknown
+  results; uncertain writes are never retried.
+- Backup results report `requested_mode` plus `effective_mode` from task-log
+  evidence only (`unknown` when not determinable).
 - Mock service, command, HTTP contract, JSON/YAML golden and race tests.
 - Generated command/schema references checked against source definitions.
 - Linux/macOS/Windows amd64/arm64 release builds, checksums, GitHub Release notes

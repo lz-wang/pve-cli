@@ -1,0 +1,11 @@
+{
+  "resource": "vm",
+  "status": "succeeded",
+  "kind": "vm",
+  "vmid": 100,
+  "node": "pve1",
+  "storage": "backup",
+  "mode": "snapshot",
+  "requested_mode": "snapshot",
+  "effective_mode": "unknown"
+}

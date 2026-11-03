@@ -2,6 +2,12 @@
 
 ## Implemented in v3
 
+- Reliability pass (P0): structured sanitized `APIError` with HTTP status,
+  field-level validation errors and operation context; post-write state
+  verification for `config set` (`verified`/`api_error` semantics, no
+  retries on uncertain outcomes); requested vs effective backup mode
+  reporting sourced from task logs.
+
 - Cluster-aware unique resource resolution and typed failures.
 - Exact guest names, filtered/sorted inventory and native configuration.
 - Recoverable async operation results, bounded waits and task cancellation.
