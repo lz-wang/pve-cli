@@ -12,12 +12,13 @@ import (
 func guestRestoreCommand(kind string, deps Dependencies) *cli.Command {
 	return &cli.Command{
 		Name:      "restore",
-		Usage:     "Restore a backup archive into a new, non-existing guest",
+		Usage:     "Restore a backup archive into a new, non-existing guest (preflighted)",
 		ArgsUsage: "ARCHIVE",
 		Flags: []cli.Flag{
 			&cli.StringFlag{Name: "node", Usage: "target PVE node name", Required: true},
 			&cli.IntFlag{Name: "vmid", Usage: "new VMID/CTID; it must not exist yet", Required: true},
 			&cli.StringFlag{Name: "storage", Usage: "target storage for guest disks"},
+			&cli.StringSliceFlag{Name: "bridge-map", Usage: "repeatable source=target bridge rewrite applied after the restore (--wait)"},
 			&cli.BoolFlag{Name: "wait", Usage: "wait for async task completion"},
 			&cli.DurationFlag{Name: "wait-timeout", Usage: "task wait timeout"},
 			&cli.StringFlag{Name: "output", Aliases: []string{"o"}, Usage: "output format: table,json,yaml"},
@@ -30,17 +31,22 @@ func guestRestoreCommand(kind string, deps Dependencies) *cli.Command {
 			if vmid <= 0 {
 				return fmt.Errorf("invalid vmid %d", vmid)
 			}
+			bridgeMap, err := parseMigrationMap(c.StringSlice("bridge-map"))
+			if err != nil {
+				return fmt.Errorf("%w: --bridge-map: %v", pve.ErrInvalid, err)
+			}
 
 			rt, err := buildRuntime(c, deps)
 			if err != nil {
 				return err
 			}
 			result, err := pve.NewRestoreService(rt.backend, rt.tasks).Restore(c.Context, pve.RestoreOptions{
-				Kind:    kind,
-				Archive: c.Args().First(),
-				Node:    c.String("node"),
-				VMID:    vmid,
-				Storage: c.String("storage"),
+				Kind:      kind,
+				Archive:   c.Args().First(),
+				Node:      c.String("node"),
+				VMID:      vmid,
+				Storage:   c.String("storage"),
+				BridgeMap: bridgeMap,
 			})
 			// Write the structured result on success, and also when the
 			// wait fails after the task was submitted, so automation can

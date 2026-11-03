@@ -108,7 +108,7 @@ func TestCommandJSONGoldenOutputs(t *testing.T) {
 		},
 		{
 			name:       "vm restore",
-			args:       []string{"pve", "--config", cfgPath, "vm", "restore", "backup:backup/vzdump-qemu-100-2026_06_06-00_00_00.vma.zst", "--node", "pve1", "--vmid", "101", "--storage", "local-lvm", "-o", "json"},
+			args:       []string{"pve", "--config", cfgPath, "vm", "restore", "backup:backup/vzdump-qemu-100-2026_06_06-00_00_00.vma.zst", "--node", "pve1", "--vmid", "101", "-o", "json"},
 			goldenFile: "vm_restore.json",
 		},
 		{

@@ -65,7 +65,12 @@ func TestRestoreServiceChecksArchiveKind(t *testing.T) {
 }
 
 func TestRestoreServiceAllowsUnknownArchiveShape(t *testing.T) {
-	backend := &fakeRestoreBackend{fakeBackend: fakeBackend{nodes: []output.NodeRow{{Name: "pve1"}}}}
+	backend := &fakeRestoreBackend{fakeBackend: fakeBackend{
+		nodes: []output.NodeRow{{Name: "pve1"}},
+		backupRows: map[string]map[string][]output.BackupRow{
+			"pve1": {"pbs": {{VolID: "pbs:store/vm/101/2026-01-01T00:00:00Z", Kind: "vm", VMID: 101}}},
+		},
+	}}
 	svc := NewRestoreService(backend, TaskRunner{})
 
 	_, err := svc.Restore(context.Background(), RestoreOptions{
@@ -79,8 +84,16 @@ func TestRestoreServiceAllowsUnknownArchiveShape(t *testing.T) {
 
 func TestRestoreServiceTriggersRestore(t *testing.T) {
 	backend := &fakeRestoreBackend{
-		fakeBackend: fakeBackend{nodes: []output.NodeRow{{Name: "pve1"}}},
-		task:        &fakeTask{upid: "UPID:pve1:restore"},
+		fakeBackend: fakeBackend{
+			nodes: []output.NodeRow{{Name: "pve1"}},
+			backupRows: map[string]map[string][]output.BackupRow{
+				"pve1": {"backup": {{VolID: "backup:backup/vzdump-lxc-200.tar.zst", Kind: "lxc", VMID: 200}}},
+			},
+			storageRows: map[string][]output.StorageRow{
+				"pve1": {{Node: "pve1", Storage: "local-lvm", Type: "lvmthin", Active: true, Enabled: true, Content: "rootdir,images", Avail: 100 << 30}},
+			},
+		},
+		task: &fakeTask{upid: "UPID:pve1:restore"},
 	}
 	svc := NewRestoreService(backend, TaskRunner{})
 
@@ -101,8 +114,13 @@ func TestRestoreServiceTriggersRestore(t *testing.T) {
 
 func TestRestoreServiceWaitFailurePreservesResult(t *testing.T) {
 	backend := &fakeRestoreBackend{
-		fakeBackend: fakeBackend{nodes: []output.NodeRow{{Name: "pve1"}}},
-		task:        &fakeTask{upid: "UPID:pve1:restore", failed: true, exitStatus: "ERROR"},
+		fakeBackend: fakeBackend{
+			nodes: []output.NodeRow{{Name: "pve1"}},
+			backupRows: map[string]map[string][]output.BackupRow{
+				"pve1": {"backup": {{VolID: "backup:backup/vzdump-qemu-100.vma.zst", Kind: "vm", VMID: 100}}},
+			},
+		},
+		task: &fakeTask{upid: "UPID:pve1:restore", failed: true, exitStatus: "ERROR"},
 	}
 	svc := NewRestoreService(backend, TaskRunner{Wait: true})
 
@@ -127,6 +145,9 @@ func TestRestoreServiceVMIDCheckFailsClosedOnNodeFailure(t *testing.T) {
 			vmErrs:  map[string]error{"pve1": errors.New("timeout")},
 			lxcErrs: map[string]error{"pve1": errors.New("timeout")},
 			vmRows:  map[string][]output.GuestRow{"pve2": {{Kind: "vm", VMID: 100, Node: "pve2"}}},
+			backupRows: map[string]map[string][]output.BackupRow{
+				"pve2": {"backup": {{VolID: "backup:backup/vzdump-qemu-100.vma.zst", Kind: "vm", VMID: 100}}},
+			},
 		},
 		task: &fakeTask{upid: "UPID:pve2:restore"},
 	}

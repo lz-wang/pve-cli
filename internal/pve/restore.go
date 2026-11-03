@@ -19,6 +19,9 @@ type RestoreOptions struct {
 	Node    string
 	VMID    int
 	Storage string
+	// BridgeMap optionally rewrites net device bridges after the restore
+	// completes (--wait); the preflight verifies the target bridges exist.
+	BridgeMap map[string]string
 }
 
 // RestoreBackend covers one-off backup restore plus the guest and node
@@ -38,9 +41,11 @@ func NewRestoreService(backend RestoreBackend, tasks TaskRunner) *RestoreService
 	return &RestoreService{backend: backend, tasks: tasks}
 }
 
-// Restore validates the request, refuses existing VMIDs, and triggers the
-// restore task. Restore never overwrites an existing guest; delete the guest
-// first instead.
+// Restore validates the request, runs the preflight plan (VMID, archive,
+// storage, bridge mapping), refuses existing VMIDs, and triggers the restore
+// task. Restore never overwrites an existing guest and never starts the
+// restored guest; with --wait and a completed task the bridge mapping is
+// applied automatically.
 func (s *RestoreService) Restore(ctx context.Context, options RestoreOptions) (output.RestoreResult, error) {
 	kind, err := parseRestoreKind(options.Kind)
 	if err != nil {
@@ -60,17 +65,33 @@ func (s *RestoreService) Restore(ctx context.Context, options RestoreOptions) (o
 	if err := checkRestoreArchiveKind(kind, archive); err != nil {
 		return output.RestoreResult{}, err
 	}
-	if err := s.ensureVMIDFree(ctx, options.VMID); err != nil {
+
+	// Preflight: failing checks abort before any mutation with the failing
+	// reasons in the error; a passing preflight stays silent to keep stdout
+	// and stderr contracts unchanged.
+	submitted := RestoreOptions{
+		Kind:      kind,
+		Archive:   archive,
+		Node:      node,
+		VMID:      options.VMID,
+		Storage:   strings.TrimSpace(options.Storage),
+		BridgeMap: options.BridgeMap,
+	}
+	plan, err := s.PlanRestore(ctx, submitted)
+	if err != nil {
 		return output.RestoreResult{}, err
 	}
+	if plan.Status == "failed" {
+		var reasons []string
+		for _, row := range plan.Checks {
+			if row.Status == output.MigrationCheckFail {
+				reasons = append(reasons, fmt.Sprintf("%s: %s", row.Check, row.Message))
+			}
+		}
+		return output.RestoreResult{}, fmt.Errorf("%w: restore preflight failed (%s); no changes were made", ErrConflict, strings.Join(reasons, "; "))
+	}
 
-	task, err := s.backend.Restore(ctx, RestoreOptions{
-		Kind:    kind,
-		Archive: archive,
-		Node:    node,
-		VMID:    options.VMID,
-		Storage: strings.TrimSpace(options.Storage),
-	})
+	task, err := s.backend.Restore(ctx, submitted)
 	if err != nil {
 		return output.RestoreResult{}, err
 	}
@@ -96,6 +117,12 @@ func (s *RestoreService) Restore(ctx context.Context, options RestoreOptions) (o
 	result.Resource = operation.Resource
 	result.Status = operation.Status
 	result.Error = operation.Error
+	if err == nil && operation.Status == "succeeded" {
+		if mapErr := s.applyBridgeMap(ctx, submitted); mapErr != nil {
+			result.Error = mapErr.Error()
+			return result, mapErr
+		}
+	}
 	return result, err
 }
 
@@ -106,7 +133,7 @@ func parseRestoreKind(value string) (string, error) {
 	case BackupKindLXC:
 		return BackupKindLXC, nil
 	default:
-		return "", fmt.Errorf("invalid restore kind %q, expected vm or lxc", value)
+		return "", fmt.Errorf("%w: invalid restore kind %q, expected vm or lxc", ErrInvalid, value)
 	}
 }
 

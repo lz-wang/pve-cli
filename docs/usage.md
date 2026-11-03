@@ -90,6 +90,20 @@ actual exit code as the process exit status; SSH connection or protocol
 failures exit with 3 instead. The guest is resolved through the API before
 the host command is issued.
 
+### Restore preflight
+
+`vm/lxc restore` runs a read-only preflight before submitting anything:
+target VMID availability across the cluster, archive readability (the
+volume must be listed on its storage), target storage existence, activation
+and capacity against the archive size, and — when `--bridge-map
+source=target` is given — that every mapped target bridge exists on the
+target node. Facts that live inside the archive (onboot, MAC/IP, bind
+mounts, device passthrough) are reported as unknowns by design, and the
+restored guest is never started automatically. A failing preflight aborts
+with the reasons in the error message and exit code 4; a passing preflight
+is silent. With `--wait` and a completed restore, bridge mappings are
+applied to the restored guest's network devices automatically.
+
 ### Cross-profile backup copy
 
 ```bash
@@ -979,7 +993,7 @@ pve vm backup VMID
 
 ### `pve vm restore`
 
-Restore a backup archive into a new, non-existing guest
+Restore a backup archive into a new, non-existing guest (preflighted)
 
 ```text
 pve vm restore ARCHIVE
@@ -990,6 +1004,7 @@ pve vm restore ARCHIVE
 | `--node` | --node value target PVE node name **Required.** |
 | `--vmid` | --vmid value new VMID/CTID; it must not exist yet (default: 0) **Required.** |
 | `--storage` | --storage value target storage for guest disks |
+| `--bridge-map` | --bridge-map value [ --bridge-map value ] repeatable source=target bridge rewrite applied after the restore (--wait) |
 | `--wait` | --wait wait for async task completion (default: false) |
 | `--wait-timeout` | --wait-timeout value task wait timeout (default: 0s) |
 | `--output`, `-o` | --output value, -o value output format: table,json,yaml |
@@ -1421,7 +1436,7 @@ pve lxc backup VMID
 
 ### `pve lxc restore`
 
-Restore a backup archive into a new, non-existing guest
+Restore a backup archive into a new, non-existing guest (preflighted)
 
 ```text
 pve lxc restore ARCHIVE
@@ -1432,6 +1447,7 @@ pve lxc restore ARCHIVE
 | `--node` | --node value target PVE node name **Required.** |
 | `--vmid` | --vmid value new VMID/CTID; it must not exist yet (default: 0) **Required.** |
 | `--storage` | --storage value target storage for guest disks |
+| `--bridge-map` | --bridge-map value [ --bridge-map value ] repeatable source=target bridge rewrite applied after the restore (--wait) |
 | `--wait` | --wait wait for async task completion (default: false) |
 | `--wait-timeout` | --wait-timeout value task wait timeout (default: 0s) |
 | `--output`, `-o` | --output value, -o value output format: table,json,yaml |

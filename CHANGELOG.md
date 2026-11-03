@@ -4,6 +4,14 @@
 
 ### Added
 
+- Restore preflight for `vm/lxc restore`: target VMID availability, archive
+  readability on its storage, target storage existence/activation/capacity
+  against the archive size, and `--bridge-map source=target` target-bridge
+  verification. Archive-internal facts (onboot, MAC/IP, mounts) stay honest
+  unknowns; the restored guest is never started automatically. A failing
+  preflight aborts before submission (exit 4, reasons in the error); with
+  `--wait` and a completed restore the bridge mapping is applied to the
+  restored guest's network devices.
 - `pve backup copy` cross-profile backup archive transfer between
   independent PVE hosts over the two SSH transports (source `cat` → local
   SHA-256/progress fan-out → target `dd`): dir-type storages only, target

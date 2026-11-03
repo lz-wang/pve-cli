@@ -795,6 +795,15 @@ func TestVMRestoreCommandWritesResultAndWaits(t *testing.T) {
 	backend := &commandBackend{
 		nodes:      []output.NodeRow{{Name: "pve1"}},
 		backupTask: task,
+		backups: map[string]map[string][]output.BackupRow{
+			"pve1": {"backup": {{
+				Node: "pve1", Storage: "backup", Kind: "vm", VMID: 100,
+				VolID: "backup:backup/vzdump-qemu-100.vma.zst", Size: 512, Format: "vma.zst",
+			}}},
+		},
+		storages: map[string][]output.StorageRow{
+			"pve1": {{Node: "pve1", Storage: "local-lvm", Type: "lvmthin", Active: true, Enabled: true, Content: "rootdir,images", Avail: 4096}},
+		},
 	}
 	var stdout bytes.Buffer
 
