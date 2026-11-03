@@ -1118,24 +1118,25 @@ func (b *commandBackend) FirewallRules(_ context.Context, scope pve.FirewallScop
 }
 
 type commandGuest struct {
-	row              output.GuestRow
-	task             pve.Task
-	actionErr        error
-	cloneID          int
-	cloneOptions     pve.CloneOptions
-	configValues     map[string]string
-	deleted          bool
-	rebooted         bool
-	startedCalled    bool
-	shutdownCalled   bool
-	stopCalled       bool
-	migrateOptions   pve.MigrateOptions
-	resizeDisk       string
-	resizeSize       string
-	snapshots        []output.SnapshotRow
-	createdSnapshot  string
-	rollbackSnapshot string
-	deletedSnapshot  string
+	row                  output.GuestRow
+	task                 pve.Task
+	actionErr            error
+	cloneID              int
+	cloneOptions         pve.CloneOptions
+	configValues         map[string]string
+	deleted              bool
+	rebooted             bool
+	startedCalled        bool
+	shutdownCalled       bool
+	stopCalled           bool
+	migrateOptions       pve.MigrateOptions
+	remoteMigrateOptions *pve.RemoteMigrateOptions
+	resizeDisk           string
+	resizeSize           string
+	snapshots            []output.SnapshotRow
+	createdSnapshot      string
+	rollbackSnapshot     string
+	deletedSnapshot      string
 }
 
 func (g *commandGuest) Row() output.GuestRow {
@@ -1203,6 +1204,11 @@ func (g *commandGuest) Delete(context.Context) (pve.Task, error) {
 
 func (g *commandGuest) Migrate(_ context.Context, options pve.MigrateOptions) (pve.Task, error) {
 	g.migrateOptions = options
+	return g.task, nil
+}
+
+func (g *commandGuest) RemoteMigrate(_ context.Context, options pve.RemoteMigrateOptions) (pve.Task, error) {
+	g.remoteMigrateOptions = &options
 	return g.task, nil
 }
 

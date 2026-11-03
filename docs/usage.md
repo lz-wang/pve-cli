@@ -112,6 +112,19 @@ or JSON plan lists every dimension with `ok`/`warning`/`unknown`/`fail`; a
 failed plan exits 1, warnings and unknowns exit 0. The plain
 `lxc migrate VMID --target NODE` command keeps migrating within one cluster.
 
+`lxc migrate remote` executes the migration through PVE's native
+`remote_migrate` API on top of the same preflight: a failing plan aborts
+before any mutation. It defaults to offline migration, never deletes the
+source container and never starts the target. The command builds the target
+endpoint bundle from the `--to` profile (host, API token) plus an optional
+`--target-fingerprint` for TLS verification of self-signed certificates;
+the target token is passed into the API request only — it never appears in
+logs, structured output or error messages (the error sanitizer also redacts
+it). `--yes` is required and the command prints two notices first: the
+source PVE receives target API credentials for the transfer, and upstream
+remote migration is experimental with no automatic resume after
+interruption — use `task get/log/wait` to recover.
+
 ## Queries and resource resolution
 
 ```bash
@@ -1226,6 +1239,31 @@ pve lxc migrate plan VMID
 | `--target-vmid` | --target-vmid value target VMID (defaults to the source VMID) (default: 0) |
 | `--storage-map` | --storage-map value [ --storage-map value ] repeatable source=target storage mapping |
 | `--bridge-map` | --bridge-map value [ --bridge-map value ] repeatable source=target bridge mapping |
+| `--name` | --name value exact guest name (including numeric names) |
+
+### `pve lxc migrate remote`
+
+Migrate a container to an independent PVE host (experimental upstream feature)
+
+```text
+pve lxc migrate remote VMID
+```
+
+| Flag | Description and default |
+|---|---|
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+| `--from` | --from value source profile name (defaults to the current profile) |
+| `--to` | --to value target profile name **Required.** |
+| `--target-node` | --target-node value target PVE node name **Required.** |
+| `--target-vmid` | --target-vmid value target VMID (defaults to the source VMID) (default: 0) |
+| `--storage-map` | --storage-map value [ --storage-map value ] repeatable source=target storage mapping |
+| `--bridge-map` | --bridge-map value [ --bridge-map value ] repeatable source=target bridge mapping |
+| `--target-fingerprint` | --target-fingerprint value SHA256 fingerprint of the target API certificate for TLS verification |
+| `--bwlimit` | --bwlimit value migration bandwidth limit in KiB/s (default: 0) |
+| `--online` | --online request online migration (default is offline) (default: false) |
+| `--yes` | --yes confirm the migration and the credential transfer to the source PVE (default: false) |
+| `--wait` | --wait wait for async task completion (default: false) |
+| `--wait-timeout` | --wait-timeout value task wait timeout (default: 0s) |
 | `--name` | --name value exact guest name (including numeric names) |
 
 ### `pve lxc clone`

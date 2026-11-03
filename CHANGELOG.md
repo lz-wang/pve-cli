@@ -4,6 +4,17 @@
 
 ### Added
 
+- `pve lxc migrate remote` executing cross-cluster migrations through PVE's
+  native `remote_migrate` API on top of the plan preflight (failing checks
+  abort before any mutation). Defaults to offline migration; never deletes
+  the source container and never starts the target. The target endpoint
+  bundle is built from the `--to` profile plus an optional
+  `--target-fingerprint`; the target token is passed to the API request
+  only and is additionally registered with the source transport's error
+  sanitizer so it can never surface in errors or output. `--yes` is
+  required; the command prints explicit notices that the source PVE
+  receives target API credentials and that upstream remote migration is
+  experimental without automatic resume.
 - `pve lxc migrate plan` cross-profile migration preflight between two
   independent PVE profiles (`--from` defaults to the current profile,
   `--to` required): read-only checks covering both connections and the

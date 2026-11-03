@@ -2,8 +2,10 @@ package cmd
 
 import (
 	"fmt"
+	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/urfave/cli/v2"
 
@@ -16,7 +18,7 @@ import (
 // The parent `lxc migrate VMID` keeps its intra-cluster behavior; these
 // subcommands target independent PVE hosts.
 func newLXCMigrateSubcommands(deps Dependencies) []*cli.Command {
-	return []*cli.Command{lxcMigratePlanCommand(deps)}
+	return []*cli.Command{lxcMigratePlanCommand(deps), lxcMigrateRemoteCommand(deps)}
 }
 
 func crossProfileMigrationFlags() []cli.Flag {
@@ -67,6 +69,109 @@ func lxcMigratePlanCommand(deps Dependencies) *cli.Command {
 			return nil
 		},
 	}
+}
+
+func lxcMigrateRemoteCommand(deps Dependencies) *cli.Command {
+	return &cli.Command{
+		Name:      "remote",
+		Usage:     "Migrate a container to an independent PVE host (experimental upstream feature)",
+		ArgsUsage: "VMID",
+		Flags: append(append(commonOutputFlags(), crossProfileMigrationFlags()...),
+			&cli.StringFlag{Name: "target-fingerprint", Usage: "SHA256 fingerprint of the target API certificate for TLS verification"},
+			&cli.UintFlag{Name: "bwlimit", Usage: "migration bandwidth limit in KiB/s"},
+			&cli.BoolFlag{Name: "online", Usage: "request online migration (default is offline)"},
+			&cli.BoolFlag{Name: "yes", Usage: "confirm the migration and the credential transfer to the source PVE"},
+			&cli.BoolFlag{Name: "wait", Usage: "wait for async task completion"},
+			&cli.DurationFlag{Name: "wait-timeout", Usage: "task wait timeout"},
+		),
+		Action: func(c *cli.Context) error {
+			if err := requireNoExtraArgs(c, 1); err != nil {
+				return err
+			}
+			vmid, err := parseMigrationVMID(c.Args().First())
+			if err != nil {
+				return err
+			}
+			if !c.Bool("yes") {
+				return fmt.Errorf("%w: remote migration requires --yes (the source PVE receives target API credentials for the transfer; the source container is kept and the target is not started)", pve.ErrInvalid)
+			}
+			options, err := parseCrossProfileOptions(c)
+			if err != nil {
+				return err
+			}
+
+			sides, err := buildCrossProfileSides(c, deps, options)
+			if err != nil {
+				return err
+			}
+			sourceService := pve.NewLXCService(sides.sourceBackend, pve.TaskRunner{}, nil, false)
+
+			// Preflight with the same plan command: failing checks abort
+			// before any mutation.
+			plan, err := sourceService.PlanRemoteMigration(c.Context, vmid, sides.migrationOptions())
+			if err != nil {
+				return err
+			}
+			if err := output.WriteMigrationPlan(c.App.ErrWriter, "table", plan); err != nil {
+				return err
+			}
+			if plan.Status == "failed" {
+				return fmt.Errorf("migration preflight failed; no changes were made")
+			}
+
+			bundle, err := buildTargetEndpointBundle(sides.targetProfile, c.String("target-fingerprint"))
+			if err != nil {
+				return err
+			}
+			fmt.Fprintln(c.App.ErrWriter, "notice: the source PVE receives target API credentials for this migration; the source container is kept, the target container is not started")
+			fmt.Fprintln(c.App.ErrWriter, "notice: PVE remote migration is experimental upstream; an interrupted migration does not resume automatically")
+
+			waitTimeout := c.Duration("wait-timeout")
+			if waitTimeout <= 0 {
+				waitTimeout = 30 * time.Minute
+			}
+			runner := pve.TaskRunner{
+				Wait:        c.Bool("wait"),
+				WaitTimeout: waitTimeout,
+				ErrWriter:   c.App.ErrWriter,
+				Format:      output.NormalizeFormat(c.String("output")),
+				Resource:    "lxc",
+			}
+			sourceService = pve.NewLXCService(sides.sourceBackend, runner, nil, false)
+			_, err = sourceService.RemoteMigrate(c.Context, vmid, "", pve.RemoteMigrateOptions{
+				TargetEndpointBundle: bundle,
+				TargetStorageMap:     options.storageMap,
+				TargetBridgeMap:      options.bridgeMap,
+				TargetVMID:           options.targetVMID,
+				BWLimit:              uint(c.Uint("bwlimit")),
+				Online:               c.Bool("online"),
+			})
+			return err
+		},
+	}
+}
+
+// buildTargetEndpointBundle assembles PVE's remote-migration endpoint string
+// from the target profile. The bundle embeds the target token secret and is
+// only ever passed into the API call.
+func buildTargetEndpointBundle(profile config.Profile, fingerprint string) (string, error) {
+	secret, err := config.ResolveTokenSecret(profile)
+	if err != nil {
+		return "", fmt.Errorf("config error: %w", err)
+	}
+	parsed, err := url.Parse(strings.TrimSpace(profile.Endpoint))
+	if err != nil {
+		return "", fmt.Errorf("%w: invalid target endpoint %q: %v", pve.ErrInvalid, profile.Endpoint, err)
+	}
+	host := parsed.Host
+	if host == "" {
+		return "", fmt.Errorf("%w: target endpoint %q has no host", pve.ErrInvalid, profile.Endpoint)
+	}
+	bundle := "apitoken=PVEAPIToken=" + profile.TokenID + "=" + secret + " host=" + host
+	if strings.TrimSpace(fingerprint) != "" {
+		bundle += " fingerprint=" + strings.TrimSpace(fingerprint)
+	}
+	return bundle, nil
 }
 
 func parseMigrationVMID(value string) (int, error) {
@@ -130,6 +235,7 @@ func parseMigrationMap(entries []string) (map[string]string, error) {
 type crossProfileSides struct {
 	request       crossProfileMigrationRequest
 	sourceProfile config.Profile
+	targetProfile config.Profile
 	sourceBackend pve.Backend
 	targetBackend pve.Backend
 }
@@ -177,6 +283,7 @@ func buildCrossProfileSides(c *cli.Context, deps Dependencies, request crossProf
 	return &crossProfileSides{
 		request:       request,
 		sourceProfile: sourceProfile,
+		targetProfile: targetProfile,
 		sourceBackend: sourceBackend,
 		targetBackend: targetBackend,
 	}, nil

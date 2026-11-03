@@ -15,6 +15,9 @@ type ClientOptions struct {
 	TokenSecret string
 	Timeout     time.Duration
 	Insecure    bool
+	// ExtraSecrets are additional secret values (for example a remote
+	// migration target token) that must never surface in errors or logs.
+	ExtraSecrets []string
 }
 
 func NewProxmoxBackend(profile config.Profile, opts ClientOptions) (Backend, error) {
@@ -33,7 +36,7 @@ func NewProxmoxBackend(profile config.Profile, opts ClientOptions) (Backend, err
 
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12, InsecureSkipVerify: opts.Insecure || profile.InsecureSkipVerify}
-	httpClient := &http.Client{Timeout: opts.Timeout, Transport: statusTransport{base: transport, redact: newErrorSanitizer(opts.TokenSecret)}, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	httpClient := &http.Client{Timeout: opts.Timeout, Transport: statusTransport{base: transport, redact: newErrorSanitizer(append([]string{opts.TokenSecret}, opts.ExtraSecrets...)...)}, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	clientOpts := []proxmox.Option{proxmox.WithAPIToken(profile.TokenID, opts.TokenSecret), proxmox.WithHTTPClient(httpClient)}
 
 	return &ProxmoxBackend{client: proxmox.NewClient(profile.Endpoint, clientOpts...)}, nil

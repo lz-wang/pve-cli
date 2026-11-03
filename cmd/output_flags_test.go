@@ -74,6 +74,7 @@ var structuredOutputCommands = map[string]bool{
 	"lxc clone":             true,
 	"lxc net set":           true,
 	"lxc migrate plan":      true,
+	"lxc migrate remote":    true,
 	"lxc exec":              true,
 	"lxc snapshot ls":       true,
 	"lxc backup":            true,
