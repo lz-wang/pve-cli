@@ -90,6 +90,25 @@ actual exit code as the process exit status; SSH connection or protocol
 failures exit with 3 instead. The guest is resolved through the API before
 the host command is issued.
 
+### Cross-profile backup copy
+
+```bash
+pve backup copy local:backup/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst \
+  --from n150 --to pve8845 --target-storage local
+```
+
+`backup copy` streams a backup archive between two independent PVE hosts
+over their SSH transports: source `cat` → local SHA-256 and progress
+fan-out → target `dd`. It requires `ssh` sections on both profiles and only
+supports dir-type storages (host-filesystem archives); PBS storages must use
+their native mechanisms. The target never overwrites an existing archive
+(conflict, exit 4). Transfers write a `.pve-cli-part` file first; a leftover
+part with the complete size is verified by checksum and resumed instead of
+re-transferred, a checksum mismatch fails and cleans the part file up, and
+publishing is an atomic rename. Transfer progress (`transferred N`) goes to
+stderr; the result reports bytes, the verified `sha256` and the `resumed`
+flag.
+
 ### Cross-profile migration
 
 ```bash
@@ -1636,6 +1655,22 @@ pve backup ls
 | `--type` | --type value backup type: all,vm,lxc (default: "all") |
 | `--latest` | --latest show only latest backup per guest (default: false) |
 | `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+
+### `pve backup copy`
+
+Copy a backup archive to another PVE host (dir storages, SSH transport)
+
+```text
+pve backup copy VOLID
+```
+
+| Flag | Description and default |
+|---|---|
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+| `--from` | --from value source profile name **Required.** |
+| `--to` | --to value target profile name **Required.** |
+| `--target-storage` | --target-storage value target dir storage name **Required.** |
+| `--node` | --node value source PVE node name (defaults to the source profile's ssh host) |
 
 ### `pve network ls`
 

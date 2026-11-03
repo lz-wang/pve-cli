@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -892,6 +893,7 @@ type commandBackend struct {
 	networkErrs          map[string]error
 	guestConfigs         map[int]map[string]any
 	guestConfigReads     int
+	dirPaths             map[string]string
 	firewallStatus       map[string]output.FirewallStatusRow
 	firewallRules        map[string][]output.FirewallRuleRow
 	backupTask           pve.Task
@@ -1111,6 +1113,14 @@ func (b *commandBackend) FirewallStatus(_ context.Context, scope pve.FirewallSco
 		return output.FirewallStatusRow{}, pve.ErrNotFound
 	}
 	return row, nil
+}
+
+// StorageDirPath resolves configured dir storages for backup copy tests.
+func (b *commandBackend) StorageDirPath(_ context.Context, storage string) (string, error) {
+	if path, ok := b.dirPaths[storage]; ok {
+		return path, nil
+	}
+	return "", fmt.Errorf("%w: storage %s is not a dir storage", pve.ErrInvalid, storage)
 }
 
 func (b *commandBackend) FirewallRules(_ context.Context, scope pve.FirewallScope) ([]output.FirewallRuleRow, error) {

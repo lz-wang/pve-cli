@@ -3,6 +3,7 @@ package pve
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"strings"
 
 	proxmox "github.com/luthermonson/go-proxmox"
@@ -51,6 +52,30 @@ func (b *ProxmoxBackend) Storage(ctx context.Context, nodeName, storageName stri
 		return output.StorageRow{}, err
 	}
 	return storageRow(storage), nil
+}
+
+// StorageDirPath returns the host directory of a dir-type storage from the
+// cluster storage configuration. Non-dir storages are rejected: backup
+// copies in this version only handle host-filesystem archives.
+func (b *ProxmoxBackend) StorageDirPath(ctx context.Context, storageName string) (string, error) {
+	storageName = strings.TrimSpace(storageName)
+	if storageName == "" {
+		return "", fmt.Errorf("storage is required")
+	}
+	var config struct {
+		Type string `json:"type"`
+		Path string `json:"path"`
+	}
+	if err := b.client.Get(ctx, "/storage/"+url.PathEscape(storageName), &config); err != nil {
+		return "", ClassifyError(err)
+	}
+	if config.Type != "dir" {
+		return "", fmt.Errorf("%w: storage %s has type %q; only dir storages are supported for backup copies (PBS must use its native mechanisms)", ErrInvalid, storageName, config.Type)
+	}
+	if strings.TrimSpace(config.Path) == "" {
+		return "", fmt.Errorf("%w: dir storage %s has no path configured", ErrInvalid, storageName)
+	}
+	return strings.TrimSpace(config.Path), nil
 }
 
 func (b *ProxmoxBackend) StorageContents(ctx context.Context, nodeName, storageName string) ([]output.StorageContentRow, error) {

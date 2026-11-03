@@ -94,6 +94,7 @@ var structuredOutputCommands = map[string]bool{
 	"storage get":           true,
 	"storage content ls":    true,
 	"backup ls":             true,
+	"backup copy":           true,
 	"network ls":            true,
 	"network get":           true,
 	"firewall status":       true,

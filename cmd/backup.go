@@ -10,9 +10,10 @@ import (
 func newBackupCommand(deps Dependencies) *cli.Command {
 	return &cli.Command{
 		Name:  "backup",
-		Usage: "List backup files",
+		Usage: "List and copy backup files",
 		Subcommands: []*cli.Command{
 			backupListCommand(deps),
+			backupCopyCommand(deps),
 		},
 	}
 }

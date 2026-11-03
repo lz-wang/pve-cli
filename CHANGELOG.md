@@ -4,6 +4,14 @@
 
 ### Added
 
+- `pve backup copy` cross-profile backup archive transfer between
+  independent PVE hosts over the two SSH transports (source `cat` → local
+  SHA-256/progress fan-out → target `dd`): dir-type storages only, target
+  never overwrites an existing archive (conflict), `.pve-cli-part` temporary
+  with checksum verification, limited resume of a complete part, atomic
+  rename publishing and interrupted-transfer cleanup. Observable progress on
+  stderr; `BackupCopyResult` reports bytes, the verified `sha256` and the
+  `resumed` flag.
 - `pve lxc migrate check` post-migration validation across both clusters:
   source presence/running state, target guest existence, target storage and
   bridge wiring, startability (locks), observable duplicate MACs (a running

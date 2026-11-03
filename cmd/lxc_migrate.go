@@ -12,6 +12,7 @@ import (
 	"github.com/lz-wang/pve-cli/v3/internal/config"
 	"github.com/lz-wang/pve-cli/v3/internal/output"
 	"github.com/lz-wang/pve-cli/v3/internal/pve"
+	"github.com/lz-wang/pve-cli/v3/internal/ssh"
 )
 
 // newLXCMigrateSubcommands holds the cross-profile LXC migration commands.
@@ -283,11 +284,14 @@ func parseMigrationMap(entries []string) (map[string]string, error) {
 
 // crossProfileSides carries the two independent cluster connections.
 type crossProfileSides struct {
-	request       crossProfileMigrationRequest
-	sourceProfile config.Profile
-	targetProfile config.Profile
-	sourceBackend pve.Backend
-	targetBackend pve.Backend
+	request           crossProfileMigrationRequest
+	sourceProfileName string
+	sourceProfile     config.Profile
+	sourceSSHProfile  *ssh.Profile
+	targetProfile     config.Profile
+	targetSSHProfile  *ssh.Profile
+	sourceBackend     pve.Backend
+	targetBackend     pve.Backend
 }
 
 func (s crossProfileSides) migrationOptions() pve.CrossProfileMigrationOptions {
@@ -331,12 +335,29 @@ func buildCrossProfileSides(c *cli.Context, deps Dependencies, request crossProf
 		return nil, fmt.Errorf("target profile %s: %w", request.to, err)
 	}
 	return &crossProfileSides{
-		request:       request,
-		sourceProfile: sourceProfile,
-		targetProfile: targetProfile,
-		sourceBackend: sourceBackend,
-		targetBackend: targetBackend,
+		request:           request,
+		sourceProfileName: sourceProfileName,
+		sourceProfile:     sourceProfile,
+		sourceSSHProfile:  sourceProfile.SSH,
+		targetProfile:     targetProfile,
+		targetSSHProfile:  targetProfile.SSH,
+		sourceBackend:     sourceBackend,
+		targetBackend:     targetBackend,
 	}, nil
+}
+
+// sshRunnersFor builds the SSH transports of both profiles; commands that
+// need host access fail with a clear error when a profile has no ssh
+// section.
+func sshRunnersFor(deps Dependencies, sides *crossProfileSides) (pve.CommandRunner, pve.CommandRunner, error) {
+	deps = deps.withDefaults()
+	if sides.sourceSSHProfile == nil {
+		return nil, nil, fmt.Errorf("%w: source profile %s has no ssh section", pve.ErrInvalid, sides.sourceProfileName)
+	}
+	if sides.targetSSHProfile == nil {
+		return nil, nil, fmt.Errorf("%w: target profile %s has no ssh section", pve.ErrInvalid, sides.request.to)
+	}
+	return deps.SSHRunnerFactory(*sides.sourceSSHProfile), deps.SSHRunnerFactory(*sides.targetSSHProfile), nil
 }
 
 func crossProfileBackend(c *cli.Context, deps Dependencies, profile config.Profile) (pve.Backend, error) {
