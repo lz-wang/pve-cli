@@ -2,9 +2,11 @@ package cmd
 
 import (
 	"errors"
-	"github.com/lz-wang/pve-cli/v3/internal/pve"
-	"github.com/urfave/cli/v2"
 	"strings"
+
+	"github.com/lz-wang/pve-cli/v3/internal/pve"
+	"github.com/lz-wang/pve-cli/v3/internal/ssh"
+	"github.com/urfave/cli/v2"
 )
 
 // ExitCode is the process-level v3 error contract.
@@ -12,12 +14,22 @@ func ExitCode(err error) int {
 	if err == nil {
 		return 0
 	}
+	// Remote command exit codes pass through untouched: automation must
+	// observe container command failures exactly as they failed.
+	var remote *pve.RemoteExitError
+	if errors.As(err, &remote) {
+		return remote.ExitCode()
+	}
 	var exit cli.ExitCoder
 	if errors.As(err, &exit) {
 		if exit.ExitCode() == 3 {
 			return 2
 		}
 		return exit.ExitCode()
+	}
+	var connect *ssh.ConnectError
+	if errors.As(err, &connect) {
+		return 3
 	}
 	switch {
 	case errors.Is(err, pve.ErrInvalid):

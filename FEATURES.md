@@ -22,6 +22,12 @@ See [usage](docs/usage.md) for every command, flag, default and argument, and
 
 - `vm/lxc ls/get` and aggregate `guest ls/get` with exact ID/name resolution,
   explicit numeric names, ambiguity reporting and complete inventory checks.
+- `lxc net set` attribute-wise network updates preserving unspecified
+  attributes, with bridge existence checks and digest conflict detection.
+- `lxc exec` container command execution through the optional host SSH
+  transport (`pct exec`): stream passthrough in text mode, bounded JSON
+  results with truncation markers, preserved remote exit codes and distinct
+  SSH connection failures.
 - Name/status/tag filters, all/any tag matching, and stable sorting by
   VMID/name/node/status/memory/CPU; missing metrics remain last.
 - Single-guest start, shutdown, reboot and stop; tracked async operation results.

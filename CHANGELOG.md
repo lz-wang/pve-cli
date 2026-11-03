@@ -4,6 +4,14 @@
 
 ### Added
 
+- `pve lxc exec` for SSH-backed command execution inside LXC containers via
+  `pct exec`: `--stdin` forwards standard input, `--timeout` bounds the run,
+  text mode passes the standard streams through live, and JSON mode returns
+  the existing agent-exec result structure with bounded output and a
+  `truncated` marker. Failing container commands preserve their actual exit
+  code as the process exit status; SSH connection/protocol failures are a
+  distinct error class (exit code 3). Requires a profile with an `ssh`
+  section (exit code 2 otherwise).
 - Optional per-profile host SSH transport (`internal/ssh`) reusing the
   system OpenSSH client: profiles accept an `ssh` section (`host`, `user`,
   `port`, `identity_file`, `known_hosts`). Host identity is always verified

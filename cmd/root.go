@@ -16,15 +16,21 @@ import (
 	"github.com/lz-wang/pve-cli/v3/internal/config"
 	"github.com/lz-wang/pve-cli/v3/internal/output"
 	"github.com/lz-wang/pve-cli/v3/internal/pve"
+	"github.com/lz-wang/pve-cli/v3/internal/ssh"
 )
 
 type BackendFactory func(config.Profile, pve.ClientOptions) (pve.Backend, error)
 
+// SSHRunnerFactory builds the optional host SSH transport from a profile's
+// ssh section.
+type SSHRunnerFactory func(profile ssh.Profile) pve.CommandRunner
+
 type Dependencies struct {
-	BackendFactory BackendFactory
-	Stdin          io.Reader
-	Stdout         io.Writer
-	Stderr         io.Writer
+	BackendFactory   BackendFactory
+	SSHRunnerFactory SSHRunnerFactory
+	Stdin            io.Reader
+	Stdout           io.Writer
+	Stderr           io.Writer
 }
 
 type BuildInfo struct {
@@ -41,6 +47,10 @@ type runtime struct {
 	verbose bool
 	stdout  io.Writer
 	stderr  io.Writer
+	// sshRunner is nil unless the selected profile declares an ssh section.
+	sshRunner pve.CommandRunner
+	// sshProfile records the raw section for error messages.
+	sshConfigured bool
 }
 
 func NewApp(version string) *cli.App {
@@ -193,6 +203,11 @@ func (d Dependencies) withDefaults() Dependencies {
 	if d.BackendFactory == nil {
 		d.BackendFactory = pve.NewProxmoxBackend
 	}
+	if d.SSHRunnerFactory == nil {
+		d.SSHRunnerFactory = func(profile ssh.Profile) pve.CommandRunner {
+			return ssh.NewRunner(profile)
+		}
+	}
 	if d.Stdin == nil {
 		d.Stdin = os.Stdin
 	}
@@ -252,7 +267,7 @@ func buildRuntime(c *cli.Context, deps Dependencies) (*runtime, error) {
 		waitTimeout = defaultWaitTimeout(c.Command.Name)
 	}
 
-	return &runtime{
+	runtimeOut := &runtime{
 		backend: backend,
 		format:  format,
 		tasks: pve.TaskRunner{
@@ -267,7 +282,12 @@ func buildRuntime(c *cli.Context, deps Dependencies) (*runtime, error) {
 		verbose: verbose,
 		stdout:  c.App.Writer,
 		stderr:  c.App.ErrWriter,
-	}, nil
+	}
+	if profileCfg.SSH != nil {
+		runtimeOut.sshRunner = deps.SSHRunnerFactory(*profileCfg.SSH)
+		runtimeOut.sshConfigured = true
+	}
+	return runtimeOut, nil
 }
 
 func resolveAPIRequestTimeout(c *cli.Context, profile config.Profile) (time.Duration, error) {

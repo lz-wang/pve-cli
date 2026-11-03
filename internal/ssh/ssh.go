@@ -98,6 +98,12 @@ type ConnectError struct {
 func (e *ConnectError) Error() string  { return e.detail }
 func (e *ConnectError) Stderr() string { return e.stderr }
 
+// NewConnectError builds a ConnectError from classified diagnostics. It
+// exists for callers that wrap other transports with the same semantics.
+func NewConnectError(detail, stderr string) *ConnectError {
+	return &ConnectError{detail: detail, stderr: stderr}
+}
+
 // Runner executes remote commands through the system ssh binary.
 type Runner struct {
 	profile Profile
@@ -112,7 +118,12 @@ func NewRunner(profile Profile) *Runner {
 // returned inside Result; a non-nil error means the command could not be
 // executed or classified (launch failure, context cancellation, or an SSH
 // connection-level failure wrapped in ConnectError).
-func (r *Runner) Run(ctx context.Context, stdin io.Reader, command string, args ...string) (Result, error) {
+//
+// stdout and stderr are optional live passthrough sinks (for example the
+// process streams in text mode). Output is always captured bounded as well,
+// for classification and for structured results; sink writers receive data
+// as it arrives.
+func (r *Runner) Run(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer, command string, args ...string) (Result, error) {
 	if err := r.profile.Validate(); err != nil {
 		return Result{}, fmt.Errorf("ssh profile: %w", err)
 	}
@@ -122,28 +133,22 @@ func (r *Runner) Run(ctx context.Context, stdin io.Reader, command string, args 
 		execFn = execCommand
 	}
 
-	var stdout, stderr limitedBuffer
-	stdout.limit = stdoutLimit
-	stderr.limit = stderrLimit
+	out := captureTee{limit: stdoutLimit, sink: stdout}
+	errTee := captureTee{limit: stderrLimit, sink: stderr}
 
-	exit, err := execFn(ctx, r.argv(profile, command, args), stdin, &stdout, &stderr)
+	exit, err := execFn(ctx, r.argv(profile, command, args), stdin, &out, &errTee)
 	result := Result{
 		ExitCode:        exit,
-		Stdout:          stdout.String(),
-		Stderr:          stderr.String(),
-		StdoutTruncated: stdout.truncated,
-		StderrTruncated: stderr.truncated,
+		Stdout:          out.String(),
+		Stderr:          errTee.String(),
+		StdoutTruncated: out.truncated,
+		StderrTruncated: errTee.truncated,
+	}
+	if isConnectFailure(exit, errTee.String()) {
+		return result, &ConnectError{detail: fmt.Sprintf("ssh connection failed: %s", strings.TrimSpace(errTee.String())), stderr: errTee.String()}
 	}
 	if err != nil {
-		if isConnectFailure(exit, stderr.String()) {
-			return result, &ConnectError{detail: fmt.Sprintf("ssh connection failed: %s", strings.TrimSpace(stderr.String())), stderr: stderr.String()}
-		}
 		return result, err
-	}
-	if exit == 255 {
-		if stderrText := stderr.String(); isConnectFailure(exit, stderrText) {
-			return result, &ConnectError{detail: fmt.Sprintf("ssh connection failed: %s", strings.TrimSpace(stderrText)), stderr: stderrText}
-		}
 	}
 	return result, nil
 }
@@ -237,14 +242,21 @@ func isConnectFailure(exit int, stderrText string) bool {
 	return false
 }
 
-// limitedBuffer keeps at most limit bytes and records truncation.
-type limitedBuffer struct {
+// captureTee keeps at most limit bytes (recording truncation) and
+// simultaneously forwards everything to an optional live sink.
+type captureTee struct {
 	limit     int
+	sink      io.Writer
 	data      []byte
 	truncated bool
 }
 
-func (b *limitedBuffer) Write(p []byte) (int, error) {
+func (b *captureTee) Write(p []byte) (int, error) {
+	if b.sink != nil {
+		if _, err := b.sink.Write(p); err != nil {
+			return len(p), err
+		}
+	}
 	if b.limit <= 0 {
 		b.limit = stdoutLimit
 	}
@@ -262,4 +274,4 @@ func (b *limitedBuffer) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-func (b *limitedBuffer) String() string { return string(b.data) }
+func (b *captureTee) String() string { return string(b.data) }

@@ -7,6 +7,11 @@
   verification for `config set` (`verified`/`api_error` semantics, no
   retries on uncertain outcomes); requested vs effective backup mode
   reporting sourced from task logs.
+- Configuration and LXC execution (P1): attribute-wise LXC network device
+  updates with bridge existence checks and digest-based conflict detection;
+  optional per-profile SSH transport over the system OpenSSH client;
+  `lxc exec` running container commands via `pct exec` with remote exit
+  codes preserved and SSH connection failures distinguished.
 
 - Cluster-aware unique resource resolution and typed failures.
 - Exact guest names, filtered/sorted inventory and native configuration.

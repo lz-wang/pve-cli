@@ -48,7 +48,7 @@ func TestRunnerBuildsSafeArgv(t *testing.T) {
 	exec := &recordedExec{}
 	runner := newTestRunner(exec, testProfile())
 
-	if _, err := runner.Run(context.Background(), nil, "pct", "exec", "101", "--", "systemctl", "status", "nginx"); err != nil {
+	if _, err := runner.Run(context.Background(), nil, nil, nil, "pct", "exec", "101", "--", "systemctl", "status", "nginx"); err != nil {
 		t.Fatalf("run: %v", err)
 	}
 	argv := exec.argv
@@ -101,7 +101,7 @@ func TestRunnerQuotesArguments(t *testing.T) {
 	exec := &recordedExec{}
 	runner := newTestRunner(exec, Profile{Host: "h"})
 
-	_, err := runner.Run(context.Background(), nil, "/usr/bin/echo",
+	_, err := runner.Run(context.Background(), nil, nil, nil, "/usr/bin/echo",
 		"two words", "it's", "$(rm -rf /)", "a;b|c&&d", `back\slash`, "newline\ninjected")
 	if err != nil {
 		t.Fatalf("run: %v", err)
@@ -134,7 +134,7 @@ func TestRunnerSeparatesExitCodeFromConnectFailure(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			exec := &recordedExec{exit: tc.exit, stdout: "out", stderr: tc.stderr}
 			runner := newTestRunner(exec, Profile{Host: "pve8845"})
-			result, err := runner.Run(context.Background(), nil, "true")
+			result, err := runner.Run(context.Background(), nil, nil, nil, "true")
 			if tc.wantConnect {
 				var connect *ConnectError
 				if !errors.As(err, &connect) {
@@ -162,7 +162,7 @@ func TestRunnerStreamsStdin(t *testing.T) {
 	exec := &recordedExec{stdout: "ok"}
 	runner := newTestRunner(exec, Profile{Host: "h"})
 
-	result, err := runner.Run(context.Background(), strings.NewReader("payload"), "cat")
+	result, err := runner.Run(context.Background(), strings.NewReader("payload"), nil, nil, "cat")
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
@@ -174,11 +174,36 @@ func TestRunnerStreamsStdin(t *testing.T) {
 	}
 }
 
+// Live passthrough sinks receive the full stream while capture stays
+// bounded for classification and structured output.
+func TestRunnerTeesToPassthroughSinks(t *testing.T) {
+	exec := &recordedExec{stdout: strings.Repeat("a", 4<<20), stderr: "warn"}
+	runner := newTestRunner(exec, Profile{Host: "h"})
+
+	var liveOut, liveErr bytes.Buffer
+	result, err := runner.Run(context.Background(), nil, &liveOut, &liveErr, "true")
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if liveOut.Len() != 4<<20 {
+		t.Fatalf("passthrough stdout len = %d, want full stream", liveOut.Len())
+	}
+	if liveErr.String() != "warn" {
+		t.Fatalf("passthrough stderr = %q", liveErr.String())
+	}
+	if !result.StdoutTruncated || len(result.Stdout) != stdoutLimit {
+		t.Fatalf("capture len = %d truncated = %v", len(result.Stdout), result.StdoutTruncated)
+	}
+	if result.Stderr != "warn" {
+		t.Fatalf("captured stderr = %q", result.Stderr)
+	}
+}
+
 func TestRunnerBoundsOutput(t *testing.T) {
 	exec := &recordedExec{stdout: strings.Repeat("a", 4<<20), stderr: strings.Repeat("b", 4<<20)}
 	runner := newTestRunner(exec, Profile{Host: "h"})
 
-	result, err := runner.Run(context.Background(), nil, "true")
+	result, err := runner.Run(context.Background(), nil, nil, nil, "true")
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
@@ -196,7 +221,7 @@ func TestRunnerRespectsContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	if _, err := runner.Run(ctx, nil, "true"); !errors.Is(err, context.Canceled) {
+	if _, err := runner.Run(ctx, nil, nil, nil, "true"); !errors.Is(err, context.Canceled) {
 		t.Fatalf("err = %v, want canceled", err)
 	}
 }
@@ -205,7 +230,7 @@ func TestRunnerLaunchFailure(t *testing.T) {
 	exec := &recordedExec{launch: errors.New("binary not found")}
 	runner := newTestRunner(exec, Profile{Host: "h"})
 
-	if _, err := runner.Run(context.Background(), nil, "true"); err == nil {
+	if _, err := runner.Run(context.Background(), nil, nil, nil, "true"); err == nil {
 		t.Fatal("expected launch error")
 	}
 }
@@ -238,7 +263,7 @@ func TestProfileDefaults(t *testing.T) {
 func TestRunnerFailsWithoutHost(t *testing.T) {
 	exec := &recordedExec{}
 	runner := newTestRunner(exec, Profile{})
-	if _, err := runner.Run(context.Background(), nil, "true"); err == nil {
+	if _, err := runner.Run(context.Background(), nil, nil, nil, "true"); err == nil {
 		t.Fatal("expected profile error")
 	}
 }
@@ -246,7 +271,7 @@ func TestRunnerFailsWithoutHost(t *testing.T) {
 func TestRunnerUsesCustomKnownHosts(t *testing.T) {
 	exec := &recordedExec{}
 	runner := newTestRunner(exec, Profile{Host: "h", KnownHosts: "/etc/pve/known_hosts"})
-	if _, err := runner.Run(context.Background(), nil, "true"); err != nil {
+	if _, err := runner.Run(context.Background(), nil, nil, nil, "true"); err != nil {
 		t.Fatal(err)
 	}
 	if !containsPair(exec.argv, "-o", "UserKnownHostsFile=/etc/pve/known_hosts") {
@@ -257,7 +282,7 @@ func TestRunnerUsesCustomKnownHosts(t *testing.T) {
 func TestRunnerOmitsPortArgForDefault(t *testing.T) {
 	exec := &recordedExec{}
 	runner := newTestRunner(exec, Profile{Host: "h", Port: 2222})
-	if _, err := runner.Run(context.Background(), nil, "true"); err != nil {
+	if _, err := runner.Run(context.Background(), nil, nil, nil, "true"); err != nil {
 		t.Fatal(err)
 	}
 	if !containsPair(exec.argv, "-p", "2222") {

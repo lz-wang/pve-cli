@@ -73,6 +73,23 @@ Remote command arguments are strictly quoted, remote exit codes are reported
 as data, and SSH connection failures are reported as a distinct error class
 rather than a command exit code. Command output is not logged by default.
 
+### LXC command execution
+
+```bash
+pve --profile pve8845 lxc exec 101 --node pve8845 -- /usr/bin/systemctl status nginx
+pve lxc exec 101 --stdin --timeout 30s -o json -- /usr/local/bin/backup.sh
+```
+
+`lxc exec` runs a command inside an LXC container through the host SSH
+transport (`pct exec`); the REST API has no equivalent endpoint, so the
+command requires a profile with an `ssh` section and fails with exit code 2
+otherwise. Text mode passes stdout/stderr (and stdin with `--stdin`) through
+live. JSON mode returns the bounded result with `exit_code`, `stdout`,
+`stderr` and a `truncated` marker. A failing container command preserves its
+actual exit code as the process exit status; SSH connection or protocol
+failures exit with 3 instead. The guest is resolved through the API before
+the host command is issued.
+
 ## Queries and resource resolution
 
 ```bash
@@ -1105,6 +1122,21 @@ pve lxc net set VMID
 | `--tag` | --tag value set tag= attribute (VLAN tag) |
 | `--rate` | --rate value set rate= attribute (MB/s limit) |
 | `--name` | --name value exact guest name (including numeric names) |
+
+### `pve lxc exec`
+
+Run a command inside an LXC container via the host SSH transport
+
+```text
+pve lxc exec VMID -- COMMAND [ARGS...]
+```
+
+| Flag | Description and default |
+|---|---|
+| `--node` | --node value PVE node name |
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+| `--stdin` | --stdin forward standard input to the container command (default: false) |
+| `--timeout` | --timeout value terminate the command after this duration (default: 0s) |
 
 ### `pve lxc config get`
 
