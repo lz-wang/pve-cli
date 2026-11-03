@@ -13,6 +13,14 @@ type OperationResult struct {
 	Task     string `json:"task,omitempty" yaml:"task,omitempty"`
 	Status   string `json:"status" yaml:"status"`
 	Error    string `json:"error,omitempty" yaml:"error,omitempty"`
+	// Verified reports the post-write state check for configuration
+	// mutations. nil means the outcome was not verified (submitted async,
+	// unverifiable value, or no verification backend); false means the
+	// re-read state differs from the requested values.
+	Verified *bool `json:"verified,omitempty" yaml:"verified,omitempty"`
+	// APIError preserves the original sanitized API failure when a write
+	// errored but the follow-up state check confirmed the requested values.
+	APIError string `json:"api_error,omitempty" yaml:"api_error,omitempty"`
 }
 
 func WriteOperation(w io.Writer, format string, r OperationResult) error {

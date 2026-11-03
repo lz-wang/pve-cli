@@ -87,6 +87,19 @@ The following reference is generated from the actual output structs.
 | `task` | `string` | yes |
 | `status` | `string` | no |
 | `error` | `string` | yes |
+| `verified` | `bool` | yes |
+| `api_error` | `string` | yes |
+
+`verified` is only set for configuration mutations with a write-after-read
+state check: `true` means every requested value was confirmed in effect;
+`false` means at least one requested value definitely differs. Omitted means
+the outcome was not verified (async submission still pending, unverifiable
+value such as a hashed credential, or no readable configuration backend).
+
+`api_error` preserves the original sanitized API failure when a write errored
+(or its wait timed out) but the follow-up state check still confirmed the
+requested values; `status` then reports `succeeded` with `verified: true`
+instead of masking the anomaly.
 
 ## CloneResult
 

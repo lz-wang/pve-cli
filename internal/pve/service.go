@@ -146,6 +146,11 @@ func (s *GuestService) Clone(ctx context.Context, vmid int, node string, options
 	return result, err
 }
 
+// Config submits a native configuration write and verifies the outcome by
+// re-reading the guest configuration whenever a reliable comparison is
+// possible. The four-step contract is: submit, then re-read, then compare
+// normalized values, then report confirmed/mismatched/unknown. Writes in an
+// uncertain state are never retried.
 func (s *GuestService) Config(ctx context.Context, vmid int, node string, values map[string]string) error {
 	if len(values) == 0 {
 		return fmt.Errorf("at least one --set key=value is required")
@@ -154,6 +159,13 @@ func (s *GuestService) Config(ctx context.Context, vmid int, node string, values
 	if err != nil {
 		return err
 	}
+	guestNode := guest.Row().Node
+	runner := s.tasks
+	runner.Resource = s.kind
+	runner.VMID = vmid
+	runner.Node = guestNode
+
+	var submitErr error
 	task, err := guest.Config(ctx, values)
 	if err != nil {
 		for key, value := range values {
@@ -161,13 +173,38 @@ func (s *GuestService) Config(ctx context.Context, vmid int, node string, values
 				err = redactError(err, value)
 			}
 		}
-		return ClassifyError(err)
+		submitErr = ClassifyError(err)
 	}
-	runner := s.tasks
-	runner.Resource = s.kind
-	runner.VMID = vmid
-	runner.Node = guest.Row().Node
-	return runner.Handle(ctx, task)
+
+	var operation output.OperationResult
+	var priorErr error
+	switch {
+	case submitErr != nil:
+		operation = output.OperationResult{Resource: s.kind, VMID: vmid, Node: guestNode, Status: "unknown"}
+		priorErr = submitErr
+	default:
+		operation, priorErr = runner.Execute(ctx, task)
+		// Async submissions and failed tasks keep their existing semantics;
+		// verification only applies once the write settled (synchronous
+		// return, completed wait, or a wait whose outcome is unknown).
+		if operation.Status == "submitted" || (priorErr != nil && !errors.Is(priorErr, ErrTaskTimeout)) {
+			return s.finishConfig(runner, operation, priorErr)
+		}
+	}
+
+	outcome := s.verifyConfigWrite(ctx, guestNode, vmid, values)
+	finalErr := applyVerification(&operation, priorErr, outcome)
+	return s.finishConfig(runner, operation, finalErr)
+}
+
+// finishConfig writes the mutation result once and returns the command error.
+func (s *GuestService) finishConfig(runner TaskRunner, operation output.OperationResult, err error) error {
+	if runner.ResultWriter != nil {
+		if e := output.WriteOperation(runner.ResultWriter, runner.Format, operation); e != nil {
+			return e
+		}
+	}
+	return err
 }
 
 func (s *GuestService) Delete(ctx context.Context, vmid int, node string) error {

@@ -4,6 +4,18 @@
 
 ### Fixed
 
+- `vm/lxc config set` now verifies mutation outcomes by re-reading the
+  configuration after the write settles. `OperationResult` gains additive
+  `verified` (tri-state) and `api_error` fields: a write that errors but is
+  confirmed in effect reports `succeeded` + `verified=true` while preserving
+  the original sanitized API error in `api_error`; a clean write whose
+  re-read state differs reports `failed` + `verified=false` with mismatch
+  details; unreadable final states stay `unknown`. Value comparison
+  normalizes numeric strings ("0" vs `0`), matches PVE option strings
+  attribute-wise (hwaddr/digest appends), skips hashed credential fields,
+  and redacts sensitive values from mismatch output. Uncertain writes are
+  never automatically retried.
+
 - HTTP error responses now preserve sanitized PVE details instead of
   discarding the body: `APIError` carries the HTTP status, CLI semantic
   category, sanitized server message, field-level validation errors, and the

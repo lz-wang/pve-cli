@@ -679,6 +679,8 @@ type fakeGuest struct {
 	cloneName        string
 	cloneOptions     CloneOptions
 	configValues     map[string]string
+	configErr        error
+	configCalls      int
 	deleted          bool
 	rebooted         bool
 	migrateOptions   MigrateOptions
@@ -744,7 +746,11 @@ func (g *fakeGuest) Clone(_ context.Context, options CloneOptions) (CloneResult,
 }
 
 func (g *fakeGuest) Config(_ context.Context, values map[string]string) (Task, error) {
+	g.configCalls++
 	g.configValues = values
+	if g.configErr != nil {
+		return nil, g.configErr
+	}
 	return g.task, nil
 }
 
