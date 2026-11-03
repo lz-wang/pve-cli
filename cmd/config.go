@@ -100,12 +100,18 @@ func newConfigShowCommand(deps Dependencies) *cli.Command {
 			rows := make([]output.ConfigProfileRow, 0, len(names))
 			for _, name := range names {
 				profile := cfg.Profiles[name]
-				rows = append(rows, output.ConfigProfileRow{
+				row := output.ConfigProfileRow{
 					Name: name, Current: name == cfg.CurrentProfile, Endpoint: profile.Endpoint,
 					TokenID: profile.TokenID, TokenSecretFile: profile.TokenSecretFile,
 					TokenSecretEnv: profile.TokenSecretEnv, InsecureSkipVerify: profile.InsecureSkipVerify,
 					Timeout: profile.Timeout, DefaultOutput: profile.DefaultOutput,
-				})
+				}
+				if profile.SSH != nil {
+					row.SSHHost = profile.SSH.Host
+					row.SSHUser = profile.SSH.User
+					row.SSHIdentityFile = profile.SSH.IdentityFile
+				}
+				rows = append(rows, row)
 			}
 			if err := output.WriteConfigProfiles(c.App.Writer, rows); err != nil {
 				return err

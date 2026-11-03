@@ -4,6 +4,18 @@
 
 ### Added
 
+- Optional per-profile host SSH transport (`internal/ssh`) reusing the
+  system OpenSSH client: profiles accept an `ssh` section (`host`, `user`,
+  `port`, `identity_file`, `known_hosts`). Host identity is always verified
+  (`accept-new`; verification cannot be disabled), BatchMode restricts auth
+  to key files/agent, remote arguments are strictly POSIX-quoted before the
+  remote shell sees them, output capture is bounded with truncation flags,
+  and SSH connection failures (`ConnectError`) are distinguished from remote
+  command exit codes. `config show` displays the SSH reference fields (no
+  secrets are stored in the section).
+
+### Fixed
+
 - `pve lxc net set` for safe partial updates of LXC network devices: reads
   the complete device configuration, modifies only the requested attributes
   (`--bridge`, `--iface`, `--ip`, `--gw`, `--tag`, `--rate`), verifies the

@@ -10,6 +10,8 @@ import (
 	"strings"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/lz-wang/pve-cli/v3/internal/ssh"
 )
 
 const DefaultPath = "~/.config/pve/config.yaml"
@@ -27,6 +29,10 @@ type Profile struct {
 	InsecureSkipVerify bool   `yaml:"insecure_skip_verify,omitempty"`
 	Timeout            string `yaml:"timeout,omitempty"`
 	DefaultOutput      string `yaml:"default_output,omitempty"`
+	// SSH is the optional host SSH transport. It carries no secrets (key
+	// files and the system agent only) and its credentials are independent
+	// from the API token.
+	SSH *ssh.Profile `yaml:"ssh,omitempty"`
 }
 
 type InitOptions struct {
@@ -252,6 +258,11 @@ func validateProfile(profile Profile) error {
 	}
 	if profile.TokenSecretFile == "" && profile.TokenSecretEnv == "" {
 		return errors.New("token-secret-file or token-secret-env is required")
+	}
+	if profile.SSH != nil {
+		if err := profile.SSH.Validate(); err != nil {
+			return fmt.Errorf("ssh: %w", err)
+		}
 	}
 	return nil
 }

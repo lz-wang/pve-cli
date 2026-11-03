@@ -46,6 +46,33 @@ and ends with the absolute config path. Config writes use 0600 permissions on
 Unix. `config set` does not switch an existing current profile. Missing config
 files offer interactive setup; interrupted prompts preserve existing files.
 
+### Optional host SSH transport
+
+Profiles may declare an SSH section for host operations the REST API cannot
+express (`lxc exec`, offline maintenance, backup file transfer):
+
+```yaml
+profiles:
+  home:
+    endpoint: https://pve.example:8006/api2/json
+    token_id: automation@pve!cli
+    token_secret_env: PVE_HOME_TOKEN
+    ssh:
+      host: pve.example
+      user: root
+      identity_file: ~/.ssh/id_ed25519
+```
+
+The transport reuses the system OpenSSH client with `BatchMode` (key files
+and the system agent only — no passwords are stored or prompted), always
+verifies host identity against `known_hosts` (`accept-new`; there is no
+option to disable verification), and optionally accepts `port` and a custom
+`known_hosts` path. SSH credentials are independent from the API token: the
+token keeps managing PVE resources; SSH only carries host-level commands.
+Remote command arguments are strictly quoted, remote exit codes are reported
+as data, and SSH connection failures are reported as a distinct error class
+rather than a command exit code. Command output is not logged by default.
+
 ## Queries and resource resolution
 
 ```bash

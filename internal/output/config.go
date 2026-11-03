@@ -19,6 +19,9 @@ type ConfigProfileRow struct {
 	InsecureSkipVerify bool
 	Timeout            string
 	DefaultOutput      string
+	SSHHost            string
+	SSHUser            string
+	SSHIdentityFile    string
 }
 
 // WriteConfigProfileList renders only profile names and endpoints.
@@ -62,6 +65,13 @@ func WriteConfigProfiles(w io.Writer, rows []ConfigProfileRow) error {
 			{"Skip TLS verify", formatBool(row.InsecureSkipVerify)},
 			{"Timeout", row.Timeout},
 			{"Default output", row.DefaultOutput},
+		}
+		if row.SSHHost != "" {
+			fields = append(fields,
+				[2]string{"SSH host", row.SSHHost},
+				[2]string{"SSH user", row.SSHUser},
+				[2]string{"SSH identity file", row.SSHIdentityFile},
+			)
 		}
 		for _, field := range fields {
 			if _, err := fmt.Fprintf(tw, "%s\t%s\n", field[0], configCell(field[1])); err != nil {
