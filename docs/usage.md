@@ -104,6 +104,25 @@ with the reasons in the error message and exit code 4; a passing preflight
 is silent. With `--wait` and a completed restore, bridge mappings are
 applied to the restored guest's network devices automatically.
 
+### Offline emergency maintenance
+
+```bash
+pve lxc mount 101 --node pve8845
+pve lxc unmount 101 --node pve8845
+```
+
+`lxc mount`/`lxc unmount` wrap `pct mount`/`pct unmount` over the host SSH
+transport for emergency maintenance. `--node` is required; the container
+must exist and be stopped (running guests are refused), double mounts are
+refused, and there is deliberately no `--force`. The result reports the
+real host path (`/var/lib/lxc/VMID/rootfs` by default, or whatever `pct`
+reports) and re-verifies the observable mount state after every operation:
+an unconfirmable outcome reports `unknown` with a manual-cleanup hint
+(check locks, run `pct unmount`) instead of pretending success. `unmount`
+is idempotent — an already-released container is reported without invoking
+pct. While mounted, PVE holds the container's locks: expect other
+operations on the guest to fail until it is unmounted.
+
 ### Cross-profile backup copy
 
 ```bash
@@ -1235,6 +1254,34 @@ pve lxc exec VMID -- COMMAND [ARGS...]
 | `--output`, `-o` | --output value, -o value output format: table,json,yaml |
 | `--stdin` | --stdin forward standard input to the container command (default: false) |
 | `--timeout` | --timeout value terminate the command after this duration (default: 0s) |
+
+### `pve lxc mount`
+
+Mount a stopped container's rootfs on the host (emergency maintenance)
+
+```text
+pve lxc mount VMID
+```
+
+| Flag | Description and default |
+|---|---|
+| `--node` | --node value PVE node name |
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+| `--name` | --name value exact guest name (including numeric names) |
+
+### `pve lxc unmount`
+
+Release a mounted container rootfs on the host
+
+```text
+pve lxc unmount VMID
+```
+
+| Flag | Description and default |
+|---|---|
+| `--node` | --node value PVE node name |
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+| `--name` | --name value exact guest name (including numeric names) |
 
 ### `pve lxc config get`
 

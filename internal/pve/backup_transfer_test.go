@@ -17,21 +17,29 @@ import (
 )
 
 // scriptedRunner replays canned results per "command args" key and records
-// the call order.
+// the call order. Sequences (onSeq) replay in order before falling back to
+// the single canned result.
 type scriptedRunner struct {
 	mu       sync.Mutex
 	calls    []string
 	stdinOf  map[string]io.Reader
 	script   map[string]ssh.Result
+	sequence map[string][]ssh.Result
 	defaults ssh.Result
 }
 
 func newScriptedRunner() *scriptedRunner {
-	return &scriptedRunner{script: map[string]ssh.Result{}, defaults: ssh.Result{ExitCode: 0}}
+	return &scriptedRunner{script: map[string]ssh.Result{}, sequence: map[string][]ssh.Result{}, defaults: ssh.Result{ExitCode: 0}}
 }
 
 func (r *scriptedRunner) on(command string, result ssh.Result) *scriptedRunner {
 	r.script[command] = result
+	return r
+}
+
+// onSeq queues ordered results for a command key.
+func (r *scriptedRunner) onSeq(command string, results ...ssh.Result) *scriptedRunner {
+	r.sequence[command] = append(r.sequence[command], results...)
 	return r
 }
 
@@ -46,7 +54,10 @@ func (r *scriptedRunner) Run(_ context.Context, stdin io.Reader, stdout, _ io.Wr
 		r.stdinOf[key] = stdin
 	}
 	result := r.defaults
-	if scripted, ok := r.script[key]; ok {
+	if queued := r.sequence[key]; len(queued) > 0 {
+		result = queued[0]
+		r.sequence[key] = queued[1:]
+	} else if scripted, ok := r.script[key]; ok {
 		result = scripted
 	}
 	r.mu.Unlock()

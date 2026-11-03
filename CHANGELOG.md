@@ -4,6 +4,13 @@
 
 ### Added
 
+- `pve lxc mount`/`pve lxc unmount` for controlled offline emergency
+  maintenance over the host SSH transport: `--node` is required, running
+  guests and double mounts are refused, there is no `--force`, the real
+  host path is reported, and the observable mount state is re-verified
+  after every operation — unconfirmable outcomes report `unknown` with a
+  manual-cleanup hint instead of pretending success. `unmount` is
+  idempotent.
 - `pve backup copy-restore` composing backup → transfer (checksum verify)
   → preflighted restore → post-check between two independent PVE hosts.
   Each stage reports its own status/task; a failing stage stops the

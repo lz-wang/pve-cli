@@ -76,6 +76,8 @@ var structuredOutputCommands = map[string]bool{
 	"lxc migrate plan":      true,
 	"lxc migrate remote":    true,
 	"lxc migrate check":     true,
+	"lxc mount":             true,
+	"lxc unmount":           true,
 	"lxc exec":              true,
 	"lxc snapshot ls":       true,
 	"lxc backup":            true,

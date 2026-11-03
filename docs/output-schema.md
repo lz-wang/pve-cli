@@ -18,6 +18,12 @@ the write errored but the requested values were confirmed in effect); see
 `OperationResult` below. Backup results separate the requested mode from the
 mode the task actually used (`requested_mode`/`effective_mode`, sourced from
 the task log when determinable, `unknown` otherwise); see `BackupResult`.
+Cross-profile migration/restore plans (`MigrationPlan`) and the composed
+backup pipeline (`WorkflowResult`) report per-check/per-stage statuses with
+explicit `unknown` for facts the API cannot observe; `LXCMountResult.mounted`
+reflects the re-verified observable mount state, where `unknown` after a
+mount means the outcome could not be confirmed and manual cleanup may be
+required.
 
 `StatusReport.complete=false` means component queries failed. Component errors
 are grouped by name and also appear as issue rows. Counts in such reports are
@@ -187,6 +193,73 @@ The following reference is generated from the actual output structs.
 | `archive` | `string` | no |
 | `storage` | `string` | yes |
 | `task` | `string` | yes |
+
+## MigrationCheckRow
+
+| Field | Go / wire value type | May be omitted |
+|---|---|---|
+| `check` | `string` | no |
+| `status` | `string` | no |
+| `message` | `string` | no |
+
+## MigrationPlan
+
+| Field | Go / wire value type | May be omitted |
+|---|---|---|
+| `resource` | `string` | no |
+| `vmid` | `int` | no |
+| `node` | `string` | no |
+| `target_node` | `string` | yes |
+| `target_vmid` | `int` | yes |
+| `status` | `string` | no |
+| `checks` | `[]output.MigrationCheckRow` | no |
+
+## BackupCopyResult
+
+| Field | Go / wire value type | May be omitted |
+|---|---|---|
+| `resource` | `string` | no |
+| `status` | `string` | no |
+| `error` | `string` | yes |
+| `source_volid` | `string` | no |
+| `target_storage` | `string` | no |
+| `target_path` | `string` | no |
+| `bytes` | `uint64` | no |
+| `sha256` | `string` | yes |
+| `resumed` | `bool` | yes |
+
+## WorkflowStageResult
+
+| Field | Go / wire value type | May be omitted |
+|---|---|---|
+| `stage` | `string` | no |
+| `status` | `string` | no |
+| `task` | `string` | yes |
+| `detail` | `string` | yes |
+
+## WorkflowResult
+
+| Field | Go / wire value type | May be omitted |
+|---|---|---|
+| `resource` | `string` | no |
+| `vmid` | `int` | no |
+| `target_vmid` | `int` | no |
+| `target_node` | `string` | yes |
+| `archive` | `string` | yes |
+| `status` | `string` | no |
+| `stages` | `[]output.WorkflowStageResult` | no |
+
+## LXCMountResult
+
+| Field | Go / wire value type | May be omitted |
+|---|---|---|
+| `resource` | `string` | no |
+| `vmid` | `int` | no |
+| `node` | `string` | no |
+| `status` | `string` | no |
+| `mounted` | `bool` | no |
+| `path` | `string` | yes |
+| `message` | `string` | yes |
 
 ## StatusReport
 
