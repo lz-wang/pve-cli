@@ -59,19 +59,27 @@ profiles:
     token_secret_env: PVE_HOME_TOKEN
     ssh:
       host: pve.example
+      node: pve8845
       user: root
       identity_file: ~/.ssh/id_ed25519
 ```
 
-The transport reuses the system OpenSSH client with `BatchMode` (key files
-and the system agent only — no passwords are stored or prompted), always
-verifies host identity against `known_hosts` (`accept-new`; there is no
-option to disable verification), and optionally accepts `port` and a custom
-`known_hosts` path. SSH credentials are independent from the API token: the
-token keeps managing PVE resources; SSH only carries host-level commands.
-Remote command arguments are strictly quoted, remote exit codes are reported
-as data, and SSH connection failures are reported as a distinct error class
-rather than a command exit code. Command output is not logged by default.
+`node` declares which PVE node the SSH host runs. It is required for every
+pct-bearing command (`lxc exec`, `lxc mount`, `lxc unmount`): those commands
+refuse to run unless the API-resolved guest node equals it — two hosts can
+host the same VMID, and one SSH profile maps to exactly one PVE node in this
+version. The transport reuses the system OpenSSH client with `BatchMode`
+(key files and the system agent only — no passwords are stored or prompted),
+always verifies host identity against `known_hosts` (`accept-new`; there is
+no option to disable verification), and optionally accepts `port` and a
+custom `known_hosts` path. Note that `accept-new` is trust-on-first-use:
+for high-risk changes, pre-seed `known_hosts` with the host key so the first
+connection is verified too. SSH credentials are independent from the API
+token: the token keeps managing PVE resources; SSH only carries host-level
+commands. Remote command arguments are strictly quoted, remote exit codes
+are reported as data, and SSH connection failures are reported as a distinct
+error class rather than a command exit code. Command output is not logged by
+default.
 
 ### LXC command execution
 
@@ -82,13 +90,15 @@ pve lxc exec 101 --stdin --timeout 30s -o json -- /usr/local/bin/backup.sh
 
 `lxc exec` runs a command inside an LXC container through the host SSH
 transport (`pct exec`); the REST API has no equivalent endpoint, so the
-command requires a profile with an `ssh` section and fails with exit code 2
-otherwise. Text mode passes stdout/stderr (and stdin with `--stdin`) through
-live. JSON mode returns the bounded result with `exit_code`, `stdout`,
-`stderr` and a `truncated` marker. A failing container command preserves its
-actual exit code as the process exit status; SSH connection or protocol
-failures exit with 3 instead. The guest is resolved through the API before
-the host command is issued.
+command requires a profile with an `ssh` section (declaring `node`) and
+fails with exit code 2 otherwise. The command is refused — before any pct
+invocation — when the ssh section's `node` disagrees with the node the API
+resolved the guest on. Text mode passes stdout/stderr (and stdin with
+`--stdin`) through live. JSON mode returns the bounded result with
+`exit_code`, `stdout`, `stderr` and a `truncated` marker. A failing
+container command preserves its actual exit code as the process exit status;
+SSH connection or protocol failures exit with 3 instead. The guest is
+resolved through the API before the host command is issued.
 
 ### Restore preflight
 
@@ -97,12 +107,17 @@ target VMID availability across the cluster, archive readability (the
 volume must be listed on its storage), target storage existence, activation
 and capacity against the archive size, and — when `--bridge-map
 source=target` is given — that every mapped target bridge exists on the
-target node. Facts that live inside the archive (onboot, MAC/IP, bind
-mounts, device passthrough) are reported as unknowns by design, and the
-restored guest is never started automatically. A failing preflight aborts
-with the reasons in the error message and exit code 4; a passing preflight
-is silent. With `--wait` and a completed restore, bridge mappings are
-applied to the restored guest's network devices automatically.
+target node (only actual bridges qualify; an ordinary interface with the
+same name is refused). Capacity is judged against the compressed archive
+size, which is only a lower bound for the restored footprint — the plan
+says so explicitly. Facts that live inside the archive (onboot, MAC/IP,
+bind mounts, device passthrough) are reported as unknowns by design, and
+the restored guest is never started automatically. A failing preflight
+aborts with the reasons in the error message and exit code 4; a passing
+preflight is silent. With `--wait` and a completed restore, bridge mappings
+are applied to the restored guest's network devices automatically; when
+that post-restore configuration fails, the workflow reports the restore
+stage as `partial` with the succeeded task ID and fails the workflow.
 
 ### Offline emergency maintenance
 
@@ -114,14 +129,19 @@ pve lxc unmount 101 --node pve8845
 `lxc mount`/`lxc unmount` wrap `pct mount`/`pct unmount` over the host SSH
 transport for emergency maintenance. `--node` is required; the container
 must exist and be stopped (running guests are refused), double mounts are
-refused, and there is deliberately no `--force`. The result reports the
-real host path (`/var/lib/lxc/VMID/rootfs` by default, or whatever `pct`
-reports) and re-verifies the observable mount state after every operation:
-an unconfirmable outcome reports `unknown` with a manual-cleanup hint
-(check locks, run `pct unmount`) instead of pretending success. `unmount`
-is idempotent — an already-released container is reported without invoking
-pct. While mounted, PVE holds the container's locks: expect other
-operations on the guest to fail until it is unmounted.
+refused, and there is deliberately no `--force`. The command is refused —
+before any pct invocation — when the profile's `ssh.node` disagrees with
+the container's node. The result reports the real host path
+(`/var/lib/lxc/VMID/rootfs` by default, or whatever `pct` reports) and
+re-verifies the observable mount state after every operation: an
+unconfirmable outcome reports `unknown` with a manual-cleanup hint (check
+locks, run `pct unmount`) and fails the command with exit code 5 — exit 0
+never stands for an unverified state. The same distinction applies to the
+mount-state probes themselves: a probe that cannot determine the state is
+an error, not a "not mounted". `unmount` is idempotent — an
+already-released container is reported without invoking pct. While
+mounted, PVE holds the container's locks: expect other operations on the
+guest to fail until it is unmounted.
 
 ### Cross-profile backup copy
 
@@ -134,13 +154,18 @@ pve backup copy local:backup/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst \
 over their SSH transports: source `cat` → local SHA-256 and progress
 fan-out → target `dd`. It requires `ssh` sections on both profiles and only
 supports dir-type storages (host-filesystem archives); PBS storages must use
-their native mechanisms. The target never overwrites an existing archive
-(conflict, exit 4). Transfers write a `.pve-cli-part` file first; a leftover
-part with the complete size is verified by checksum and resumed instead of
-re-transferred, a checksum mismatch fails and cleans the part file up, and
-publishing is an atomic rename. Transfer progress (`transferred N`) goes to
-stderr; the result reports bytes, the verified `sha256` and the `resumed`
-flag.
+their native mechanisms. The source PVE node is resolved from the API by
+finding the node whose storage lists the archive — the SSH host name is
+never assumed to be the node name; pass `--node` to pin it. The target
+never overwrites an existing archive: publication is an atomic hard link
+(fails if the file appeared concurrently), and an existing file is accepted
+only when its checksum matches the source — an idempotent continuation of a
+previous interrupted run. A different existing file conflicts (exit 4).
+Transfers write a `.pve-cli-part` file first; a leftover part with the
+complete size is verified by checksum and resumed (complete-temp-file
+recovery, not byte-range resumption), a checksum mismatch fails and cleans
+the part file up. Transfer progress (`transferred N`) goes to stderr; the
+result reports bytes, the verified `sha256` and the `resumed` flag.
 
 ### Composed backup-copy-restore workflow
 
@@ -152,14 +177,25 @@ pve backup copy-restore 101 --from n150 --to pve8845 \
 
 `backup copy-restore` chains the stages built in this section — backup,
 transfer (with checksum verify), restore (preflighted), post-check — and
-reports every stage with its own status (`succeeded`/`skipped`/`failed`)
-and task ID. A failing stage stops the pipeline; nothing rolls back
-automatically, both sides stay as they are. Resume is deliberately limited:
-an existing target guest means the earlier stages already completed (only
-the post-check runs), and `--archive VOLID` restarts from an existing
-backup instead of taking a new one. `--wait` is required because the
-pipeline is meaningless without confirming each task; bridge mappings apply
-after the restore like in plain `restore`.
+reports every stage with its own status (`succeeded`/`skipped`/`failed`/
+`partial`/`warning`) and task ID. A failing stage stops the pipeline;
+nothing rolls back automatically, both sides stay as they are. The source
+node for the transfer is the source guest's API-resolved node (`--node`
+overrides; the SSH host name is never assumed). An existing target guest
+refuses the workflow outright (conflict, exit 4): the same VMID is not
+proof that this workflow created it, and there is no persisted run
+identity to prove a resume — remove the guest or choose another
+`--target-vmid`. Continuation is operator-verified: `--archive VOLID`
+skips the backup and continues from a named archive; an already-published
+target file is accepted only after a checksum match. A restore task that
+succeeded while its post-restore configuration (bridge mapping) failed
+reports the stage as `partial` and fails the workflow. The post-check
+always carries unconfirmed risks (MAC/IP, DHCP, autostart are not
+observable via the API): when those remain, the overall result is
+`warning` — not an unconditional `succeeded` — listing the unconfirmed
+checks. `--wait` is required because the pipeline is meaningless without
+confirming each task; bridge mappings apply after the restore like in
+plain `restore`.
 
 ### Cross-profile migration
 

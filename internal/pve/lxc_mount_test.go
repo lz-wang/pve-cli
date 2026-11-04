@@ -238,3 +238,22 @@ func TestLXCMountRejectsSSHNodeMismatch(t *testing.T) {
 		t.Fatalf("unmount err = %v, want ErrInvalid", err)
 	}
 }
+
+// P2: mountpoint exit codes distinguish "not mounted" (1) from "cannot
+// determine" (other) — the latter must never read as a safe unmounted.
+func TestLXCMountMountpointFailureIsUncertain(t *testing.T) {
+	service, runner, _ := mountHarness(t, "stopped", map[string]ssh.Result{
+		"mountpoint -q " + mountRootfs: {ExitCode: 32, Stderr: "mountpoint: permission denied"},
+	})
+
+	result, err := service.Mount(context.Background(), 101, "pve8845")
+	if !errors.Is(err, ErrUncertain) {
+		t.Fatalf("err = %v, want ErrUncertain when the mount state cannot be determined", err)
+	}
+	if runner.saw("pct mount") {
+		t.Fatal("pct mount must not run on an undetermined pre-state")
+	}
+	if result.Status != "" || result.Mounted {
+		t.Fatalf("result = %+v, want no misleading mount row", result)
+	}
+}

@@ -21,7 +21,7 @@ func backupCopyCommand(deps Dependencies) *cli.Command {
 			&cli.StringFlag{Name: "from", Usage: "source profile name", Required: true},
 			&cli.StringFlag{Name: "to", Usage: "target profile name", Required: true},
 			&cli.StringFlag{Name: "target-storage", Usage: "target dir storage name", Required: true},
-			&cli.StringFlag{Name: "node", Usage: "source PVE node name (defaults to the source profile's ssh host)"},
+			&cli.StringFlag{Name: "node", Usage: "source PVE node name (defaults to API resolution from the archive's storage listing)"},
 		),
 		Action: func(c *cli.Context) error {
 			if err := requireNoExtraArgs(c, 1); err != nil {
@@ -41,13 +41,18 @@ func backupCopyCommand(deps Dependencies) *cli.Command {
 			if err != nil {
 				return err
 			}
-			sourceNode := c.String("node")
-			if sourceNode == "" {
-				sourceNode = sides.sourceSSHProfile.Host
-			}
 			sourceReader, ok := sides.sourceBackend.(pve.BackupReader)
 			if !ok {
 				return fmt.Errorf("%w: source backend cannot list backups", pve.ErrUnavailable)
+			}
+			sourceNode := c.String("node")
+			if sourceNode == "" {
+				// The SSH host name is not necessarily the PVE node name;
+				// resolve the node whose storage actually lists the archive.
+				sourceNode, err = resolveSourceNodeForArchive(c.Context, sides.sourceBackend, volid)
+				if err != nil {
+					return err
+				}
 			}
 			targetDir, ok := sides.targetBackend.(pve.DirStoragePath)
 			if !ok {
@@ -62,7 +67,7 @@ func backupCopyCommand(deps Dependencies) *cli.Command {
 				Volid:         volid,
 				TargetStorage: c.String("target-storage"),
 			})
-			if writeErr := output.WriteBackupCopyResult(c.App.Writer, output.NormalizeFormat(c.String("output")), result); writeErr != nil {
+			if writeErr := output.WriteBackupCopyResult(c.App.Writer, crossProfileOutputFormat(c, sides), result); writeErr != nil {
 				return writeErr
 			}
 			return err

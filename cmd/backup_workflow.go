@@ -55,7 +55,16 @@ func backupCopyRestoreCommand(deps Dependencies) *cli.Command {
 			if err != nil {
 				return err
 			}
-			sourceNode := sides.sourceSSHProfile.Host
+			sourceNode := c.String("node")
+			if sourceNode == "" {
+				// The SSH host name is not necessarily the PVE node name;
+				// the backup stage runs on the source guest's actual node.
+				row, rowErr := pve.NewLXCService(sides.sourceBackend, pve.TaskRunner{}, nil, false).Get(c.Context, vmid, "")
+				if rowErr != nil {
+					return rowErr
+				}
+				sourceNode = row.Node
+			}
 
 			if _, ok := sides.sourceBackend.(pve.DirStoragePath); !ok {
 				return fmt.Errorf("%w: source backend cannot resolve dir storage paths", pve.ErrUnavailable)
@@ -95,7 +104,7 @@ func backupCopyRestoreCommand(deps Dependencies) *cli.Command {
 				TargetVMID:    c.Int("target-vmid"),
 				BridgeMap:     bridgeMap,
 			})
-			if writeErr := output.WriteWorkflowResult(c.App.Writer, output.NormalizeFormat(c.String("output")), result); writeErr != nil {
+			if writeErr := output.WriteWorkflowResult(c.App.Writer, crossProfileOutputFormat(c, sides), result); writeErr != nil {
 				return writeErr
 			}
 			return err

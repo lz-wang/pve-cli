@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"net/url"
 	"strconv"
@@ -64,7 +65,7 @@ func lxcMigratePlanCommand(deps Dependencies) *cli.Command {
 			if err != nil {
 				return err
 			}
-			if err := output.WriteMigrationPlan(c.App.Writer, output.NormalizeFormat(c.String("output")), plan); err != nil {
+			if err := output.WriteMigrationPlan(c.App.Writer, crossProfileOutputFormat(c, sides), plan); err != nil {
 				return err
 			}
 			if plan.Status == "failed" {
@@ -142,7 +143,7 @@ func lxcMigrateRemoteCommand(deps Dependencies) *cli.Command {
 				WaitTimeout:  waitTimeout,
 				ErrWriter:    c.App.ErrWriter,
 				ResultWriter: c.App.Writer,
-				Format:       output.NormalizeFormat(c.String("output")),
+				Format:       crossProfileOutputFormat(c, sides),
 				Resource:     "lxc",
 			}
 			sourceService = pve.NewLXCService(sides.sourceBackend, runner, nil, false)
@@ -225,7 +226,7 @@ func lxcMigrateCheckCommand(deps Dependencies) *cli.Command {
 			if err != nil {
 				return err
 			}
-			if err := output.WriteMigrationPlan(c.App.Writer, output.NormalizeFormat(c.String("output")), plan); err != nil {
+			if err := output.WriteMigrationPlan(c.App.Writer, crossProfileOutputFormat(c, sides), plan); err != nil {
 				return err
 			}
 			if plan.Status == "failed" {
@@ -373,6 +374,51 @@ func sshRunnersFor(deps Dependencies, sides *crossProfileSides) (pve.CommandRunn
 		return nil, nil, fmt.Errorf("%w: target profile %s has no ssh section", pve.ErrInvalid, sides.request.to)
 	}
 	return deps.SSHRunnerFactory(*sides.sourceSSHProfile), deps.SSHRunnerFactory(*sides.targetSSHProfile), nil
+}
+
+// crossProfileOutputFormat resolves -o with the source profile's
+// default_output applied, matching the runtime commands' behavior.
+func crossProfileOutputFormat(c *cli.Context, sides *crossProfileSides) string {
+	format := c.String("output")
+	if format == "" {
+		format = sides.sourceProfile.DefaultOutput
+	}
+	return output.NormalizeFormat(format)
+}
+
+// resolveSourceNodeForArchive finds the PVE node whose storage lists the
+// archive volume; the SSH host name never decides the node.
+func resolveSourceNodeForArchive(ctx context.Context, backend pve.Backend, volid string) (string, error) {
+	storage, _, _ := strings.Cut(volid, ":")
+	if storage == "" {
+		return "", fmt.Errorf("%w: invalid volume id %q", pve.ErrInvalid, volid)
+	}
+	nodes, err := backend.Nodes(ctx)
+	if err != nil {
+		return "", fmt.Errorf("resolve source node: %w", err)
+	}
+	var firstErr error
+	for _, node := range nodes {
+		if strings.TrimSpace(node.Name) == "" {
+			continue
+		}
+		rows, err := backend.Backups(ctx, node.Name, storage)
+		if err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+		for _, row := range rows {
+			if row.VolID == volid {
+				return node.Name, nil
+			}
+		}
+	}
+	if firstErr != nil {
+		return "", fmt.Errorf("resolve source node for %s: %w", volid, firstErr)
+	}
+	return "", fmt.Errorf("%w: archive %s not found on any source node; pass --node explicitly", pve.ErrNotFound, volid)
 }
 
 func crossProfileBackend(c *cli.Context, deps Dependencies, profile config.Profile, extraSecrets ...string) (pve.Backend, error) {

@@ -165,6 +165,42 @@ func TestBackupCopyRestoreWorkflowSkipsBackupWithArchive(t *testing.T) {
 	}
 }
 
+// Documented continuation (test matrix): the process died after the backup
+// transfer completed but before the restore started. Re-running with
+// --archive verifies the already-published file by checksum and continues
+// to the restore stage instead of refusing on the existing file.
+func TestBackupCopyRestoreWorkflowContinuesFromArchiveAfterTransfer(t *testing.T) {
+	workflow, _, _, sourceSSH, targetSSH := workflowHarness(t)
+	checksum := dataSHA(transferPayload)
+	targetSSH.on("test -e /mnt/backups/backup/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst", ssh.Result{ExitCode: 0})
+	targetSSH.on("sha256sum /mnt/backups/backup/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst", ssh.Result{ExitCode: 0, Stdout: checksum + "  f\n"})
+	sourceSSH.on("sha256sum /var/lib/vz/backup/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst", ssh.Result{ExitCode: 0, Stdout: checksum + "  f\n"})
+
+	options := workflowOptions()
+	options.Archive = workflowArchive
+
+	result, err := workflow.Run(context.Background(), options)
+	if err != nil {
+		t.Fatalf("workflow continuation: %v", err)
+	}
+	stages := map[string]output.WorkflowStageResult{}
+	for _, stage := range result.Stages {
+		stages[stage.Stage] = stage
+	}
+	if stages["backup"].Status != "skipped" {
+		t.Fatalf("backup stage = %+v, want skipped", stages["backup"])
+	}
+	if stages["transfer"].Status != "succeeded" {
+		t.Fatalf("transfer = %+v, want an idempotent verified continuation", stages["transfer"])
+	}
+	if stages["restore"].Status != "succeeded" {
+		t.Fatalf("restore = %+v, want the continuation to reach the restore stage", stages["restore"])
+	}
+	if result.Status == "failed" {
+		t.Fatalf("status = %q", result.Status)
+	}
+}
+
 // P0-3: an existing target guest is never treated as a restored resource —
 // the same VMID does not prove it originated from this workflow. The
 // workflow refuses up front (no auto-resume) instead of validating an

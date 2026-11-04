@@ -160,12 +160,22 @@ func (s *MountService) resolveStopped(ctx context.Context, vmid int, node, opera
 	return guest, nil
 }
 
+// pathMounted distinguishes the mountpoint exit codes: 0 mounted, 1 not
+// mounted, anything else means the state could not be determined — that
+// must never read as a safe "not mounted".
 func (s *MountService) pathMounted(ctx context.Context, path string) (bool, error) {
 	run, err := s.runner.Run(ctx, nil, nil, nil, "mountpoint", "-q", path)
 	if err != nil {
 		return false, err
 	}
-	return run.ExitCode == 0, nil
+	switch run.ExitCode {
+	case 0:
+		return true, nil
+	case 1:
+		return false, nil
+	default:
+		return false, fmt.Errorf("%w: mountpoint -q %s exited with %d (%s); the mount state cannot be determined", ErrUncertain, path, run.ExitCode, strings.TrimSpace(run.Stderr))
+	}
 }
 
 func lxcRootfsPath(vmid int) string {

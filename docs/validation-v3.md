@@ -54,9 +54,10 @@ Local lifecycle tests validate the full state machine against a simulated
 host: mount → read a file through the mount → lock observable in the guest
 config while mounted → unmount → lock released; interrupted mounts report
 failure with the manual-cleanup hint and recover through `pct unmount`;
-unmounts that claim success while the mount persists report `unknown` and a
-retry completes the release; double mounts are refused without touching the
-mounted state.
+unmounts that claim success while the mount persists report `unknown`,
+fail the command with exit 5, and a retry completes the release; double
+mounts are refused without touching the mounted state; a mount-state probe
+that cannot determine the state is an error, never a silent "not mounted".
 
 The real-PVE acceptance procedure below must run on a **dedicated test
 container only** — mount holds container locks and interrupted mounts can
@@ -71,8 +72,42 @@ need host-side cleanup. Never run it against production guests.
 4. `pve lxc mount 201 --node <node>` again — expect the double-mount
    refusal (exit 4) with the mounted state untouched.
 5. Interrupt a run (Ctrl+C during mount) — expect an `unknown`/`failed`
-   outcome with the manual-cleanup hint; recover with
+   outcome with the manual-cleanup hint and a non-zero exit; recover with
    `pve lxc unmount 201 --node <node>` until it reports released.
 6. `pve lxc unmount 201 --node <node>` — expect `succeeded`,
    `mounted: false`, the lock gone, and the container startable again.
 7. Delete the test container and confirm its volumes are gone.
+
+## Post-review reliability regression coverage (2026-11-04)
+
+The following contract regressions were added after the reliability review;
+all run against HTTP contract servers or scripted transports, not real
+hosts. Real-PVE acceptance for cross-host migration and backup workflows is
+still pending (see the release notes in `docs/roadmap.md`).
+
+- Remote migration: HTTP 400/500/timeout/nil-task/empty-UPID submissions
+  never report `succeeded`; the structured result keeps `failed`/`unknown`
+  and the original error.
+- Remote migration wire format: `target-endpoint` uses PVE's official
+  comma-separated attributes (`apitoken=…,host=…,port=…,fingerprint=…`);
+  storage/bridge maps are submitted as `source:target` pairs.
+- Secret protection: a source-side 400 that echoes the submitted endpoint
+  bundle must not leak the target token into stdout, stderr or the error
+  (CLI-chain regression); endpoint-bearing field errors are redacted whole.
+- Inventory fail-closed: an unreadable target guest inventory fails the
+  migration plan's VMID check (never "vmid free") and refuses the
+  copy-restore workflow.
+- SSH node binding: `lxc exec`/`lxc mount`/`lxc unmount` refuse pct
+  commands when the profile's `ssh.node` is missing or disagrees with the
+  API-resolved guest node.
+- Workflow targeting: an existing target guest conflicts instead of being
+  treated as a restored resource; the backup stage only accepts archives
+  created during the run (clock-skew tolerated).
+- Restore reporting: a succeeded restore task with a failed post-restore
+  bridge mapping reports the stage as `partial` and fails the workflow;
+  post-check warnings propagate as an overall `warning`.
+- Transfer publication: hard-link publish (no overwrite window), concurrent
+  publish conflicts, checksum-identical existing files continue
+  idempotently, different files conflict.
+- Mount outcomes: unconfirmed mount/unmount states exit 5 with
+  `status=unknown` kept in the structured result.

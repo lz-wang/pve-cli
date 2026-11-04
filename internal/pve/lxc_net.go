@@ -144,7 +144,8 @@ func netAttributeUpdates(options LXCNetUpdateOptions) (map[string]string, error)
 }
 
 // checkBridgeExists fails with ErrInvalid when the target bridge is not
-// present on the node.
+// present on the node, or when the name belongs to a non-bridge interface —
+// a name match alone would route the device onto an ordinary link.
 func (s *GuestService) checkBridgeExists(ctx context.Context, node, bridge string) error {
 	networks, ok := s.backend.(NetworkBackend)
 	if !ok {
@@ -155,9 +156,13 @@ func (s *GuestService) checkBridgeExists(ctx context.Context, node, bridge strin
 		return ClassifyError(err)
 	}
 	for _, row := range rows {
-		if row.Name == bridge {
-			return nil
+		if row.Name != bridge {
+			continue
 		}
+		if !strings.EqualFold(strings.TrimSpace(row.Type), "bridge") {
+			return fmt.Errorf("%w: %q on node %s is a %s, not a bridge", ErrInvalid, bridge, node, row.Type)
+		}
+		return nil
 	}
 	return fmt.Errorf("%w: bridge %q does not exist on node %s", ErrInvalid, bridge, node)
 }

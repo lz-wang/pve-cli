@@ -212,3 +212,28 @@ func TestPlanRestoreValidations(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+// P2: the archive size is compressed, so the passing capacity message must
+// say it is a lower bound — available space at or above the archive size is
+// not a guarantee for the restored footprint.
+func TestPlanRestoreCapacityReportsLowerBound(t *testing.T) {
+	backend := newRestoreTestBackend()
+	service := NewRestoreService(backend, TaskRunner{})
+
+	plan, err := service.PlanRestore(context.Background(), restorePlanOptions())
+	if err != nil {
+		t.Fatalf("plan: %v", err)
+	}
+	var storage output.MigrationCheckRow
+	for _, row := range plan.Checks {
+		if row.Check == "storage" {
+			storage = row
+		}
+	}
+	if storage.Status != "ok" {
+		t.Fatalf("storage check = %+v", storage)
+	}
+	if !strings.Contains(storage.Message, "lower bound") {
+		t.Fatalf("storage message = %q, want the compressed-size lower-bound caveat", storage.Message)
+	}
+}

@@ -245,3 +245,21 @@ func TestLXCNetSetDigestConflictIsErrConflict(t *testing.T) {
 		t.Fatalf("err = %v, want conflict", err)
 	}
 }
+
+// P2: a name match is not enough — only an actual bridge may receive a
+// net device; an ordinary interface with the same name must be refused.
+func TestLXCNetSetRejectsNonBridgeDevice(t *testing.T) {
+	service, _, _ := newNetService(t,
+		map[string]any{"net0": "name=eth0,bridge=vmbr2"},
+		nil,
+		[]output.NetworkRow{{Node: "pve1", Name: "vmbr0", Type: "ether"}}, false)
+
+	err := service.UpdateLXCNet(context.Background(), 101, LXCNetUpdateOptions{
+		Node:   "pve1",
+		Device: "net0",
+		Bridge: "vmbr0",
+	})
+	if !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "not a bridge") {
+		t.Fatalf("err = %v, want a not-a-bridge refusal", err)
+	}
+}

@@ -155,7 +155,7 @@ func (s *RestoreService) planTargetStorage(ctx context.Context, plan *output.Mig
 		}
 		plan.Checks = append(plan.Checks, output.MigrationCheckRow{
 			Check: "storage", Status: output.MigrationCheckOK,
-			Message: fmt.Sprintf("storage %s active on %s (%s available)", storage, options.Node, output.FormatBytes(row.Avail)),
+			Message: fmt.Sprintf("storage %s active on %s (%s available; the compressed archive size is only a lower bound for the restored footprint)", storage, options.Node, output.FormatBytes(row.Avail)),
 		})
 		return
 	}

@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"strings"
@@ -74,6 +75,31 @@ func writeTwoSSHProfileConfig(t *testing.T) string {
 
 const copyVolid = "local:backup/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst"
 const copyPayload = "archive-bytes"
+
+// writeAliasedSSHProfileConfig gives the profiles SSH host aliases that do
+// NOT match their PVE node names — the API, not the SSH name, decides the
+// node for backup copy.
+func writeAliasedSSHProfileConfig(t *testing.T) string {
+	t.Helper()
+	cfgPath := t.TempDir() + "/config.yaml"
+	t.Setenv("PVE_TOKEN", "secret")
+	cfg := config.Empty()
+	aliases := map[string]string{"n150": "ssh-alias-src", "pve8845": "ssh-alias-dst"}
+	for name, alias := range aliases {
+		if err := cfg.SetProfile(name, config.Profile{
+			Endpoint:       "https://" + name + ".lan:8006",
+			TokenID:        "root@pam!test",
+			TokenSecretEnv: "PVE_TOKEN",
+			SSH:            &ssh.Profile{Host: alias, Node: name, User: "root"},
+		}); err != nil {
+			t.Fatalf("set profile %s: %v", name, err)
+		}
+	}
+	if err := config.Save(cfgPath, cfg); err != nil {
+		t.Fatal(err)
+	}
+	return cfgPath
+}
 
 func copyTestBackends() (source, target *commandBackend) {
 	source = &commandBackend{
@@ -173,7 +199,7 @@ func TestBackupCopyCommandRefusesOverwrite(t *testing.T) {
 		"sha256sum /var/lib/vz/backup/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst": {ExitCode: 0, Stdout: checksum + "  f\n"},
 	}}
 	targetRunner := &cmdScriptedRunner{script: map[string]ssh.Result{
-		"test -e /mnt/backups/backup/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst": {ExitCode: 0},
+		"test -e /mnt/backups/backup/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst":   {ExitCode: 0},
 		"sha256sum /mnt/backups/backup/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst": {ExitCode: 0, Stdout: strings.Repeat("f", 64) + "  f\n"},
 	}}
 	var stdout, stderr bytes.Buffer
@@ -193,4 +219,98 @@ func TestBackupCopyCommandRefusesOverwrite(t *testing.T) {
 	if targetRunner.saw("dd of=") {
 		t.Fatal("no transfer over an existing file")
 	}
+}
+
+// P2: the SSH host name is not necessarily the PVE node name — with no
+// --node the source node is resolved from the API by finding the node whose
+// storage lists the archive (here the SSH alias differs from the node).
+func TestBackupCopyCommandResolvesSourceNodeFromAPI(t *testing.T) {
+	source, target := copyTestBackends()
+	sourceRunner := &cmdScriptedRunner{script: map[string]ssh.Result{
+		"cat /var/lib/vz/backup/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst": {ExitCode: 0, Stdout: copyPayload},
+	}}
+	targetRunner := &cmdScriptedRunner{script: map[string]ssh.Result{
+		"test -e /mnt/backups/backup/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst":                 {ExitCode: 1},
+		"stat -c %s /mnt/backups/backup/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst.pve-cli-part": {ExitCode: 1},
+		"sha256sum /mnt/backups/backup/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst.pve-cli-part":  {ExitCode: 0, Stdout: dataChecksum(copyPayload) + "  f\n"},
+	}}
+	var stdout, stderr bytes.Buffer
+	deps := Dependencies{Stdout: &stdout, Stderr: &stderr}
+	deps.BackendFactory = func(profile config.Profile, _ pve.ClientOptions) (pve.Backend, error) {
+		if strings.Contains(profile.Endpoint, "pve8845") {
+			return target, nil
+		}
+		return source, nil
+	}
+	deps.SSHRunnerFactory = func(profile ssh.Profile) pve.CommandRunner {
+		if profile.Host == "ssh-alias-dst" {
+			return targetRunner
+		}
+		return sourceRunner
+	}
+
+	err := RunWithDependencies([]string{
+		"pve", "--config", writeAliasedSSHProfileConfig(t), "--profile", "n150",
+		"backup", "copy", copyVolid,
+		"--from", "n150", "--to", "pve8845", "--target-storage", "backup-dst",
+		"-o", "json",
+	}, "test", deps)
+	if err != nil {
+		t.Fatalf("copy: %v (stderr %s)", err, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), `"status": "succeeded"`) {
+		t.Fatalf("stdout = %s", stdout.String())
+	}
+}
+
+// P2: profile default_output applies to the newer commands too — json is
+// emitted without an explicit -o flag.
+func TestProfileDefaultJSONAppliesToBackupCopy(t *testing.T) {
+	source, target := copyTestBackends()
+	sourceRunner := &cmdScriptedRunner{script: map[string]ssh.Result{
+		"cat /var/lib/vz/backup/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst": {ExitCode: 0, Stdout: copyPayload},
+	}}
+	targetRunner := &cmdScriptedRunner{script: map[string]ssh.Result{
+		"test -e /mnt/backups/backup/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst":                 {ExitCode: 1},
+		"stat -c %s /mnt/backups/backup/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst.pve-cli-part": {ExitCode: 1},
+		"sha256sum /mnt/backups/backup/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst.pve-cli-part":  {ExitCode: 0, Stdout: dataChecksum(copyPayload) + "  f\n"},
+	}}
+	var stdout, stderr bytes.Buffer
+	deps := copyDeps(source, target, sourceRunner, targetRunner, &stdout, &stderr)
+
+	cfgPath := t.TempDir() + "/config.yaml"
+	t.Setenv("PVE_TOKEN", "secret")
+	cfg := config.Empty()
+	for _, name := range []string{"n150", "pve8845"} {
+		if err := cfg.SetProfile(name, config.Profile{
+			Endpoint:       "https://" + name + ".lan:8006",
+			TokenID:        "root@pam!test",
+			TokenSecretEnv: "PVE_TOKEN",
+			DefaultOutput:  "json",
+			SSH:            &ssh.Profile{Host: name, Node: name, User: "root"},
+		}); err != nil {
+			t.Fatalf("set profile %s: %v", name, err)
+		}
+	}
+	if err := config.Save(cfgPath, cfg); err != nil {
+		t.Fatal(err)
+	}
+
+	err := RunWithDependencies([]string{
+		"pve", "--config", cfgPath, "--profile", "n150",
+		"backup", "copy", copyVolid,
+		"--from", "n150", "--to", "pve8845", "--target-storage", "backup-dst",
+	}, "test", deps)
+	if err != nil {
+		t.Fatalf("copy: %v (stderr %s)", err, stderr.String())
+	}
+	var result output.BackupCopyResult
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatalf("stdout must be json (profile default_output=json): %v (%q)", err, stdout.String())
+	}
+}
+
+func dataChecksum(payload string) string {
+	sum := sha256.Sum256([]byte(payload))
+	return hex.EncodeToString(sum[:])
 }

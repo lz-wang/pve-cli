@@ -261,3 +261,46 @@ func TestLXCExecCommandValidations(t *testing.T) {
 		})
 	}
 }
+
+// writeDefaultJSONConfig is an ssh-enabled profile with default_output=json.
+func writeDefaultJSONConfig(t *testing.T) string {
+	t.Helper()
+	cfgPath := filepath.Join(t.TempDir(), "config.yaml")
+	t.Setenv("PVE_TOKEN", "secret")
+	cfg := config.Empty()
+	if err := cfg.SetProfile("home", config.Profile{
+		Endpoint:       "https://pve.example:8006/api2/json",
+		TokenID:        "root@pam!test",
+		TokenSecretEnv: "PVE_TOKEN",
+		DefaultOutput:  "json",
+		SSH:            &ssh.Profile{Host: "pve1", Node: "pve1", User: "root"},
+	}); err != nil {
+		t.Fatalf("set profile: %v", err)
+	}
+	if err := config.Save(cfgPath, cfg); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+	return cfgPath
+}
+
+// P2: the profile's default_output=json applies to lxc exec without -o.
+func TestLXCExecCommandUsesProfileDefaultOutput(t *testing.T) {
+	runner := &execTestRunner{result: ssh.Result{ExitCode: 0, Stdout: "active"}}
+	var stdout, stderr bytes.Buffer
+	deps := execTestDeps(t, &stdout, &stderr, runner)
+
+	err := RunWithDependencies([]string{
+		"pve", "--config", writeDefaultJSONConfig(t),
+		"lxc", "exec", "200", "--node", "pve1", "--", "systemctl", "is-active",
+	}, "test", deps)
+	if err != nil {
+		t.Fatalf("exec: %v (stderr %s)", err, stderr.String())
+	}
+	var result output.AgentExecResult
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatalf("stdout must be json (profile default_output=json): %v (%q)", err, stdout.String())
+	}
+	if result.ExitCode != 0 || result.Stdout != "active" {
+		t.Fatalf("result = %+v", result)
+	}
+}
