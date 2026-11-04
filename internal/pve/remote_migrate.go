@@ -2,6 +2,7 @@ package pve
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -53,6 +54,29 @@ func (s *GuestService) RemoteMigrate(ctx context.Context, vmid int, node string,
 	runner.Resource = s.kind
 	runner.VMID = vmid
 	runner.Node = guest.Row().Node
+	if err != nil {
+		// A failed submission must never surface as success. An APIError
+		// proves PVE rejected the request (nothing was committed); any
+		// other failure leaves the submission state unconfirmed.
+		status := TaskStatusUnknown
+		var apiErr *APIError
+		if errors.As(err, &apiErr) {
+			status = "failed"
+		}
+		operation := output.OperationResult{
+			Resource: runner.Resource,
+			VMID:     runner.VMID,
+			Node:     runner.Node,
+			Status:   status,
+			Error:    err.Error(),
+		}
+		if runner.ResultWriter != nil {
+			if writeErr := output.WriteOperation(runner.ResultWriter, runner.Format, operation); writeErr != nil {
+				return operation, writeErr
+			}
+		}
+		return operation, fmt.Errorf("submit remote migration: %w", ClassifyError(err))
+	}
 	operation, runErr := runner.Execute(ctx, task)
 	if runner.ResultWriter != nil {
 		if writeErr := output.WriteOperation(runner.ResultWriter, runner.Format, operation); writeErr != nil {

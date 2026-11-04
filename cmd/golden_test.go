@@ -146,8 +146,14 @@ func TestCommandJSONGoldenOutputs(t *testing.T) {
 			if err != nil {
 				t.Fatalf("run: %v", err)
 			}
-			if stderr.String() != "" {
-				t.Fatalf("stderr = %s", stderr.String())
+			// Async mutations legitimately report their UPID on stderr;
+			// anything else is noise the golden must not paper over.
+			for _, line := range strings.Split(stderr.String(), "\n") {
+				line = strings.TrimSpace(line)
+				if line == "" || isTaskProgressLine(line) {
+					continue
+				}
+				t.Fatalf("unexpected stderr: %s", stderr.String())
 			}
 
 			got := stdout.String()
@@ -289,10 +295,11 @@ func goldenBackend() *commandBackend {
 				Source: "192.168.2.0/24", Comment: "ssh from lan",
 			}},
 		},
-		vms:       map[string][]output.GuestRow{"pve1": {vmRow}},
-		lxcs:      map[string][]output.GuestRow{"pve1": {lxcRow}},
-		vmGuests:  map[string]map[int]*commandGuest{"pve1": {100: {row: vmRow}}},
-		lxcGuests: map[string]map[int]*commandGuest{"pve1": {200: {row: lxcRow}}},
+		vms:        map[string][]output.GuestRow{"pve1": {vmRow}},
+		lxcs:       map[string][]output.GuestRow{"pve1": {lxcRow}},
+		vmGuests:   map[string]map[int]*commandGuest{"pve1": {100: {row: vmRow}}},
+		lxcGuests:  map[string]map[int]*commandGuest{"pve1": {200: {row: lxcRow}}},
+		backupTask: &commandTask{upid: "UPID:pve1:vzdump:100:root@pam:"},
 		backups: map[string]map[string][]output.BackupRow{
 			"pve1": {
 				"backup": {{
@@ -321,6 +328,17 @@ func goldenBackend() *commandBackend {
 			},
 		},
 	}
+}
+
+// isTaskProgressLine reports whether a stderr line is an async task
+// notification (UPID announcement and wait progress) rather than noise.
+func isTaskProgressLine(line string) bool {
+	for _, prefix := range []string{"task: UPID:", "waiting for task: UPID:", "task completed: UPID:"} {
+		if strings.HasPrefix(line, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 func goldenOutput(t *testing.T, name, cfgPath string) string {

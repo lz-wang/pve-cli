@@ -173,6 +173,112 @@ func TestRemoteMigrateHTTPContract(t *testing.T) {
 	}
 }
 
+// P0-1 regression: a failed or unconfirmed submission must never surface as
+// a succeeded result. A structured APIError proves PVE rejected the request
+// (nothing was committed -> failed); any other failure leaves the submission
+// state unconfirmed (unknown). A nil task or an empty UPID can never mean
+// success either.
+func TestRemoteMigrateSubmissionFailureNeverReportsSuccess(t *testing.T) {
+	cases := []struct {
+		name       string
+		task       Task
+		err        error
+		wantStatus string
+		wantKind   error
+	}{
+		{"http 400", nil, &APIError{HTTPStatus: 400, Category: CategoryInvalid, kind: ErrInvalid}, "failed", nil},
+		{"http 500", nil, &APIError{HTTPStatus: 500, Category: CategoryUnavailable, kind: ErrUnavailable}, "failed", nil},
+		{"network timeout", nil, context.DeadlineExceeded, "unknown", ErrUnavailable},
+		{"nil task without error", nil, nil, "unknown", ErrTaskTimeout},
+		{"empty upid", &fakeTask{}, nil, "unknown", ErrTaskTimeout},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			guest := newRemoteMigrateGuest()
+			guest.task = tc.task
+			guest.err = tc.err
+			svc, out := remoteMigrateSetup(t, guest, false)
+
+			operation, err := svc.RemoteMigrate(context.Background(), 101, "n150", RemoteMigrateOptions{
+				TargetEndpointBundle: "apitoken=PVEAPIToken=u@pam!t=secret host=t.lan",
+			})
+			if err == nil {
+				t.Fatalf("expected error, got result %+v", operation)
+			}
+			if tc.wantKind != nil && !errors.Is(err, tc.wantKind) {
+				t.Fatalf("err = %v, want kind %v", err, tc.wantKind)
+			}
+			if tc.wantKind == nil {
+				var apiErr *APIError
+				if !errors.As(err, &apiErr) {
+					t.Fatalf("err = %v, want preserved *APIError", err)
+				}
+			}
+			if operation.Status != tc.wantStatus {
+				t.Fatalf("status = %q, want %q", operation.Status, tc.wantStatus)
+			}
+			rendered := out.String()
+			if rendered == "" {
+				t.Fatal("result must still be written for a failed submission")
+			}
+			if strings.Contains(rendered, "succeeded") {
+				t.Fatalf("submission failure reported as succeeded: %s", rendered)
+			}
+			var result output.OperationResult
+			if err := json.Unmarshal([]byte(rendered), &result); err != nil {
+				t.Fatalf("json: %v", err)
+			}
+			if result.Status != tc.wantStatus {
+				t.Fatalf("written status = %q, want %q", result.Status, tc.wantStatus)
+			}
+		})
+	}
+}
+
+// P0-1 HTTP regression through the real client: an HTTP 400 from
+// remote_migrate must fail the command and write a failed result.
+func TestRemoteMigrateHTTP400FailsTheCommand(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/lxc/101/status/current"):
+			_, _ = w.Write([]byte(`{"data":{"vmid":101,"status":"stopped","name":"app"}}`))
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/lxc/101/config"):
+			_, _ = w.Write([]byte(`{"data":{"rootfs":"local-lvm:vm-101-disk-0,size=8G","net0":"name=eth0,bridge=vmbr2"}}`))
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/nodes/n150/status"):
+			_, _ = w.Write([]byte(`{"data":{"status":"online"}}`))
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/lxc/101/remote_migrate"):
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"data":null,"errors":{"target-vmid":"VM 201 is already in use"}}`))
+		default:
+			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	backend, err := NewProxmoxBackend(config.Profile{Endpoint: server.URL, TokenID: "test@pve!cli"}, ClientOptions{TokenSecret: "private-test-token"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	svc := NewLXCService(backend, TaskRunner{Format: "json", ResultWriter: &out}, nil, false)
+
+	operation, err := svc.RemoteMigrate(context.Background(), 101, "n150", RemoteMigrateOptions{
+		TargetEndpointBundle: "apitoken=PVEAPIToken=root@pam!tgt=secret host=10.0.0.2:8006",
+		TargetVMID:           201,
+	})
+	if err == nil {
+		t.Fatalf("expected error, got result %+v", operation)
+	}
+	var result output.OperationResult
+	if err := json.Unmarshal(out.Bytes(), &result); err != nil {
+		t.Fatalf("json %q: %v", out.String(), err)
+	}
+	if result.Status != "failed" {
+		t.Fatalf("status = %q, want failed", result.Status)
+	}
+}
+
 func TestFormatMigrationMaps(t *testing.T) {
 	cases := []struct {
 		input    map[string]string

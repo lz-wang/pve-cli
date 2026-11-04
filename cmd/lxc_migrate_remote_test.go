@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"bytes"
+	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 
@@ -12,7 +14,10 @@ import (
 // only with --yes, and never echoes the target token.
 func TestLXCMigrateRemoteCommandEndToEnd(t *testing.T) {
 	backend := migrationPlanBackends()
-	guest := &commandGuest{row: backend.source.lxcGuests["n150"][101].row}
+	guest := &commandGuest{
+		row:  backend.source.lxcGuests["n150"][101].row,
+		task: &commandTask{upid: "UPID:n150:rm:101"},
+	}
 	backend.source.lxcGuests["n150"][101] = guest
 	var stdout, stderr bytes.Buffer
 	deps := migrationDeps(backend, &stdout, &stderr)
@@ -73,6 +78,72 @@ func TestLXCMigrateRemoteRequiresYes(t *testing.T) {
 	}
 	if guest.remoteMigrateOptions != nil {
 		t.Fatal("no submission without --yes")
+	}
+}
+
+// P1-5: with -o json the submitted operation result (UPID and status) must
+// be written to stdout so agents can track the task.
+func TestLXCMigrateRemoteJSONOutputsOperationResult(t *testing.T) {
+	backend := migrationPlanBackends()
+	guest := &commandGuest{
+		row:  backend.source.lxcGuests["n150"][101].row,
+		task: &commandTask{upid: "UPID:n150:rm:101"},
+	}
+	backend.source.lxcGuests["n150"][101] = guest
+	var stdout, stderr bytes.Buffer
+	deps := migrationDeps(backend, &stdout, &stderr)
+
+	err := RunWithDependencies([]string{
+		"pve", "--config", writeTwoProfileConfig(t), "--profile", "n150",
+		"lxc", "migrate", "remote", "101",
+		"--to", "pve8845", "--target-node", "pve8845",
+		"--storage-map", "local-lvm=local-lvm", "--bridge-map", "vmbr2=vmbr0",
+		"--yes", "-o", "json",
+	}, "test", deps)
+	if err != nil {
+		t.Fatalf("remote migrate: %v (stderr %s)", err, stderr.String())
+	}
+	var result output.OperationResult
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatalf("stdout must carry the operation result json: %v (%q)", err, stdout.String())
+	}
+	if result.Resource != "lxc" || result.Status != "submitted" || result.Task != "UPID:n150:rm:101" {
+		t.Fatalf("result = %+v", result)
+	}
+}
+
+// A submission failure must fail the command and write a non-succeeded
+// result, never a silent success.
+func TestLXCMigrateRemoteSubmissionFailureFailsCommand(t *testing.T) {
+	backend := migrationPlanBackends()
+	guest := &commandGuest{
+		row:              backend.source.lxcGuests["n150"][101].row,
+		task:             &commandTask{upid: "UPID:n150:rm:101"},
+		remoteMigrateErr: errors.New("connection reset while submitting"),
+	}
+	backend.source.lxcGuests["n150"][101] = guest
+	var stdout, stderr bytes.Buffer
+	deps := migrationDeps(backend, &stdout, &stderr)
+
+	err := RunWithDependencies([]string{
+		"pve", "--config", writeTwoProfileConfig(t), "--profile", "n150",
+		"lxc", "migrate", "remote", "101",
+		"--to", "pve8845", "--target-node", "pve8845",
+		"--storage-map", "local-lvm=local-lvm", "--bridge-map", "vmbr2=vmbr0",
+		"--yes", "-o", "json",
+	}, "test", deps)
+	if err == nil {
+		t.Fatalf("submission failure must fail the command (stdout %s)", stdout.String())
+	}
+	var result output.OperationResult
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatalf("stdout must carry the operation result json: %v (%q)", err, stdout.String())
+	}
+	if result.Status == "succeeded" {
+		t.Fatalf("submission failure reported as succeeded: %+v", result)
+	}
+	if result.Status != "unknown" {
+		t.Fatalf("status = %q, want unknown for an unconfirmed submission", result.Status)
 	}
 }
 

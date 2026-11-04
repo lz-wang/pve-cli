@@ -138,11 +138,12 @@ func lxcMigrateRemoteCommand(deps Dependencies) *cli.Command {
 				waitTimeout = 30 * time.Minute
 			}
 			runner := pve.TaskRunner{
-				Wait:        c.Bool("wait"),
-				WaitTimeout: waitTimeout,
-				ErrWriter:   c.App.ErrWriter,
-				Format:      output.NormalizeFormat(c.String("output")),
-				Resource:    "lxc",
+				Wait:         c.Bool("wait"),
+				WaitTimeout:  waitTimeout,
+				ErrWriter:    c.App.ErrWriter,
+				ResultWriter: c.App.Writer,
+				Format:       output.NormalizeFormat(c.String("output")),
+				Resource:     "lxc",
 			}
 			sourceService = pve.NewLXCService(sides.sourceBackend, runner, nil, false)
 			_, err = sourceService.RemoteMigrate(c.Context, vmid, "", pve.RemoteMigrateOptions{

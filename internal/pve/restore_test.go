@@ -65,12 +65,15 @@ func TestRestoreServiceChecksArchiveKind(t *testing.T) {
 }
 
 func TestRestoreServiceAllowsUnknownArchiveShape(t *testing.T) {
-	backend := &fakeRestoreBackend{fakeBackend: fakeBackend{
-		nodes: []output.NodeRow{{Name: "pve1"}},
-		backupRows: map[string]map[string][]output.BackupRow{
-			"pve1": {"pbs": {{VolID: "pbs:store/vm/101/2026-01-01T00:00:00Z", Kind: "vm", VMID: 101}}},
+	backend := &fakeRestoreBackend{
+		fakeBackend: fakeBackend{
+			nodes: []output.NodeRow{{Name: "pve1"}},
+			backupRows: map[string]map[string][]output.BackupRow{
+				"pve1": {"pbs": {{VolID: "pbs:store/vm/101/2026-01-01T00:00:00Z", Kind: "vm", VMID: 101}}},
+			},
 		},
-	}}
+		task: &fakeTask{upid: "UPID:pve1:restore"},
+	}
 	svc := NewRestoreService(backend, TaskRunner{})
 
 	_, err := svc.Restore(context.Background(), RestoreOptions{

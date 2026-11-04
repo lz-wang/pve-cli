@@ -78,7 +78,8 @@ func TestBackupCopyRestoreCommandEndToEnd(t *testing.T) {
 				Size: uint64(len(copyPayload)), Format: "tar.zst", CTime: 1710000000,
 			}}},
 		},
-		dirPaths: map[string]string{"local": "/var/lib/vz"},
+		dirPaths:   map[string]string{"local": "/var/lib/vz"},
+		backupTask: &commandTask{upid: "UPID:n150:vzdump:101:root@pam:"},
 	}}
 	target := &cmdWorkflowBackend{commandBackend: &commandBackend{
 		nodes: []output.NodeRow{{Name: "pve8845", Status: "online"}},
@@ -93,7 +94,8 @@ func TestBackupCopyRestoreCommandEndToEnd(t *testing.T) {
 				Size:  uint64(len(copyPayload)), Format: "tar.zst", CTime: 1710000000,
 			}}},
 		},
-		dirPaths: map[string]string{"backup-dst": "/mnt/backups"},
+		dirPaths:   map[string]string{"backup-dst": "/mnt/backups"},
+		backupTask: &commandTask{upid: "UPID:pve8845:restore:201:root@pam:"},
 	}}
 	var stdout, stderr bytes.Buffer
 	deps := workflowCmdDeps(t, source, target, &stdout, &stderr)

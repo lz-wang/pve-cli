@@ -101,7 +101,7 @@ func TestLXCMigratePlanCommandRunsChecks(t *testing.T) {
 // The legacy intra-cluster migrate still works with a VMID argument.
 func TestLXCMigrateLegacyCommandStillWorks(t *testing.T) {
 	backend := migrationPlanBackends()
-	guest := &commandGuest{row: output.GuestRow{Kind: "lxc", VMID: 101, Node: "n150", Status: "stopped"}, task: nil}
+	guest := &commandGuest{row: output.GuestRow{Kind: "lxc", VMID: 101, Node: "n150", Status: "stopped"}, task: &commandTask{upid: "UPID:n150:migrate:101"}}
 	backend.source.lxcGuests["n150"][101] = guest
 	var stdout, stderr bytes.Buffer
 	deps := migrationDeps(backend, &stdout, &stderr)

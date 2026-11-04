@@ -1,8 +1,9 @@
 {
   "resource": "vm",
-  "status": "succeeded",
+  "status": "submitted",
   "kind": "vm",
   "vmid": 101,
   "node": "pve1",
-  "archive": "backup:backup/vzdump-qemu-100-2026_06_06-00_00_00.vma.zst"
+  "archive": "backup:backup/vzdump-qemu-100-2026_06_06-00_00_00.vma.zst",
+  "task": "UPID:pve1:vzdump:100:root@pam:"
 }

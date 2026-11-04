@@ -6,6 +6,7 @@ import (
 	"github.com/lz-wang/pve-cli/v3/internal/output"
 	"io"
 	"math"
+	"strings"
 	"time"
 )
 
@@ -21,12 +22,21 @@ type TaskRunner struct {
 }
 
 // Execute always returns the submitted UPID, including on timeout/interruption.
+// A submission without a task handle or UPID is never a success: its outcome
+// is unconfirmed and is reported as unknown so callers must re-check state.
 func (r TaskRunner) Execute(ctx context.Context, task Task) (output.OperationResult, error) {
 	result := output.OperationResult{Resource: r.Resource, VMID: r.VMID, Node: r.Node, Status: "succeeded"}
 	if task == nil {
-		return result, nil
+		result.Status = TaskStatusUnknown
+		result.Error = "submission returned no task handle; outcome unconfirmed"
+		return result, fmt.Errorf("%w: submission returned no task handle", ErrTaskTimeout)
 	}
 	result.Task = task.UPID()
+	if strings.TrimSpace(result.Task) == "" {
+		result.Status = TaskStatusUnknown
+		result.Error = "submission returned no UPID; outcome unconfirmed"
+		return result, fmt.Errorf("%w: submission returned no UPID", ErrTaskTimeout)
+	}
 	result.Status = "submitted"
 	if r.ErrWriter != nil {
 		if _, err := fmt.Fprintf(r.ErrWriter, "task: %s\n", task.UPID()); err != nil {

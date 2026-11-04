@@ -63,9 +63,12 @@ func workflowHarness(t *testing.T) (*BackupCopyRestoreWorkflow, *fakeBackend, *f
 	transfer := NewBackupTransferService(sourceWithDirs, "n150", sourceSSH, targetWithDirs, targetSSH, nil)
 	backupRunner := TaskRunner{Wait: true, WaitTimeout: time.Second}
 	backupSvc := NewBackupService(source, backupRunner)
-	source.lxcs["n150"][101].task = nil // synchronous backup
-	source.backupTask = nil
+	// PVE vzdump is an async task: the mock mirrors the real SDK contract of
+	// a non-nil task handle on a successful submission.
+	source.lxcs["n150"][101].task = &fakeTask{upid: "UPID:n150:vzdump:101:"}
+	source.backupTask = &fakeTask{upid: "UPID:n150:vzdump:101:"}
 
+	target.restoreTask = &fakeTask{upid: "UPID:pve8845:restore"}
 	restoreBackend := &restoreWorkflowBackend{fakeBackend: target}
 	restoreSvc := NewRestoreService(restoreBackend, TaskRunner{Wait: true, WaitTimeout: time.Second})
 	sourceGuests := NewLXCService(source, TaskRunner{}, nil, false)

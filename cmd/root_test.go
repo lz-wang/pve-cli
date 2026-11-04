@@ -1150,6 +1150,7 @@ type commandGuest struct {
 	stopCalled           bool
 	migrateOptions       pve.MigrateOptions
 	remoteMigrateOptions *pve.RemoteMigrateOptions
+	remoteMigrateErr     error
 	resizeDisk           string
 	resizeSize           string
 	snapshots            []output.SnapshotRow
@@ -1228,6 +1229,9 @@ func (g *commandGuest) Migrate(_ context.Context, options pve.MigrateOptions) (p
 
 func (g *commandGuest) RemoteMigrate(_ context.Context, options pve.RemoteMigrateOptions) (pve.Task, error) {
 	g.remoteMigrateOptions = &options
+	if g.remoteMigrateErr != nil {
+		return nil, g.remoteMigrateErr
+	}
 	return g.task, nil
 }
 

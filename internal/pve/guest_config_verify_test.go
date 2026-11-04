@@ -137,9 +137,10 @@ func TestConfigVerifyPUTTimeoutReadFails(t *testing.T) {
 // Synchronous write that reports success but reads back differently is a
 // detected mismatch, not a silent success.
 func TestConfigVerifySyncWriteMismatch(t *testing.T) {
-	guest := &fakeGuest{row: output.GuestRow{Kind: "lxc", VMID: 101, Node: "pve1"}}
+	guest := &fakeGuest{row: output.GuestRow{Kind: "lxc", VMID: 101, Node: "pve1"}, task: &fakeTask{upid: "UPID:pve1:config"}}
 	backend := &verifyingBackend{fakeBackend: &fakeBackend{}, config: map[string]any{"cores": float64(1)}}
-	svc, out := newVerifyService(t, guest, backend, false)
+	// The write settles before verification: the runner waits for the task.
+	svc, out := newVerifyService(t, guest, backend, true)
 
 	err := svc.Config(context.Background(), 101, "pve1", map[string]string{"cores": "2"})
 	if err == nil || !strings.Contains(err.Error(), "cores") {
@@ -224,9 +225,9 @@ func TestConfigVerifyEndToEndNormalization(t *testing.T) {
 // Credential fields are transformed on store (hashed), so they are skipped
 // by verification and their submitted values are never echoed anywhere.
 func TestConfigVerifySkipsAndNeverEchoesSensitiveKeys(t *testing.T) {
-	guest := &fakeGuest{row: output.GuestRow{Kind: "lxc", VMID: 101, Node: "pve1"}}
+	guest := &fakeGuest{row: output.GuestRow{Kind: "lxc", VMID: 101, Node: "pve1"}, task: &fakeTask{upid: "UPID:pve1:config"}}
 	backend := &verifyingBackend{fakeBackend: &fakeBackend{}, config: map[string]any{"cipassword": "$5$hash-of-hunter2-secret"}}
-	svc, out := newVerifyService(t, guest, backend, false)
+	svc, out := newVerifyService(t, guest, backend, true)
 
 	err := svc.Config(context.Background(), 101, "pve1", map[string]string{"cipassword": "hunter2-secret"})
 	if err != nil {
@@ -244,11 +245,11 @@ func TestConfigVerifySkipsAndNeverEchoesSensitiveKeys(t *testing.T) {
 // Backends without native config reads keep the legacy behavior: no
 // verification fields, original statuses.
 func TestConfigVerifySkippedWithoutConfigBackend(t *testing.T) {
-	guest := &fakeGuest{row: output.GuestRow{Kind: "lxc", VMID: 101, Node: "pve1"}}
+	guest := &fakeGuest{row: output.GuestRow{Kind: "lxc", VMID: 101, Node: "pve1"}, task: &fakeTask{upid: "UPID:pve1:config"}}
 	backend := &fakeBackend{}
 	backend.lxcs = map[string]map[int]*fakeGuest{"pve1": {101: guest}}
 	var out bytes.Buffer
-	svc := NewLXCService(backend, TaskRunner{Format: "json", ResultWriter: &out}, nil, false)
+	svc := NewLXCService(backend, TaskRunner{Wait: true, WaitTimeout: time.Second, Format: "json", ResultWriter: &out}, nil, false)
 
 	if err := svc.Config(context.Background(), 101, "pve1", map[string]string{"cores": "2"}); err != nil {
 		t.Fatalf("err = %v", err)
