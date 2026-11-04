@@ -163,14 +163,86 @@ func TestBackupCopyTransfersVerifiesAndRenames(t *testing.T) {
 	if !targetSSH.saw("dd of=") {
 		t.Fatal("dd transfer missing")
 	}
-	if !targetSSH.saw("mv /mnt/backups/backup/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst.pve-cli-part") {
-		t.Fatal("atomic rename missing")
+	// P1-6: publication is a hard link (atomic, fails on an existing target)
+	// followed by part cleanup — never mv, which would overwrite a file
+	// created between the existence check and the publish.
+	if !targetSSH.saw("ln /mnt/backups/backup/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst.pve-cli-part /mnt/backups/backup/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst") {
+		t.Fatal("atomic link publish missing")
+	}
+	if targetSSH.saw("mv ") {
+		t.Fatal("mv must never publish — it overwrites")
+	}
+	if !targetSSH.saw("rm -f /mnt/backups/backup/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst.pve-cli-part") {
+		t.Fatal("part cleanup missing after publish")
+	}
+}
+
+// P1-6: if the final path appears between the existence check and the
+// publish, the hard link fails and nothing is overwritten.
+func TestBackupCopyPublishRefusesConcurrentTarget(t *testing.T) {
+	const payload = "vzdump-payload-bytes"
+	final := "/mnt/backups/backup/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst"
+	sourceSSH := newScriptedRunner().on("cat /var/lib/vz/backup/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst", ssh.Result{ExitCode: 0, Stdout: payload})
+	targetSSH := newScriptedRunner().
+		on("test -e "+final, ssh.Result{ExitCode: 1}).
+		on("stat -c %s "+final+".pve-cli-part", ssh.Result{ExitCode: 1}).
+		on("sha256sum "+final+".pve-cli-part", ssh.Result{ExitCode: 0, Stdout: dataSHA(payload) + "  file\n"}).
+		on("ln "+final+".pve-cli-part "+final, ssh.Result{ExitCode: 1})
+	svc, _ := newTransferService(sourceSSH, targetSSH, nil)
+
+	result, err := svc.Copy(context.Background(), BackupCopyOptions{
+		Volid:         "local:backup/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst",
+		TargetStorage: "backup-dst",
+	})
+	if !errors.Is(err, ErrConflict) {
+		t.Fatalf("err = %v, want conflict on the concurrent publish", err)
+	}
+	if !strings.Contains(err.Error(), "concurrently") || !strings.Contains(err.Error(), "nothing was overwritten") {
+		t.Fatalf("err = %v, want the no-overwrite guarantee", err)
+	}
+	if targetSSH.saw("mv ") {
+		t.Fatal("mv must never publish — it overwrites")
+	}
+	if result.Status == "succeeded" {
+		t.Fatalf("result = %+v", result)
+	}
+}
+
+// An existing, checksum-identical target file is the completion of a
+// previous interrupted run: an idempotent continuation, not an overwrite.
+func TestBackupCopyExistingIdenticalFileIsIdempotent(t *testing.T) {
+	const payload = "vzdump-payload-bytes"
+	final := "/mnt/backups/backup/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst"
+	sourceSSH := newScriptedRunner().
+		on("sha256sum /var/lib/vz/backup/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst", ssh.Result{ExitCode: 0, Stdout: dataSHA(payload) + "  file\n"})
+	targetSSH := newScriptedRunner().
+		on("test -e "+final, ssh.Result{ExitCode: 0}).
+		on("sha256sum "+final, ssh.Result{ExitCode: 0, Stdout: dataSHA(payload) + "  file\n"})
+	svc, _ := newTransferService(sourceSSH, targetSSH, nil)
+
+	result, err := svc.Copy(context.Background(), BackupCopyOptions{
+		Volid:         "local:backup/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst",
+		TargetStorage: "backup-dst",
+	})
+	if err != nil {
+		t.Fatalf("copy: %v", err)
+	}
+	if result.Status != "succeeded" || !result.Resumed || result.SHA256 != dataSHA(payload) {
+		t.Fatalf("result = %+v, want a verified idempotent continuation", result)
+	}
+	if targetSSH.saw("dd of=") || targetSSH.saw("ln ") {
+		t.Fatal("an identical published file must not be re-transferred or re-published")
 	}
 }
 
 func TestBackupCopyRefusesOverwrite(t *testing.T) {
-	sourceSSH := newScriptedRunner()
-	targetSSH := newScriptedRunner().on("test -e /mnt/backups/backup/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst", ssh.Result{ExitCode: 0})
+	const payload = "vzdump-payload-bytes"
+	final := "/mnt/backups/backup/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst"
+	sourceSSH := newScriptedRunner().
+		on("sha256sum /var/lib/vz/backup/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst", ssh.Result{ExitCode: 0, Stdout: dataSHA(payload) + "  file\n"})
+	targetSSH := newScriptedRunner().
+		on("test -e "+final, ssh.Result{ExitCode: 0}).
+		on("sha256sum "+final, ssh.Result{ExitCode: 0, Stdout: strings.Repeat("f", 64) + "  file\n"})
 	svc, _ := newTransferService(sourceSSH, targetSSH, nil)
 
 	_, err := svc.Copy(context.Background(), BackupCopyOptions{
@@ -178,10 +250,10 @@ func TestBackupCopyRefusesOverwrite(t *testing.T) {
 		TargetStorage: "backup-dst",
 	})
 	if !errors.Is(err, ErrConflict) {
-		t.Fatalf("err = %v, want conflict", err)
+		t.Fatalf("err = %v, want conflict for a different existing file", err)
 	}
-	if targetSSH.saw("dd of=") {
-		t.Fatal("must not transfer over an existing file")
+	if targetSSH.saw("dd of=") || targetSSH.saw("ln ") {
+		t.Fatal("must not transfer over or replace an existing different file")
 	}
 }
 
@@ -211,8 +283,8 @@ func TestBackupCopyResumesCompletePart(t *testing.T) {
 	if targetSSH.saw("dd of=") {
 		t.Fatal("complete part must not re-transfer")
 	}
-	if !targetSSH.saw("mv /mnt/backups/backup/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst.pve-cli-part") {
-		t.Fatal("rename missing on resume")
+	if !targetSSH.saw("ln /mnt/backups/backup/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst.pve-cli-part") {
+		t.Fatal("atomic link publish missing on resume")
 	}
 }
 

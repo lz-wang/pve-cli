@@ -140,7 +140,7 @@ func TestBackupCopyCommandEndToEnd(t *testing.T) {
 			t.Fatalf("missing %q:\n%s", want, out)
 		}
 	}
-	if !targetRunner.saw("dd of=") || !targetRunner.saw("mv /mnt/backups/backup/") {
+	if !targetRunner.saw("dd of=") || !targetRunner.saw("ln /mnt/backups/backup/") || targetRunner.saw("mv ") {
 		t.Fatalf("target commands = %v", targetRunner.calls)
 	}
 }
@@ -167,9 +167,14 @@ func TestBackupCopyCommandRequiresSSHProfiles(t *testing.T) {
 
 func TestBackupCopyCommandRefusesOverwrite(t *testing.T) {
 	source, target := copyTestBackends()
-	sourceRunner := &cmdScriptedRunner{}
+	sum := sha256.Sum256([]byte(copyPayload))
+	checksum := hex.EncodeToString(sum[:])
+	sourceRunner := &cmdScriptedRunner{script: map[string]ssh.Result{
+		"sha256sum /var/lib/vz/backup/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst": {ExitCode: 0, Stdout: checksum + "  f\n"},
+	}}
 	targetRunner := &cmdScriptedRunner{script: map[string]ssh.Result{
 		"test -e /mnt/backups/backup/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst": {ExitCode: 0},
+		"sha256sum /mnt/backups/backup/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst": {ExitCode: 0, Stdout: strings.Repeat("f", 64) + "  f\n"},
 	}}
 	var stdout, stderr bytes.Buffer
 	deps := copyDeps(source, target, sourceRunner, targetRunner, &stdout, &stderr)

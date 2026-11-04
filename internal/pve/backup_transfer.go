@@ -99,11 +99,28 @@ func (s *BackupTransferService) Copy(ctx context.Context, options BackupCopyOpti
 	partPath := finalPath + ".pve-cli-part"
 	result.TargetPath = finalPath
 
-	// The target never overwrites an existing archive.
+	// The target never overwrites an existing archive — but an identical,
+	// checksum-verified file is the completion of a previous interrupted
+	// run: an idempotent continuation, not an overwrite.
 	if run, err := s.targetSSH.Run(ctx, nil, nil, nil, "test", "-e", finalPath); err != nil {
 		return result, err
 	} else if run.ExitCode == 0 {
-		return result, fmt.Errorf("%w: target file %s already exists; delete it first or choose another storage", ErrConflict, finalPath)
+		sourceSum, sumErr := s.remoteChecksum(ctx, s.sourceSSH, sourceFile)
+		if sumErr != nil {
+			return result, sumErr
+		}
+		targetSum, sumErr := s.remoteChecksum(ctx, s.targetSSH, finalPath)
+		if sumErr != nil {
+			return result, sumErr
+		}
+		if sourceSum != targetSum {
+			return result, fmt.Errorf("%w: target file %s already exists and does not match the source archive; delete it first or choose another storage", ErrConflict, finalPath)
+		}
+		result.Bytes = source.Size
+		result.SHA256 = sourceSum
+		result.Resumed = true
+		result.Status = "succeeded"
+		return result, nil
 	}
 
 	// Limited resume: a part file with the complete size skips re-transfer
@@ -153,9 +170,17 @@ func (s *BackupTransferService) Copy(ctx context.Context, options BackupCopyOpti
 	}
 	result.SHA256 = sourceSum
 
-	if _, err := s.runTarget(ctx, "mv", partPath, finalPath); err != nil {
+	// Publish without any overwrite window: hard-linking the part file is
+	// atomic and fails when the final path appeared concurrently (closing
+	// the test-then-publish TOCTOU gap that mv would silently overwrite).
+	if run, err := s.runTarget(ctx, "ln", partPath, finalPath); err != nil {
 		return result, err
+	} else if run.ExitCode != 0 {
+		return result, fmt.Errorf("%w: publishing %s failed (ln exited with %d): the target file may have been created concurrently; nothing was overwritten", ErrConflict, finalPath, run.ExitCode)
 	}
+	// Cleanup is best effort: the archive is already published, and a
+	// leftover part file is picked up by the idempotent continuation above.
+	_, _ = s.runTarget(ctx, "rm", "-f", partPath)
 	result.Status = "succeeded"
 	return result, nil
 }
