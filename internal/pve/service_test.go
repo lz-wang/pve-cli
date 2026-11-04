@@ -679,8 +679,10 @@ type fakeGuest struct {
 	cloneName        string
 	cloneOptions     CloneOptions
 	configValues     map[string]string
+	configDigest     string
 	configErr        error
 	configCalls      int
+	onConfig         func(values map[string]string)
 	deleted          bool
 	rebooted         bool
 	migrateOptions   MigrateOptions
@@ -751,7 +753,17 @@ func (g *fakeGuest) Config(_ context.Context, values map[string]string) (Task, e
 	if g.configErr != nil {
 		return nil, g.configErr
 	}
+	if g.onConfig != nil {
+		g.onConfig(values)
+	}
 	return g.task, nil
+}
+
+// ConfigWithDigest records the digest a caller submitted under; tests
+// assert on it to verify optimistic-concurrency writes.
+func (g *fakeGuest) ConfigWithDigest(ctx context.Context, values map[string]string, digest string) (Task, error) {
+	g.configDigest = digest
+	return g.Config(ctx, values)
 }
 
 func (g *fakeGuest) Delete(context.Context) (Task, error) {

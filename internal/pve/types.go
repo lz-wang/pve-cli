@@ -23,6 +23,14 @@ type Guest interface {
 	DeleteSnapshot(ctx context.Context, name string) (Task, error)
 }
 
+// DigestConfigSubmitter supports optimistic-concurrency configuration
+// writes: the digest read with the configuration must accompany the write,
+// so PVE rejects it when the configuration changed in between instead of
+// silently overwriting the concurrent change.
+type DigestConfigSubmitter interface {
+	ConfigWithDigest(ctx context.Context, values map[string]string, digest string) (Task, error)
+}
+
 type Task interface {
 	UPID() string
 	WaitFor(ctx context.Context, seconds int) error

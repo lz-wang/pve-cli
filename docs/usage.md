@@ -115,7 +115,15 @@ bind mounts, device passthrough) are reported as unknowns by design, and
 the restored guest is never started automatically. A failing preflight
 aborts with the reasons in the error message and exit code 4; a passing
 preflight is silent. With `--wait` and a completed restore, bridge mappings
-are applied to the restored guest's network devices automatically. The
+are applied to the restored guest's network devices automatically: every
+explicit mapping must match at least one restored net device (a mapping
+matching nothing fails the command instead of being silently ignored), the
+write submits under the configuration digest so a concurrent change is
+rejected instead of overwritten, and the applied state is verified by
+reading the configuration back — only every mapped device reporting its
+target bridge counts as applied. `--bridge-map` without `--wait` is
+refused: the restore task keeps running, but the command fails and says
+the mapping was not applied. The
 structured result separates the two outcomes: `restore_status` reports the
 archive restore task itself, `post_config_status` reports the bridge
 rewrite (`succeeded`/`failed`/`skipped`), and the overall `status` reads

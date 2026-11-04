@@ -3,7 +3,9 @@ package pve
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
+	"time"
 
 	"github.com/lz-wang/pve-cli/v3/internal/output"
 )
@@ -212,7 +214,11 @@ func (s *RestoreService) planBridgeMap(ctx context.Context, plan *output.Migrati
 
 // applyBridgeMap rewrites the bridge= attribute of the restored guest's
 // network devices according to the mapping. It runs only after a completed
-// (--wait) restore task.
+// (--wait) restore task. Every explicit mapping must match at least one net
+// device — a mapping matching nothing is a configuration error, never a
+// silent no-op. The write submits under the configuration digest and is
+// verified by reading the configuration back: only every mapped device
+// reporting its target bridge counts as applied.
 func (s *RestoreService) applyBridgeMap(ctx context.Context, options RestoreOptions) error {
 	if len(options.BridgeMap) == 0 {
 		return nil
@@ -236,6 +242,8 @@ func (s *RestoreService) applyBridgeMap(ctx context.Context, options RestoreOpti
 		return fmt.Errorf("bridge mapping: read config: %w", ClassifyError(err))
 	}
 	values := map[string]string{}
+	targets := map[string]string{}
+	matched := map[string]int{}
 	for key, value := range config {
 		text, ok := value.(string)
 		if !ok || !strings.HasPrefix(key, "net") {
@@ -247,12 +255,63 @@ func (s *RestoreService) applyBridgeMap(ctx context.Context, options RestoreOpti
 			continue
 		}
 		values[key] = mergeNetAttributes(text, map[string]string{"bridge": target})
+		targets[key] = target
+		matched[bridge]++
 	}
-	if len(values) == 0 {
-		return nil
+	var unmatched []string
+	for source := range options.BridgeMap {
+		if matched[source] == 0 {
+			unmatched = append(unmatched, source)
+		}
 	}
-	if _, err := guest.Config(ctx, values); err != nil {
+	if len(unmatched) > 0 {
+		sort.Strings(unmatched)
+		return fmt.Errorf("%w: bridge mapping matched no network device on the restored guest: %s (inspect the restored configuration with `pve guest config`)", ErrInvalid, strings.Join(unmatched, ", "))
+	}
+
+	// Submit under the digest read with the configuration: a concurrent
+	// write between this read and the submit is rejected by PVE instead of
+	// silently overwritten.
+	digest, _ := config["digest"].(string)
+	var task Task
+	if submitter, ok := guest.(DigestConfigSubmitter); ok && strings.TrimSpace(digest) != "" {
+		task, err = submitter.ConfigWithDigest(ctx, values, digest)
+	} else {
+		task, err = guest.Config(ctx, values)
+	}
+	if err != nil {
 		return fmt.Errorf("bridge mapping: update config: %w", ClassifyError(err))
+	}
+	// The mapping is part of the completed restore: its config write is
+	// always awaited, independently of the user's --wait choice, because
+	// the read-back verification below needs the settled state.
+	if task != nil {
+		runner := s.tasks
+		runner.Wait = true
+		if runner.WaitTimeout <= 0 {
+			runner.WaitTimeout = 2 * time.Minute
+		}
+		operation, waitErr := runner.Execute(ctx, task)
+		if waitErr != nil || operation.Status != "succeeded" {
+			detail := detailOrError(operation.Error, waitErr)
+			return fmt.Errorf("bridge mapping: config task did not complete (%s): %s", operation.Status, detail)
+		}
+	}
+
+	// An accepted write is not an applied write: read the configuration
+	// back and require every mapped device to report its target bridge.
+	verifyConfig, err := configBackend.GuestConfig(ctx, options.Kind, options.Node, options.VMID)
+	if err != nil {
+		return fmt.Errorf("bridge mapping: read back config: %w", ClassifyError(err))
+	}
+	for key, target := range targets {
+		applied, ok := verifyConfig[key].(string)
+		if !ok {
+			return fmt.Errorf("%w: bridge mapping did not take effect: device %s is missing from the configuration after the write", ErrConflict, key)
+		}
+		if actual := optionAttributeValue(applied, "bridge"); actual != target {
+			return fmt.Errorf("%w: bridge mapping did not take effect: device %s reports bridge %q, expected %q", ErrConflict, key, actual, target)
+		}
 	}
 	return nil
 }

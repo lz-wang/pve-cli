@@ -2,6 +2,7 @@ package pve
 
 import (
 	"context"
+	"strings"
 
 	proxmox "github.com/luthermonson/go-proxmox"
 
@@ -71,6 +72,20 @@ func (g vmGuest) Config(ctx context.Context, values map[string]string) (Task, er
 	options := make([]proxmox.VirtualMachineOption, 0, len(values))
 	for key, value := range values {
 		options = append(options, proxmox.VirtualMachineOption{Name: key, Value: value})
+	}
+	task, err := g.vm.Config(ctx, options...)
+	return wrapTask(task), err
+}
+
+// ConfigWithDigest submits the write under the configuration digest read
+// with it: PVE rejects the write when the configuration changed in between.
+func (g vmGuest) ConfigWithDigest(ctx context.Context, values map[string]string, digest string) (Task, error) {
+	options := make([]proxmox.VirtualMachineOption, 0, len(values)+1)
+	for key, value := range values {
+		options = append(options, proxmox.VirtualMachineOption{Name: key, Value: value})
+	}
+	if strings.TrimSpace(digest) != "" {
+		options = append(options, proxmox.VirtualMachineOption{Name: "digest", Value: strings.TrimSpace(digest)})
 	}
 	task, err := g.vm.Config(ctx, options...)
 	return wrapTask(task), err

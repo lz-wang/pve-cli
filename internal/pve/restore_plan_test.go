@@ -165,14 +165,24 @@ func TestRestoreAbortsOnFailedPreflight(t *testing.T) {
 }
 
 // With --wait and a successful task, bridge mappings are applied to the
-// restored container's network devices.
+// restored container's network devices, verified by a read-back of the
+// configuration.
 func TestRestoreAppliesBridgeMapAfterWait(t *testing.T) {
 	backend := newRestoreTestBackend()
 	backend.restoreTask = &fakeTask{upid: "UPID:pve1:0001:0000:6839F4A1:vzrestore:201:root@pam:"}
 	// The restored container appears after the task completes.
 	restored := &fakeGuest{row: output.GuestRow{Kind: "lxc", VMID: 201, Node: "pve1", Status: "stopped"}}
 	backend.lxcs["pve1"] = map[int]*fakeGuest{201: restored}
-	backend.config = map[string]any{"net0": "name=eth0,bridge=vmbr2"}
+	backend.config = map[string]any{
+		"digest": "restore-digest-1",
+		"net0":   "name=eth0,bridge=vmbr2",
+	}
+	// The config write applies to the fake state, so the read-back sees it.
+	restored.onConfig = func(values map[string]string) {
+		for key, value := range values {
+			backend.config[key] = value
+		}
+	}
 
 	var out bytes.Buffer
 	service := NewRestoreService(backend, TaskRunner{Wait: true, WaitTimeout: time.Second, Format: "json", ResultWriter: &out})
@@ -186,6 +196,9 @@ func TestRestoreAppliesBridgeMapAfterWait(t *testing.T) {
 	submitted := restored.configValues
 	if submitted["net0"] != "name=eth0,bridge=vmbr0" {
 		t.Fatalf("bridge fixup missing: %+v", submitted)
+	}
+	if restored.configDigest != "restore-digest-1" {
+		t.Fatalf("submitted digest = %q, want the digest read with the config", restored.configDigest)
 	}
 }
 

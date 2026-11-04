@@ -119,7 +119,10 @@ func (s *RestoreService) Restore(ctx context.Context, options RestoreOptions) (o
 	result.RestoreStatus = operation.Status
 	result.Error = operation.Error
 	// The post-configuration only runs after a completed restore; anything
-	// else reports it as skipped rather than pretending it succeeded.
+	// else reports it as skipped rather than pretending it succeeded. A
+	// bridge map on an unwaited restore is refused instead of skipped: the
+	// operator asked for a configuration change that cannot be applied to
+	// a task still running.
 	result.PostConfigStatus = "skipped"
 	if len(submitted.BridgeMap) > 0 && err == nil && operation.Status == "succeeded" {
 		if mapErr := s.applyBridgeMap(ctx, submitted); mapErr != nil {
@@ -132,6 +135,10 @@ func (s *RestoreService) Restore(ctx context.Context, options RestoreOptions) (o
 			return result, mapErr
 		}
 		result.PostConfigStatus = "succeeded"
+	} else if len(submitted.BridgeMap) > 0 && err == nil && operation.Status == "submitted" {
+		detail := "--bridge-map was NOT applied: the restore task is still running; repeat the command with --wait (a free VMID is required) or apply the mapping manually after the restore completes"
+		result.Error = detail
+		return result, fmt.Errorf("%w: %s", ErrInvalid, detail)
 	}
 	return result, err
 }

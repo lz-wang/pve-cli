@@ -3,6 +3,7 @@ package pve
 import (
 	"context"
 	"errors"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -296,5 +297,151 @@ func TestRestoreServiceSplitStates(t *testing.T) {
 	}
 	if result.RestoreStatus != "failed" || result.PostConfigStatus != "skipped" {
 		t.Fatalf("result = %#v, want restore_status failed / post_config skipped", result)
+	}
+}
+
+// bridgeMapBackend adds native config reads to a restore backend: the
+// restored guest carries a native configuration with one net device.
+type bridgeMapBackend struct {
+	*fakeRestoreBackend
+	guestConfigs map[string]map[string]any
+}
+
+// GuestConfig serves the config keyed "kind/node/vmid"; the map is returned
+// as-is so a fakeGuest.onConfig hook can mutate it to simulate a read-back.
+func (b *bridgeMapBackend) GuestConfig(_ context.Context, kind, node string, id int) (map[string]any, error) {
+	cfg, ok := b.guestConfigs[kind+"/"+node+"/"+strconv.Itoa(id)]
+	if !ok {
+		return map[string]any{}, nil
+	}
+	return cfg, nil
+}
+
+func bridgeMapBackendOf(digest, net0 string) *bridgeMapBackend {
+	backend := &bridgeMapBackend{
+		fakeRestoreBackend: &fakeRestoreBackend{
+			fakeBackend: fakeBackend{
+				nodes: []output.NodeRow{{Name: "pve1"}},
+				backupRows: map[string]map[string][]output.BackupRow{
+					"pve1": {"backup": {{VolID: "backup:backup/vzdump-lxc-200.tar.zst", Kind: "lxc", VMID: 200}}},
+				},
+				storageRows: map[string][]output.StorageRow{
+					"pve1": {{Node: "pve1", Storage: "local-lvm", Type: "lvmthin", Active: true, Enabled: true, Content: "rootdir", Avail: 100 << 30}},
+				},
+				networkRows: map[string][]output.NetworkRow{
+					"pve1": {{Node: "pve1", Name: "vmbr0", Type: "bridge", Active: true}},
+				},
+				lxcs: map[string]map[int]*fakeGuest{"pve1": {201: {
+					row:  output.GuestRow{Kind: "lxc", VMID: 201, Node: "pve1", Status: "stopped"},
+					task: &fakeTask{upid: "UPID:pve1:config"},
+				}}},
+			},
+			task: &fakeTask{upid: "UPID:pve1:restore"},
+		},
+		guestConfigs: map[string]map[string]any{
+			"lxc/pve1/201": {
+				"digest": digest,
+				"net0":   net0,
+			},
+		},
+	}
+	return backend
+}
+
+// P1-2: an explicit bridge mapping that matches no net device on the
+// restored guest is a configuration error, never a silent no-op — the
+// command fails without submitting any config write.
+func TestRestoreBridgeMapUnmatchedSourceFails(t *testing.T) {
+	backend := bridgeMapBackendOf("digest-1", "name=eth0,bridge=vmbr2,firewall=1")
+	guest := backend.fakeRestoreBackend.lxcs["pve1"][201]
+	svc := NewRestoreService(backend, TaskRunner{Wait: true, WaitTimeout: time.Second})
+
+	result, err := svc.Restore(context.Background(), RestoreOptions{
+		Kind: "lxc", Archive: "backup:backup/vzdump-lxc-200.tar.zst",
+		Node: "pve1", VMID: 201, Storage: "local-lvm",
+		BridgeMap: map[string]string{"vmbr9": "vmbr0"},
+	})
+	if err == nil {
+		t.Fatal("a mapping matching no device must fail the command")
+	}
+	if result.Status != "partial" || result.PostConfigStatus != "failed" {
+		t.Fatalf("result = %#v, want partial/failed (archive restored, mapping rejected)", result)
+	}
+	if guest.configCalls != 0 {
+		t.Fatal("an unmatched mapping must not submit any config write")
+	}
+}
+
+// P1-2: the mapping verifies the applied state by reading the configuration
+// back: a config write the API accepted that did not change the bridge can
+// never report post_config_status succeeded.
+func TestRestoreBridgeMapVerifiesAppliedState(t *testing.T) {
+	backend := bridgeMapBackendOf("digest-1", "name=eth0,bridge=vmbr2,firewall=1")
+	svc := NewRestoreService(backend, TaskRunner{Wait: true, WaitTimeout: time.Second})
+
+	result, err := svc.Restore(context.Background(), RestoreOptions{
+		Kind: "lxc", Archive: "backup:backup/vzdump-lxc-200.tar.zst",
+		Node: "pve1", VMID: 201, Storage: "local-lvm",
+		BridgeMap: map[string]string{"vmbr2": "vmbr0"},
+	})
+	if err == nil {
+		t.Fatal("a mapping that did not take effect must fail the command")
+	}
+	if result.Status != "partial" || result.PostConfigStatus != "failed" {
+		t.Fatalf("result = %#v, want partial/failed (write accepted, state unchanged)", result)
+	}
+}
+
+// P1-2: the config write submits under the digest read with the
+// configuration, so a concurrent write between read and submit is rejected
+// by PVE instead of silently overwritten. A mapping that took effect
+// reports post_config_status succeeded.
+func TestRestoreBridgeMapSubmitsWithDigest(t *testing.T) {
+	backend := bridgeMapBackendOf("digest-1", "name=eth0,bridge=vmbr2,firewall=1")
+	guest := backend.fakeRestoreBackend.lxcs["pve1"][201]
+	guest.onConfig = func(values map[string]string) {
+		config := backend.guestConfigs["lxc/pve1/201"]
+		for key, value := range values {
+			config[key] = value
+		}
+	}
+	svc := NewRestoreService(backend, TaskRunner{Wait: true, WaitTimeout: time.Second})
+
+	result, err := svc.Restore(context.Background(), RestoreOptions{
+		Kind: "lxc", Archive: "backup:backup/vzdump-lxc-200.tar.zst",
+		Node: "pve1", VMID: 201, Storage: "local-lvm",
+		BridgeMap: map[string]string{"vmbr2": "vmbr0"},
+	})
+	if err != nil {
+		t.Fatalf("restore: %v", err)
+	}
+	if result.Status != "succeeded" || result.RestoreStatus != "succeeded" || result.PostConfigStatus != "succeeded" {
+		t.Fatalf("result = %#v, want all three succeeded", result)
+	}
+	if guest.configDigest != "digest-1" {
+		t.Fatalf("submitted digest = %q, want the digest read with the config", guest.configDigest)
+	}
+}
+
+// P1-2: --bridge-map without --wait must not silently skip the mapping:
+// the submitted restore task keeps its UPID, but the command fails and
+// explains that the mapping was not applied.
+func TestRestoreBridgeMapRequiresWait(t *testing.T) {
+	backend := bridgeMapBackendOf("digest-1", "name=eth0,bridge=vmbr2,firewall=1")
+	svc := NewRestoreService(backend, TaskRunner{Wait: false})
+
+	result, err := svc.Restore(context.Background(), RestoreOptions{
+		Kind: "lxc", Archive: "backup:backup/vzdump-lxc-200.tar.zst",
+		Node: "pve1", VMID: 201, Storage: "local-lvm",
+		BridgeMap: map[string]string{"vmbr2": "vmbr0"},
+	})
+	if err == nil {
+		t.Fatal("a bridge map without --wait must fail the command")
+	}
+	if result.Task != "UPID:pve1:restore" {
+		t.Fatalf("task = %q, want the preserved restore UPID", result.Task)
+	}
+	if result.PostConfigStatus == "succeeded" {
+		t.Fatalf("post_config_status = %q, the mapping was never applied", result.PostConfigStatus)
 	}
 }
