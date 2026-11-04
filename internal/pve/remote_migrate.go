@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"sort"
 	"strings"
 
@@ -190,16 +191,18 @@ func isAllDigits(value string) bool {
 // migration before it started: a structured APIError in the 4xx family
 // (parameter validation, permission, conflict, optimistic-concurrency
 // digest), or a server error whose body names a missing resource — a lookup
-// failure cannot have started anything. Everything else (5xx, connection
-// interruptions, timeouts) leaves the outcome unproven: the caller must
-// re-check the actual task state instead of trusting a mechanical HTTP
-// classification.
+// failure cannot have started anything. HTTP 408 (request timeout) is
+// excluded from the 4xx family: the request may have been processed, so the
+// outcome is as unproven as any server failure. Everything else (5xx,
+// connection interruptions, timeouts) leaves the outcome unproven: the
+// caller must re-check the actual task state instead of trusting a
+// mechanical HTTP classification.
 func submissionRejected(err error) bool {
 	var apiErr *APIError
 	if !errors.As(err, &apiErr) {
 		return false
 	}
-	if apiErr.HTTPStatus >= 400 && apiErr.HTTPStatus < 500 {
+	if apiErr.HTTPStatus >= 400 && apiErr.HTTPStatus < 500 && apiErr.HTTPStatus != http.StatusRequestTimeout {
 		return true
 	}
 	return apiErr.HTTPStatus >= 500 && errors.Is(apiErr, ErrNotFound)

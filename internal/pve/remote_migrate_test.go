@@ -205,6 +205,7 @@ func TestRemoteMigrateSubmissionFailureNeverReportsSuccess(t *testing.T) {
 		wantTaskKeep string
 	}{
 		{"http 400", nil, &APIError{HTTPStatus: 400, Category: CategoryInvalid, kind: ErrInvalid}, "failed", nil, ""},
+		{"http 408", nil, &APIError{HTTPStatus: 408, Category: CategoryUnavailable, kind: ErrUnavailable}, "unknown", nil, ""},
 		{"http 409", nil, &APIError{HTTPStatus: 409, Category: CategoryConflict, kind: ErrConflict}, "failed", nil, ""},
 		{"http 412", nil, &APIError{HTTPStatus: 412, Category: CategoryConflict, kind: ErrConflict}, "failed", nil, ""},
 		{"http 500", nil, &APIError{HTTPStatus: 500, Category: CategoryUnavailable, kind: ErrUnavailable}, "unknown", nil, ""},

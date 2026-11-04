@@ -453,3 +453,54 @@ func TestBackupCopyCommandRequiresSSHNodeBinding(t *testing.T) {
 		t.Fatal("no host command may run without an explicit ssh.node binding")
 	}
 }
+
+// P1-3, target side: backup copy writes host data on the target too
+// (dd/ln/rm/pvesm), so the target profile must also declare an explicit
+// ssh.node binding — a multi-node target cluster must not guess which node
+// the SSH host serves, or the archive lands on the wrong node's local disk.
+func TestBackupCopyCommandRequiresTargetSSHNodeBinding(t *testing.T) {
+	source, target := copyTestBackends()
+	sourceRunner, targetRunner := &cmdScriptedRunner{}, &cmdScriptedRunner{}
+	var stdout, stderr bytes.Buffer
+	deps := copyDeps(source, target, sourceRunner, targetRunner, &stdout, &stderr)
+
+	// The source profile is correctly bound; the target profile has an ssh
+	// section but no ssh.node.
+	cfgPath := t.TempDir() + "/config.yaml"
+	t.Setenv("PVE_TOKEN", "secret")
+	cfg := config.Empty()
+	if err := cfg.SetProfile("n150", config.Profile{
+		Endpoint:       "https://n150.lan:8006",
+		TokenID:        "root@pam!test",
+		TokenSecretEnv: "PVE_TOKEN",
+		SSH:            &ssh.Profile{Host: "n150", Node: "n150", User: "root"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := cfg.SetProfile("pve8845", config.Profile{
+		Endpoint:       "https://pve8845.lan:8006",
+		TokenID:        "root@pam!test",
+		TokenSecretEnv: "PVE_TOKEN",
+		SSH:            &ssh.Profile{Host: "pve8845", User: "root"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.Save(cfgPath, cfg); err != nil {
+		t.Fatal(err)
+	}
+
+	err := RunWithDependencies([]string{
+		"pve", "--config", cfgPath, "--profile", "n150",
+		"backup", "copy", copyVolid,
+		"--from", "n150", "--to", "pve8845", "--target-storage", "backup-dst",
+	}, "test", deps)
+	if err == nil || !strings.Contains(err.Error(), "ssh.node") {
+		t.Fatalf("err = %v, want a target ssh.node binding refusal", err)
+	}
+	if code := ExitCode(err); code != 2 {
+		t.Fatalf("exit = %d, want 2", code)
+	}
+	if sourceRunner.saw("cat") || targetRunner.saw("dd") {
+		t.Fatal("no host command may run without the target ssh.node binding")
+	}
+}

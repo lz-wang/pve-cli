@@ -386,6 +386,20 @@ func crossProfileOutputFormat(c *cli.Context, sides *crossProfileSides) string {
 	return output.NormalizeFormat(format)
 }
 
+// requireSSHNodeDeclared is the minimal binding requirement for host-data
+// transfers: the profile must declare which PVE node its SSH host serves,
+// even when no node name is available to compare against (backup copy has
+// no --target-node; the archive lands on the declared node's local dir).
+func requireSSHNodeDeclared(profile *ssh.Profile, command string) error {
+	if profile == nil {
+		return fmt.Errorf("%w: %s transfers host data and requires an ssh profile with an explicit ssh.node binding", pve.ErrInvalid, command)
+	}
+	if strings.TrimSpace(profile.Node) == "" {
+		return fmt.Errorf("%w: %s transfers host data and requires an explicit ssh.node binding for the profile host %q; declare the PVE node the SSH host serves", pve.ErrInvalid, command, profile.Host)
+	}
+	return nil
+}
+
 // requireSSHNodeBindingForTransfer refuses a host-transfer unless the
 // profile's SSH host is explicitly bound (ssh.node) to the PVE node the
 // data lives on — the same wrong-host hazard the pct commands close, and
@@ -394,13 +408,10 @@ func crossProfileOutputFormat(c *cli.Context, sides *crossProfileSides) string {
 // node is refused as well; single-host setups are safe by declaring the
 // node, multi-node clusters must not guess.
 func requireSSHNodeBindingForTransfer(profile *ssh.Profile, node, command string) (string, error) {
-	if profile == nil {
-		return "", fmt.Errorf("%w: %s transfers host data and requires an ssh profile with an explicit ssh.node binding", pve.ErrInvalid, command)
+	if err := requireSSHNodeDeclared(profile, command); err != nil {
+		return "", err
 	}
 	declared := strings.TrimSpace(profile.Node)
-	if declared == "" {
-		return "", fmt.Errorf("%w: %s transfers host data and requires an explicit ssh.node binding for the profile host %q; declare the PVE node the SSH host serves", pve.ErrInvalid, command, profile.Host)
-	}
 	if declared != node {
 		return "", fmt.Errorf("%w: the profile ssh host is bound to PVE node %q but %s resolves to node %q; refusing to run host commands there", pve.ErrInvalid, declared, command, node)
 	}

@@ -57,6 +57,13 @@ func backupCopyCommand(deps Dependencies) *cli.Command {
 			if _, bindErr := requireSSHNodeBindingForTransfer(sides.sourceSSHProfile, sourceNode, "backup copy"); bindErr != nil {
 				return bindErr
 			}
+			// The target side writes host data too (dd/ln/rm/pvesm): its
+			// profile must also declare the node its SSH host serves.
+			// backup copy has no --target-node to compare against, so the
+			// explicit declaration is the check.
+			if bindErr := requireSSHNodeDeclared(sides.targetSSHProfile, "backup copy (target)"); bindErr != nil {
+				return bindErr
+			}
 			targetContract, ok := sides.targetBackend.(pve.BackupStorageContract)
 			if !ok {
 				return fmt.Errorf("%w: target backend cannot verify dir storage contracts", pve.ErrUnavailable)

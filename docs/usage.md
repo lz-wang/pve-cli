@@ -155,9 +155,14 @@ pve backup copy local:backup/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst \
 
 `backup copy` streams a backup archive between two independent PVE hosts
 over their SSH transports: source `cat` → local SHA-256 and progress
-fan-out → target `dd`. It requires `ssh` sections on both profiles and only
-supports dir-type storages with backup content (verified through the API
-before any host command); PBS storages must use their native mechanisms.
+fan-out → target `dd`. It requires an `ssh` section with an explicit
+`ssh.node` binding on BOTH profiles — the source binding must match the
+node the archive resolves to, and the target profile must declare the node
+its SSH host serves (the archive lands on that node's local storage
+directory); unbound or disagreeing profiles refuse before any host command.
+It only supports dir-type storages with backup content (verified through
+the API before any host command); PBS storages must use their native
+mechanisms.
 Both archive paths are resolved on the hosts with `pvesm path`, so the
 default `dump/` directory and custom `content-dirs` mappings are honored —
 the logical volume namespace (`storage:backup/file`) is never treated as a
