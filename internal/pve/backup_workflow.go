@@ -251,8 +251,24 @@ func (w *BackupCopyRestoreWorkflow) targetGuestExists(ctx context.Context, optio
 		if options.TargetNode != "" && node.Name != options.TargetNode {
 			continue
 		}
-		guest, err := w.target.LXC(ctx, node.Name, options.TargetVMID)
+		// The VMID namespace is shared between VMs and containers: a qemu VM
+		// occupying the target VMID is an existing unrelated guest too, and
+		// refusing only at the restore stage would waste the whole pipeline.
+		guest, err := w.target.VM(ctx, node.Name, options.TargetVMID)
 		if err == nil && guest != nil {
+			return true, nil
+		}
+		if guest == nil && err == nil {
+			return true, nil
+		}
+		if !errors.Is(ClassifyError(err), ErrNotFound) {
+			return false, err
+		}
+		guest, err = w.target.LXC(ctx, node.Name, options.TargetVMID)
+		if err == nil && guest != nil {
+			return true, nil
+		}
+		if guest == nil && err == nil {
 			return true, nil
 		}
 		if !errors.Is(ClassifyError(err), ErrNotFound) {

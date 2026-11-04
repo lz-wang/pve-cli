@@ -362,6 +362,30 @@ func TestBackupCopyRestoreWorkflowReportsPartialRestore(t *testing.T) {
 	}
 }
 
+// The preflight refusal covers qemu VMs too: a VMID occupied by a VM is
+// still an existing unrelated guest, and refusing late (after backup and
+// transfer) would waste the whole pipeline.
+func TestBackupCopyRestoreWorkflowRejectsExistingVMTarget(t *testing.T) {
+	workflow, source, target, sourceSSH, targetSSH := workflowHarness(t)
+	target.vms = map[string]map[int]*fakeGuest{"pve8845": {201: {
+		row: output.GuestRow{Kind: "vm", VMID: 201, Node: "pve8845", Status: "stopped"},
+	}}}
+
+	result, err := workflow.Run(context.Background(), workflowOptions())
+	if !errors.Is(err, ErrConflict) {
+		t.Fatalf("err = %v, want ErrConflict for a VM-occupied target VMID", err)
+	}
+	if result.Status != "failed" {
+		t.Fatalf("status = %q, want failed", result.Status)
+	}
+	if source.backupCalls != 0 {
+		t.Fatalf("backup ran on a refused workflow: %d calls", source.backupCalls)
+	}
+	if sourceSSH.saw("cat") || targetSSH.saw("test -e") {
+		t.Fatal("transfer ran on a refused workflow")
+	}
+}
+
 // A failing stage stops the workflow; earlier stages keep their results and
 // nothing rolls back automatically.
 func TestBackupCopyRestoreWorkflowStopsOnFailure(t *testing.T) {

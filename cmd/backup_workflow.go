@@ -26,6 +26,7 @@ func backupCopyRestoreCommand(deps Dependencies) *cli.Command {
 			&cli.StringFlag{Name: "target-storage", Usage: "target dir storage name", Required: true},
 			&cli.StringFlag{Name: "target-node", Usage: "target PVE node name", Required: true},
 			&cli.IntFlag{Name: "target-vmid", Usage: "target VMID (defaults to the source VMID)"},
+			&cli.StringFlag{Name: "node", Usage: "source PVE node name (defaults to the source guest's API-resolved node)"},
 			&cli.StringSliceFlag{Name: "bridge-map", Usage: "repeatable source=target bridge rewrite applied after the restore"},
 			&cli.BoolFlag{Name: "wait", Usage: "wait for async task completion (required for the pipeline)", Required: true},
 			&cli.DurationFlag{Name: "wait-timeout", Usage: "task wait timeout"},
@@ -64,6 +65,16 @@ func backupCopyRestoreCommand(deps Dependencies) *cli.Command {
 					return rowErr
 				}
 				sourceNode = row.Node
+			}
+			if bound, bindErr := requireSSHNodeBindingForTransfer(sides.sourceSSHProfile, sourceNode, "backup copy-restore"); bindErr != nil {
+				return bindErr
+			} else if bound == "" {
+				fmt.Fprintf(c.App.ErrWriter, "notice: source ssh host is not bound to a node (ssh.node); the source guest lives on node %s\n", sourceNode)
+			}
+			if bound, bindErr := requireSSHNodeBindingForTransfer(sides.targetSSHProfile, c.String("target-node"), "backup copy-restore"); bindErr != nil {
+				return bindErr
+			} else if bound == "" {
+				fmt.Fprintf(c.App.ErrWriter, "notice: target ssh host is not bound to a node (ssh.node); the target node is %s\n", c.String("target-node"))
 			}
 
 			if _, ok := sides.sourceBackend.(pve.DirStoragePath); !ok {

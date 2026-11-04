@@ -314,3 +314,62 @@ func dataChecksum(payload string) string {
 	sum := sha256.Sum256([]byte(payload))
 	return hex.EncodeToString(sum[:])
 }
+
+// Review I-2: a profile whose ssh.node is explicitly bound to a different
+// PVE node than the one the archive resolves to is refused before any host
+// command runs.
+func TestBackupCopyCommandRejectsSSHNodeMismatch(t *testing.T) {
+	source, target := copyTestBackends()
+	sourceRunner := &cmdScriptedRunner{}
+	targetRunner := &cmdScriptedRunner{}
+	var stdout, stderr bytes.Buffer
+	deps := Dependencies{Stdout: &stdout, Stderr: &stderr}
+	deps.BackendFactory = func(profile config.Profile, _ pve.ClientOptions) (pve.Backend, error) {
+		if strings.Contains(profile.Endpoint, "pve8845") {
+			return target, nil
+		}
+		return source, nil
+	}
+	deps.SSHRunnerFactory = func(profile ssh.Profile) pve.CommandRunner {
+		if profile.Host == "pve8845.lan" {
+			return targetRunner
+		}
+		return sourceRunner
+	}
+
+	cfgPath := t.TempDir() + "/config.yaml"
+	t.Setenv("PVE_TOKEN", "secret")
+	cfg := config.Empty()
+	mustSet := func(name, sshNode string) {
+		t.Helper()
+		if err := cfg.SetProfile(name, config.Profile{
+			Endpoint:       "https://" + name + ".lan:8006",
+			TokenID:        "root@pam!test",
+			TokenSecretEnv: "PVE_TOKEN",
+			SSH:            &ssh.Profile{Host: name + ".lan", Node: sshNode, User: "root"},
+		}); err != nil {
+			t.Fatalf("set profile %s: %v", name, err)
+		}
+	}
+	mustSet("n150", "pve8845") // declared node disagrees with the archive's node
+	mustSet("pve8845", "pve8845")
+	if err := config.Save(cfgPath, cfg); err != nil {
+		t.Fatal(err)
+	}
+
+	err := RunWithDependencies([]string{
+		"pve", "--config", cfgPath, "--profile", "n150",
+		"backup", "copy", copyVolid,
+		"--from", "n150", "--to", "pve8845", "--target-storage", "backup-dst",
+		"-o", "json",
+	}, "test", deps)
+	if err == nil || !strings.Contains(err.Error(), "bound to PVE node") {
+		t.Fatalf("err = %v, want an ssh.node binding refusal", err)
+	}
+	if code := ExitCode(err); code != 2 {
+		t.Fatalf("exit = %d, want 2", code)
+	}
+	if sourceRunner.saw("cat") {
+		t.Fatal("no host read from a mis-bound SSH host")
+	}
+}

@@ -54,6 +54,11 @@ func backupCopyCommand(deps Dependencies) *cli.Command {
 					return err
 				}
 			}
+			if bound, bindErr := requireSSHNodeBindingForTransfer(sides.sourceSSHProfile, sourceNode, "backup copy"); bindErr != nil {
+				return bindErr
+			} else if bound == "" {
+				fmt.Fprintf(c.App.ErrWriter, "notice: source ssh host is not bound to a node (ssh.node); the archive resolves to node %s\n", sourceNode)
+			}
 			targetDir, ok := sides.targetBackend.(pve.DirStoragePath)
 			if !ok {
 				return fmt.Errorf("%w: target backend cannot resolve dir storage paths", pve.ErrUnavailable)

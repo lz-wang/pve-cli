@@ -386,6 +386,26 @@ func crossProfileOutputFormat(c *cli.Context, sides *crossProfileSides) string {
 	return output.NormalizeFormat(format)
 }
 
+// requireSSHNodeBindingForTransfer refuses a host-transfer whose profile
+// SSH host is explicitly bound (ssh.node) to a different PVE node than the
+// one the data lives on — the same wrong-host hazard the pct commands
+// close. An unbound host returns the node for a stderr notice instead: the
+// single-host case is safe by profile identity, multi-node clusters must
+// declare ssh.node.
+func requireSSHNodeBindingForTransfer(profile *ssh.Profile, node, command string) (string, error) {
+	if profile == nil {
+		return "", nil
+	}
+	declared := strings.TrimSpace(profile.Node)
+	if declared == "" {
+		return node, nil
+	}
+	if declared != node {
+		return "", fmt.Errorf("%w: the profile ssh host is bound to PVE node %q but %s resolves to node %q; refusing to run host commands there", pve.ErrInvalid, declared, command, node)
+	}
+	return declared, nil
+}
+
 // resolveSourceNodeForArchive finds the PVE node whose storage lists the
 // archive volume; the SSH host name never decides the node.
 func resolveSourceNodeForArchive(ctx context.Context, backend pve.Backend, volid string) (string, error) {

@@ -222,3 +222,124 @@ func TestBackupCopyRestoreCommandRequiresWait(t *testing.T) {
 		t.Fatalf("exit = %d, want 2", code)
 	}
 }
+
+// Review I-1/I-2: --node overrides the API-resolved source node, and an
+// ssh.node bound to a different node refuses before any host command.
+func TestBackupCopyRestoreCommandAcceptsNodeOverride(t *testing.T) {
+	lxcRow := output.GuestRow{Kind: "lxc", VMID: 101, Name: "app", Node: "n150", Status: "stopped"}
+	source := &cmdWorkflowBackend{commandBackend: &commandBackend{
+		nodes:     []output.NodeRow{{Name: "n150", Status: "online"}},
+		lxcs:      map[string][]output.GuestRow{"n150": {lxcRow}},
+		lxcGuests: map[string]map[int]*commandGuest{"n150": {101: {row: lxcRow}}},
+		backups: map[string]map[string][]output.BackupRow{
+			"n150": {"local": {{
+				Node: "n150", Storage: "local", Kind: "lxc", VMID: 101, VolID: copyVolid,
+				Size: uint64(len(copyPayload)), Format: "tar.zst", CTime: uint64(time.Now().Unix()),
+			}}},
+		},
+		dirPaths:   map[string]string{"local": "/var/lib/vz"},
+		backupTask: &commandTask{upid: "UPID:n150:vzdump:101:root@pam:"},
+	}}
+	target := &cmdWorkflowBackend{commandBackend: &commandBackend{
+		nodes: []output.NodeRow{{Name: "pve8845", Status: "online"}},
+		lxcs:  map[string][]output.GuestRow{},
+		storages: map[string][]output.StorageRow{
+			"pve8845": {{Node: "pve8845", Storage: "backup-dst", Type: "dir", Active: true, Enabled: true, Content: "backup", Avail: 1 << 30}},
+		},
+		backups: map[string]map[string][]output.BackupRow{
+			"pve8845": {"backup-dst": {{
+				Node: "pve8845", Storage: "backup-dst", Kind: "lxc", VMID: 101,
+				VolID: "backup-dst:backup/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst",
+				Size:  uint64(len(copyPayload)), Format: "tar.zst", CTime: uint64(time.Now().Unix()),
+			}}},
+		},
+		dirPaths:   map[string]string{"backup-dst": "/mnt/backups"},
+		backupTask: &commandTask{upid: "UPID:pve8845:restore:201:root@pam:"},
+	}}
+	var stdout, stderr bytes.Buffer
+	deps := workflowCmdDeps(t, source, target, &stdout, &stderr)
+
+	err := RunWithDependencies([]string{
+		"pve", "--config", writeTwoSSHProfileConfig(t),
+		"backup", "copy-restore", "101",
+		"--from", "n150", "--to", "pve8845",
+		"--backup-storage", "local",
+		"--target-storage", "backup-dst",
+		"--target-node", "pve8845",
+		"--target-vmid", "201",
+		"--node", "n150",
+		"--wait", "-o", "json",
+	}, "test", deps)
+	if err != nil {
+		t.Fatalf("copy-restore with --node: %v (stderr %s)", err, stderr.String())
+	}
+	if source.backupCalls != 1 {
+		t.Fatalf("backup calls = %d, want 1", source.backupCalls)
+	}
+}
+
+func TestBackupCopyRestoreCommandRejectsSSHNodeMismatch(t *testing.T) {
+	lxcRow := output.GuestRow{Kind: "lxc", VMID: 101, Name: "app", Node: "n150", Status: "stopped"}
+	source := &cmdWorkflowBackend{commandBackend: &commandBackend{
+		nodes:     []output.NodeRow{{Name: "n150", Status: "online"}},
+		lxcs:      map[string][]output.GuestRow{"n150": {lxcRow}},
+		lxcGuests: map[string]map[int]*commandGuest{"n150": {101: {row: lxcRow}}},
+	}}
+	target := &cmdWorkflowBackend{commandBackend: &commandBackend{
+		nodes: []output.NodeRow{{Name: "pve8845", Status: "online"}},
+	}}
+	var stdout, stderr bytes.Buffer
+	deps := Dependencies{Stdout: &stdout, Stderr: &stderr}
+	deps.BackendFactory = func(profile config.Profile, _ pve.ClientOptions) (pve.Backend, error) {
+		if strings.Contains(profile.Endpoint, "pve8845") {
+			return target, nil
+		}
+		return source, nil
+	}
+	deps.SSHRunnerFactory = func(profile ssh.Profile) pve.CommandRunner {
+		if profile.Host == "pve8845.lan" {
+			return &cmdScriptedRunner{}
+		}
+		return &cmdScriptedRunner{}
+	}
+
+	cfgPath := t.TempDir() + "/config.yaml"
+	t.Setenv("PVE_TOKEN", "secret")
+	cfg := config.Empty()
+	if err := cfg.SetProfile("n150", config.Profile{
+		Endpoint:       "https://n150.lan:8006",
+		TokenID:        "root@pam!test",
+		TokenSecretEnv: "PVE_TOKEN",
+		SSH:            &ssh.Profile{Host: "n150.lan", Node: "pve8845", User: "root"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := cfg.SetProfile("pve8845", config.Profile{
+		Endpoint:       "https://pve8845.lan:8006",
+		TokenID:        "root@pam!test",
+		TokenSecretEnv: "PVE_TOKEN",
+		SSH:            &ssh.Profile{Host: "pve8845.lan", Node: "pve8845", User: "root"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.Save(cfgPath, cfg); err != nil {
+		t.Fatal(err)
+	}
+
+	err := RunWithDependencies([]string{
+		"pve", "--config", cfgPath, "--profile", "n150",
+		"backup", "copy-restore", "101",
+		"--from", "n150", "--to", "pve8845",
+		"--backup-storage", "local",
+		"--target-storage", "backup-dst",
+		"--target-node", "pve8845",
+		"--target-vmid", "201",
+		"--wait", "-o", "json",
+	}, "test", deps)
+	if err == nil || !strings.Contains(err.Error(), "bound to PVE node") {
+		t.Fatalf("err = %v, want an ssh.node binding refusal", err)
+	}
+	if code := ExitCode(err); code != 2 {
+		t.Fatalf("exit = %d, want 2", code)
+	}
+}

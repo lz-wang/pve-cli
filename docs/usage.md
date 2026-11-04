@@ -181,7 +181,10 @@ reports every stage with its own status (`succeeded`/`skipped`/`failed`/
 `partial`/`warning`) and task ID. A failing stage stops the pipeline;
 nothing rolls back automatically, both sides stay as they are. The source
 node for the transfer is the source guest's API-resolved node (`--node`
-overrides; the SSH host name is never assumed). An existing target guest
+overrides; the SSH host name is never assumed). When a profile's `ssh.node`
+declares a node that disagrees with the resolved source or target node, the
+command refuses before running any host command; an unbound `ssh.node`
+prints a notice instead. An existing target guest
 refuses the workflow outright (conflict, exit 4): the same VMID is not
 proof that this workflow created it, and there is no persisted run
 identity to prove a resume — remove the guest or choose another
