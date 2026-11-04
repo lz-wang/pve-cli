@@ -52,6 +52,8 @@ func (r *cmdScriptedRunner) saw(part string) bool {
 	return false
 }
 
+// writeTwoSSHProfileConfig builds two profiles with ssh sections bound to
+// their own nodes — transfers require the explicit ssh.node binding.
 func writeTwoSSHProfileConfig(t *testing.T) string {
 	t.Helper()
 	cfgPath := t.TempDir() + "/config.yaml"
@@ -62,7 +64,7 @@ func writeTwoSSHProfileConfig(t *testing.T) string {
 			Endpoint:       "https://" + name + ".lan:8006",
 			TokenID:        "root@pam!test",
 			TokenSecretEnv: "PVE_TOKEN",
-			SSH:            &ssh.Profile{Host: name, User: "root"},
+			SSH:            &ssh.Profile{Host: name, Node: name, User: "root"},
 		}); err != nil {
 			t.Fatalf("set profile %s: %v", name, err)
 		}
@@ -82,7 +84,17 @@ const (
 	copyTargetVolid = "backup-dst:backup/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst"
 	copySourceFile  = "/var/lib/vz/dump/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst"
 	copyTargetFile  = "/mnt/backups/dump/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst"
+	copyPartFile    = copyTargetFile + ".pve-cli-part-t0ken"
 )
+
+// pinPartToken fixes the unique transfer suffix so scripted remote commands
+// stay deterministic.
+func pinPartToken(t *testing.T) {
+	t.Helper()
+	previous := pve.PartToken
+	pve.PartToken = func() string { return "t0ken" }
+	t.Cleanup(func() { pve.PartToken = previous })
+}
 
 // writeAliasedSSHProfileConfig gives the profiles SSH host aliases that do
 // NOT match their PVE node names — the API, not the SSH name, decides the
@@ -145,6 +157,7 @@ func copyDeps(source, target *commandBackend, sourceRunner, targetRunner *cmdScr
 }
 
 func TestBackupCopyCommandEndToEnd(t *testing.T) {
+	pinPartToken(t)
 	source, target := copyTestBackends()
 	sum := sha256.Sum256([]byte(copyPayload))
 	checksum := hex.EncodeToString(sum[:])
@@ -153,11 +166,11 @@ func TestBackupCopyCommandEndToEnd(t *testing.T) {
 		"cat " + copySourceFile:   {ExitCode: 0, Stdout: copyPayload},
 	}}
 	targetRunner := &cmdScriptedRunner{script: map[string]ssh.Result{
-		"pvesm path " + copyTargetVolid:                  {ExitCode: 0, Stdout: copyTargetFile + "\n"},
-		"test -e " + copyTargetFile:                      {ExitCode: 1},
-		"stat -c %s " + copyTargetFile + ".pve-cli-part": {ExitCode: 1},
-		"sha256sum " + copyTargetFile + ".pve-cli-part":  {ExitCode: 0, Stdout: checksum + "  f\n"},
-		"pvesm list backup-dst --content backup":         {ExitCode: 0, Stdout: copyTargetVolid + " tar.zst backup 123\n"},
+		"pvesm path " + copyTargetVolid:          {ExitCode: 0, Stdout: copyTargetFile + "\n"},
+		"test -e " + copyTargetFile:              {ExitCode: 1},
+		"stat -c %s " + copyPartFile:             {ExitCode: 1},
+		"sha256sum " + copyPartFile:              {ExitCode: 0, Stdout: checksum + "  f\n"},
+		"pvesm list backup-dst --content backup": {ExitCode: 0, Stdout: copyTargetVolid + " tar.zst backup 123\n"},
 	}}
 	var stdout, stderr bytes.Buffer
 	deps := copyDeps(source, target, sourceRunner, targetRunner, &stdout, &stderr)
@@ -241,17 +254,18 @@ func TestBackupCopyCommandRefusesOverwrite(t *testing.T) {
 // --node the source node is resolved from the API by finding the node whose
 // storage lists the archive (here the SSH alias differs from the node).
 func TestBackupCopyCommandResolvesSourceNodeFromAPI(t *testing.T) {
+	pinPartToken(t)
 	source, target := copyTestBackends()
 	sourceRunner := &cmdScriptedRunner{script: map[string]ssh.Result{
 		"pvesm path " + copyVolid: {ExitCode: 0, Stdout: copySourceFile + "\n"},
 		"cat " + copySourceFile:   {ExitCode: 0, Stdout: copyPayload},
 	}}
 	targetRunner := &cmdScriptedRunner{script: map[string]ssh.Result{
-		"pvesm path " + copyTargetVolid:                  {ExitCode: 0, Stdout: copyTargetFile + "\n"},
-		"test -e " + copyTargetFile:                      {ExitCode: 1},
-		"stat -c %s " + copyTargetFile + ".pve-cli-part": {ExitCode: 1},
-		"sha256sum " + copyTargetFile + ".pve-cli-part":  {ExitCode: 0, Stdout: dataChecksum(copyPayload) + "  f\n"},
-		"pvesm list backup-dst --content backup":         {ExitCode: 0, Stdout: copyTargetVolid + " tar.zst backup 123\n"},
+		"pvesm path " + copyTargetVolid:          {ExitCode: 0, Stdout: copyTargetFile + "\n"},
+		"test -e " + copyTargetFile:              {ExitCode: 1},
+		"stat -c %s " + copyPartFile:             {ExitCode: 1},
+		"sha256sum " + copyPartFile:              {ExitCode: 0, Stdout: dataChecksum(copyPayload) + "  f\n"},
+		"pvesm list backup-dst --content backup": {ExitCode: 0, Stdout: copyTargetVolid + " tar.zst backup 123\n"},
 	}}
 	var stdout, stderr bytes.Buffer
 	deps := Dependencies{Stdout: &stdout, Stderr: &stderr}
@@ -285,17 +299,18 @@ func TestBackupCopyCommandResolvesSourceNodeFromAPI(t *testing.T) {
 // P2: profile default_output applies to the newer commands too — json is
 // emitted without an explicit -o flag.
 func TestProfileDefaultJSONAppliesToBackupCopy(t *testing.T) {
+	pinPartToken(t)
 	source, target := copyTestBackends()
 	sourceRunner := &cmdScriptedRunner{script: map[string]ssh.Result{
 		"pvesm path " + copyVolid: {ExitCode: 0, Stdout: copySourceFile + "\n"},
 		"cat " + copySourceFile:   {ExitCode: 0, Stdout: copyPayload},
 	}}
 	targetRunner := &cmdScriptedRunner{script: map[string]ssh.Result{
-		"pvesm path " + copyTargetVolid:                  {ExitCode: 0, Stdout: copyTargetFile + "\n"},
-		"test -e " + copyTargetFile:                      {ExitCode: 1},
-		"stat -c %s " + copyTargetFile + ".pve-cli-part": {ExitCode: 1},
-		"sha256sum " + copyTargetFile + ".pve-cli-part":  {ExitCode: 0, Stdout: dataChecksum(copyPayload) + "  f\n"},
-		"pvesm list backup-dst --content backup":         {ExitCode: 0, Stdout: copyTargetVolid + " tar.zst backup 123\n"},
+		"pvesm path " + copyTargetVolid:          {ExitCode: 0, Stdout: copyTargetFile + "\n"},
+		"test -e " + copyTargetFile:              {ExitCode: 1},
+		"stat -c %s " + copyPartFile:             {ExitCode: 1},
+		"sha256sum " + copyPartFile:              {ExitCode: 0, Stdout: dataChecksum(copyPayload) + "  f\n"},
+		"pvesm list backup-dst --content backup": {ExitCode: 0, Stdout: copyTargetVolid + " tar.zst backup 123\n"},
 	}}
 	var stdout, stderr bytes.Buffer
 	deps := copyDeps(source, target, sourceRunner, targetRunner, &stdout, &stderr)
@@ -393,5 +408,48 @@ func TestBackupCopyCommandRejectsSSHNodeMismatch(t *testing.T) {
 	}
 	if sourceRunner.saw("cat") {
 		t.Fatal("no host read from a mis-bound SSH host")
+	}
+}
+
+// P1-3: a host-transfer reads and writes host data, so an unbound ssh.node
+// is refused — multi-node clusters must not guess which node the SSH host
+// serves. The refusal happens before any host command.
+func TestBackupCopyCommandRequiresSSHNodeBinding(t *testing.T) {
+	source, target := copyTestBackends()
+	sourceRunner, targetRunner := &cmdScriptedRunner{}, &cmdScriptedRunner{}
+	var stdout, stderr bytes.Buffer
+	deps := copyDeps(source, target, sourceRunner, targetRunner, &stdout, &stderr)
+
+	// Profiles with ssh sections but no ssh.node binding.
+	cfgPath := t.TempDir() + "/config.yaml"
+	t.Setenv("PVE_TOKEN", "secret")
+	cfg := config.Empty()
+	for _, name := range []string{"n150", "pve8845"} {
+		if err := cfg.SetProfile(name, config.Profile{
+			Endpoint:       "https://" + name + ".lan:8006",
+			TokenID:        "root@pam!test",
+			TokenSecretEnv: "PVE_TOKEN",
+			SSH:            &ssh.Profile{Host: name, User: "root"},
+		}); err != nil {
+			t.Fatalf("set profile %s: %v", name, err)
+		}
+	}
+	if err := config.Save(cfgPath, cfg); err != nil {
+		t.Fatal(err)
+	}
+
+	err := RunWithDependencies([]string{
+		"pve", "--config", cfgPath, "--profile", "n150",
+		"backup", "copy", copyVolid,
+		"--from", "n150", "--to", "pve8845", "--target-storage", "backup-dst",
+	}, "test", deps)
+	if err == nil || !strings.Contains(err.Error(), "ssh.node") {
+		t.Fatalf("err = %v, want an ssh.node binding refusal", err)
+	}
+	if code := ExitCode(err); code != 2 {
+		t.Fatalf("exit = %d, want 2", code)
+	}
+	if sourceRunner.saw("cat") || targetRunner.saw("dd") {
+		t.Fatal("no host command may run without an explicit ssh.node binding")
 	}
 }

@@ -115,8 +115,18 @@ const (
 	transferFile  = "/var/lib/vz/dump/" + transferName
 	targetVolid   = "backup-dst:backup/" + transferName
 	targetFile    = "/mnt/backups/dump/" + transferName
-	targetPart    = targetFile + ".pve-cli-part"
+	testPartToken = "t0ken"
+	targetPart    = targetFile + ".pve-cli-part-" + testPartToken
 )
+
+// withPartToken pins the unique transfer suffix so scripted commands stay
+// deterministic; every test with part-path scripts needs it.
+func withPartToken(t *testing.T) {
+	t.Helper()
+	previous := PartToken
+	PartToken = func() string { return testPartToken }
+	t.Cleanup(func() { PartToken = previous })
+}
 
 func newTransferAPIs() (*transferTestAPI, *transferTestAPI) {
 	sourceAPI := &transferTestAPI{fakeBackend: &fakeBackend{
@@ -143,7 +153,9 @@ func defaultTransferScripts(sourceSSH, targetSSH *scriptedRunner) {
 	targetSSH.on("pvesm list backup-dst --content backup", ssh.Result{ExitCode: 0, Stdout: "Volid                                                    Format Type Size Filename\n" + targetVolid + " tar.zst backup " + fmt.Sprint(len(transferPayload)) + " " + transferName + "\n"})
 }
 
-func newTransferService(sourceSSH, targetSSH *scriptedRunner, progress io.Writer) (*BackupTransferService, *transferTestAPI) {
+func newTransferService(t *testing.T, sourceSSH, targetSSH *scriptedRunner, progress io.Writer) (*BackupTransferService, *transferTestAPI) {
+	t.Helper()
+	withPartToken(t)
 	sourceAPI, targetAPI := newTransferAPIs()
 	defaultTransferScripts(sourceSSH, targetSSH)
 	return NewBackupTransferService(sourceAPI, "n150", sourceSSH, targetAPI, targetSSH, progress), targetAPI
@@ -164,7 +176,7 @@ func TestBackupCopyResolvesPhysicalDumpPaths(t *testing.T) {
 		on("stat -c %s "+targetPart, ssh.Result{ExitCode: 1}).
 		on("sha256sum "+targetPart, ssh.Result{ExitCode: 0, Stdout: dataSHA(transferPayload) + "  file\n"})
 	var progress bytes.Buffer
-	svc, _ := newTransferService(sourceSSH, targetSSH, &progress)
+	svc, _ := newTransferService(t, sourceSSH, targetSSH, &progress)
 
 	result, err := svc.Copy(context.Background(), BackupCopyOptions{Volid: transferVolid, TargetStorage: "backup-dst"})
 	if err != nil {
@@ -184,8 +196,9 @@ func TestBackupCopyResolvesPhysicalDumpPaths(t *testing.T) {
 // content-dirs overrides redirect the physical archive directory; the
 // transfer must follow whatever `pvesm path` reports.
 func TestBackupCopyFollowsCustomContentDirs(t *testing.T) {
+	withPartToken(t)
 	customFile := "/mnt/vzdump-archive/" + transferName
-	customPart := customFile + ".pve-cli-part"
+	customPart := customFile + ".pve-cli-part-" + testPartToken
 	sourceAPI, targetAPI := newTransferAPIs()
 	sourceSSH := newScriptedRunner().
 		on("pvesm path "+transferVolid, ssh.Result{ExitCode: 0, Stdout: customFile + "\n"}).
@@ -193,7 +206,6 @@ func TestBackupCopyFollowsCustomContentDirs(t *testing.T) {
 	targetSSH := newScriptedRunner().
 		on("pvesm path "+targetVolid, ssh.Result{ExitCode: 0, Stdout: customFile + "\n"}).
 		on("test -e "+customFile, ssh.Result{ExitCode: 1}).
-		on("stat -c %s "+customPart, ssh.Result{ExitCode: 1}).
 		on("sha256sum "+customPart, ssh.Result{ExitCode: 0, Stdout: dataSHA(transferPayload) + "  file\n"}).
 		on("pvesm list backup-dst --content backup", ssh.Result{ExitCode: 0, Stdout: targetVolid + " tar.zst backup 123\n"})
 	svc := NewBackupTransferService(sourceAPI, "n150", sourceSSH, targetAPI, targetSSH, nil)
@@ -218,7 +230,7 @@ func TestBackupCopyVerifiesTargetInventoryRecognition(t *testing.T) {
 		on("test -e "+targetFile, ssh.Result{ExitCode: 1}).
 		on("stat -c %s "+targetPart, ssh.Result{ExitCode: 1}).
 		on("sha256sum "+targetPart, ssh.Result{ExitCode: 0, Stdout: dataSHA(transferPayload) + "  file\n"})
-	svc, _ := newTransferService(sourceSSH, targetSSH, nil)
+	svc, _ := newTransferService(t, sourceSSH, targetSSH, nil)
 
 	result, err := svc.Copy(context.Background(), BackupCopyOptions{Volid: transferVolid, TargetStorage: "backup-dst"})
 	if err != nil {
@@ -235,6 +247,7 @@ func TestBackupCopyVerifiesTargetInventoryRecognition(t *testing.T) {
 // A file that exists on disk but is not listed by the storage inventory is
 // not a completed copy — e.g. an unrecognized archive extension.
 func TestBackupCopyFailsWhenInventoryMissesArchive(t *testing.T) {
+	withPartToken(t)
 	sourceAPI, targetAPI := newTransferAPIs()
 	sourceSSH := newScriptedRunner().
 		on("pvesm path "+transferVolid, ssh.Result{ExitCode: 0, Stdout: transferFile + "\n"}).
@@ -242,7 +255,6 @@ func TestBackupCopyFailsWhenInventoryMissesArchive(t *testing.T) {
 	targetSSH := newScriptedRunner().
 		on("pvesm path "+targetVolid, ssh.Result{ExitCode: 0, Stdout: targetFile + "\n"}).
 		on("test -e "+targetFile, ssh.Result{ExitCode: 1}).
-		on("stat -c %s "+targetPart, ssh.Result{ExitCode: 1}).
 		on("sha256sum "+targetPart, ssh.Result{ExitCode: 0, Stdout: dataSHA(transferPayload) + "  file\n"}).
 		on("ln "+targetPart+" "+targetFile, ssh.Result{ExitCode: 0}).
 		on("pvesm list backup-dst --content backup", ssh.Result{ExitCode: 0, Stdout: "Volid\nbackup-dst:backup/some-other-archive.tar.zst tar.zst backup 1 x\n"})
@@ -300,7 +312,7 @@ func TestBackupCopyTransfersVerifiesAndRenames(t *testing.T) {
 		on("stat -c %s "+targetPart, ssh.Result{ExitCode: 1}).
 		on("sha256sum "+targetPart, ssh.Result{ExitCode: 0, Stdout: dataSHA(transferPayload) + "  file\n"})
 	var progress bytes.Buffer
-	svc, _ := newTransferService(sourceSSH, targetSSH, &progress)
+	svc, _ := newTransferService(t, sourceSSH, targetSSH, &progress)
 
 	result, err := svc.Copy(context.Background(), BackupCopyOptions{Volid: transferVolid, TargetStorage: "backup-dst"})
 	if err != nil {
@@ -341,7 +353,7 @@ func TestBackupCopyPublishRefusesConcurrentTarget(t *testing.T) {
 		on("stat -c %s "+targetPart, ssh.Result{ExitCode: 1}).
 		on("sha256sum "+targetPart, ssh.Result{ExitCode: 0, Stdout: dataSHA(transferPayload) + "  file\n"}).
 		on("ln "+targetPart+" "+targetFile, ssh.Result{ExitCode: 1})
-	svc, _ := newTransferService(sourceSSH, targetSSH, nil)
+	svc, _ := newTransferService(t, sourceSSH, targetSSH, nil)
 
 	result, err := svc.Copy(context.Background(), BackupCopyOptions{Volid: transferVolid, TargetStorage: "backup-dst"})
 	if !errors.Is(err, ErrConflict) {
@@ -367,7 +379,7 @@ func TestBackupCopyExistingIdenticalFileIsIdempotent(t *testing.T) {
 	targetSSH := newScriptedRunner().
 		on("test -e "+targetFile, ssh.Result{ExitCode: 0}).
 		on("sha256sum "+targetFile, ssh.Result{ExitCode: 0, Stdout: dataSHA(transferPayload) + "  file\n"})
-	svc, _ := newTransferService(sourceSSH, targetSSH, nil)
+	svc, _ := newTransferService(t, sourceSSH, targetSSH, nil)
 
 	result, err := svc.Copy(context.Background(), BackupCopyOptions{Volid: transferVolid, TargetStorage: "backup-dst"})
 	if err != nil {
@@ -390,7 +402,7 @@ func TestBackupCopyRefusesOverwrite(t *testing.T) {
 	targetSSH := newScriptedRunner().
 		on("test -e "+targetFile, ssh.Result{ExitCode: 0}).
 		on("sha256sum "+targetFile, ssh.Result{ExitCode: 0, Stdout: strings.Repeat("f", 64) + "  file\n"})
-	svc, _ := newTransferService(sourceSSH, targetSSH, nil)
+	svc, _ := newTransferService(t, sourceSSH, targetSSH, nil)
 
 	_, err := svc.Copy(context.Background(), BackupCopyOptions{Volid: transferVolid, TargetStorage: "backup-dst"})
 	if !errors.Is(err, ErrConflict) {
@@ -406,9 +418,9 @@ func TestBackupCopyResumesCompletePart(t *testing.T) {
 		on("sha256sum "+transferFile, ssh.Result{ExitCode: 0, Stdout: dataSHA(transferPayload) + "  file\n"})
 	targetSSH := newScriptedRunner().
 		on("test -e "+targetFile, ssh.Result{ExitCode: 1}).
-		on("stat -c %s "+targetPart, ssh.Result{ExitCode: 0, Stdout: fmt.Sprint(len(transferPayload))}).
+		on("find /mnt/backups/dump -maxdepth 1 -type f -name "+transferName+".pve-cli-part-* -size "+fmt.Sprint(len(transferPayload))+"c", ssh.Result{ExitCode: 0, Stdout: targetPart + "\n"}).
 		on("sha256sum "+targetPart, ssh.Result{ExitCode: 0, Stdout: dataSHA(transferPayload) + "  file\n"})
-	svc, _ := newTransferService(sourceSSH, targetSSH, nil)
+	svc, _ := newTransferService(t, sourceSSH, targetSSH, nil)
 
 	result, err := svc.Copy(context.Background(), BackupCopyOptions{Volid: transferVolid, TargetStorage: "backup-dst"})
 	if err != nil {
@@ -431,7 +443,7 @@ func TestBackupCopyHashMismatchCleansUp(t *testing.T) {
 		on("test -e "+targetFile, ssh.Result{ExitCode: 1}).
 		on("stat -c %s "+targetPart, ssh.Result{ExitCode: 1}).
 		on("sha256sum "+targetPart, ssh.Result{ExitCode: 0, Stdout: strings.Repeat("0", 64) + "  file\n"})
-	svc, _ := newTransferService(sourceSSH, targetSSH, nil)
+	svc, _ := newTransferService(t, sourceSSH, targetSSH, nil)
 
 	result, err := svc.Copy(context.Background(), BackupCopyOptions{Volid: transferVolid, TargetStorage: "backup-dst"})
 	if err == nil || !strings.Contains(err.Error(), "checksum") {
@@ -446,7 +458,7 @@ func TestBackupCopyHashMismatchCleansUp(t *testing.T) {
 }
 
 func TestBackupCopyValidations(t *testing.T) {
-	svc, _ := newTransferService(newScriptedRunner(), newScriptedRunner(), nil)
+	svc, _ := newTransferService(t, newScriptedRunner(), newScriptedRunner(), nil)
 
 	if _, err := svc.Copy(context.Background(), BackupCopyOptions{Volid: "garbage"}); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("err = %v, want invalid volid", err)
@@ -469,7 +481,7 @@ func TestBackupCopyReportsProgress(t *testing.T) {
 		on("stat -c %s "+targetPart, ssh.Result{ExitCode: 1}).
 		on("sha256sum "+targetPart, ssh.Result{ExitCode: 0, Stdout: dataSHA("data") + "  f\n"})
 	var progress bytes.Buffer
-	svc, _ := newTransferService(sourceSSH, targetSSH, &progress)
+	svc, _ := newTransferService(t, sourceSSH, targetSSH, &progress)
 
 	if _, err := svc.Copy(context.Background(), BackupCopyOptions{Volid: transferVolid, TargetStorage: "backup-dst"}); err != nil {
 		t.Fatalf("copy: %v", err)
@@ -495,5 +507,98 @@ func TestResolveVolumePathRejectsUnusableOutput(t *testing.T) {
 	runner.on("pvesm path "+transferVolid, ssh.Result{ExitCode: 0, Stdout: ""})
 	if _, err := resolveVolumePath(context.Background(), runner, transferVolid); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("err = %v, want invalid for empty output", err)
+	}
+}
+
+// P1-1: two concurrent copies to the same archive never share a part file —
+// each transfer writes its own uniquely named temporary state and cleanup
+// only ever removes its own part. The second publisher loses the atomic
+// hard-link race and reports a conflict; nothing is overwritten.
+func TestBackupCopyConcurrentCopiesIsolatePartFiles(t *testing.T) {
+	withPartToken(t)
+	partA := targetFile + ".pve-cli-part-run-a"
+	partB := targetFile + ".pve-cli-part-run-b"
+	tokens := []string{"run-a", "run-b"}
+	PartToken = func() string {
+		token := tokens[0]
+		tokens = tokens[1:]
+		return token
+	}
+	t.Cleanup(func() { PartToken = func() string { return testPartToken } })
+
+	sourceAPI, targetAPI := newTransferAPIs()
+	sourceSSH := newScriptedRunner().
+		on("pvesm path "+transferVolid, ssh.Result{ExitCode: 0, Stdout: transferFile + "\n"}).
+		on("cat "+transferFile, ssh.Result{ExitCode: 0, Stdout: transferPayload})
+	targetSSH := newScriptedRunner().
+		on("pvesm path "+targetVolid, ssh.Result{ExitCode: 0, Stdout: targetFile + "\n"}).
+		on("test -e "+targetFile, ssh.Result{ExitCode: 1}).
+		on("sha256sum "+partA, ssh.Result{ExitCode: 0, Stdout: dataSHA(transferPayload) + "  f\n"}).
+		on("sha256sum "+partB, ssh.Result{ExitCode: 0, Stdout: dataSHA(transferPayload) + "  f\n"}).
+		on("ln "+partA+" "+targetFile, ssh.Result{ExitCode: 0}).
+		on("ln "+partB+" "+targetFile, ssh.Result{ExitCode: 1}).
+		on("pvesm list backup-dst --content backup", ssh.Result{ExitCode: 0, Stdout: targetVolid + " tar.zst backup 123\n"})
+	svc := NewBackupTransferService(sourceAPI, "n150", sourceSSH, targetAPI, targetSSH, nil)
+
+	first, firstErr := svc.Copy(context.Background(), BackupCopyOptions{Volid: transferVolid, TargetStorage: "backup-dst"})
+	if firstErr != nil || first.Status != "succeeded" {
+		t.Fatalf("first copy = %+v, %v", first, firstErr)
+	}
+	second, secondErr := svc.Copy(context.Background(), BackupCopyOptions{Volid: transferVolid, TargetStorage: "backup-dst"})
+	if !errors.Is(secondErr, ErrConflict) || !strings.Contains(secondErr.Error(), "nothing was overwritten") {
+		t.Fatalf("second copy err = %v, want a no-overwrite conflict", secondErr)
+	}
+	if second.Status == "succeeded" {
+		t.Fatalf("second copy = %+v", second)
+	}
+	ddParts := map[string]bool{}
+	for _, call := range targetSSH.calls {
+		if rest, found := strings.CutPrefix(call, "dd of="); found {
+			ddParts[strings.Fields(rest)[0]] = true
+		}
+		if rest, found := strings.CutPrefix(call, "rm -f "); found {
+			if rest != partA && rest != partB {
+				t.Fatalf("cleanup touched a foreign path %q", rest)
+			}
+		}
+	}
+	if !ddParts[partA] || !ddParts[partB] {
+		t.Fatalf("each concurrent copy must transfer to its own part file: %v", ddParts)
+	}
+}
+
+// P1-1: a leftover full-size part from an interrupted (possibly different)
+// run is found by size and resumed — no shared fixed part name required.
+func TestBackupCopyResumesLeftoverPartFromAnyRun(t *testing.T) {
+	withPartToken(t)
+	stalePart := targetFile + ".pve-cli-part-stale9"
+	sourceAPI, targetAPI := newTransferAPIs()
+	sourceSSH := newScriptedRunner().
+		on("pvesm path "+transferVolid, ssh.Result{ExitCode: 0, Stdout: transferFile + "\n"}).
+		on("sha256sum "+transferFile, ssh.Result{ExitCode: 0, Stdout: dataSHA(transferPayload) + "  f\n"})
+	targetSSH := newScriptedRunner().
+		on("pvesm path "+targetVolid, ssh.Result{ExitCode: 0, Stdout: targetFile + "\n"}).
+		on("test -e "+targetFile, ssh.Result{ExitCode: 1}).
+		on("find /mnt/backups/dump -maxdepth 1 -type f -name "+transferName+".pve-cli-part-* -size "+fmt.Sprint(len(transferPayload))+"c", ssh.Result{ExitCode: 0, Stdout: stalePart + "\n"}).
+		on("sha256sum "+stalePart, ssh.Result{ExitCode: 0, Stdout: dataSHA(transferPayload) + "  f\n"}).
+		on("ln "+stalePart+" "+targetFile, ssh.Result{ExitCode: 0}).
+		on("pvesm list backup-dst --content backup", ssh.Result{ExitCode: 0, Stdout: targetVolid + " tar.zst backup 123\n"})
+	svc := NewBackupTransferService(sourceAPI, "n150", sourceSSH, targetAPI, targetSSH, nil)
+
+	result, err := svc.Copy(context.Background(), BackupCopyOptions{Volid: transferVolid, TargetStorage: "backup-dst"})
+	if err != nil {
+		t.Fatalf("copy: %v", err)
+	}
+	if !result.Resumed {
+		t.Fatalf("result = %+v, want a resumed transfer", result)
+	}
+	if targetSSH.saw("dd of=") {
+		t.Fatal("a complete leftover part must not re-transfer")
+	}
+	if !targetSSH.saw("ln " + stalePart + " " + targetFile) {
+		t.Fatal("the leftover part must be the published file")
+	}
+	if !targetSSH.saw("rm -f " + stalePart) {
+		t.Fatal("cleanup removes only the part used by this run")
 	}
 }

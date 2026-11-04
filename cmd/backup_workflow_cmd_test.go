@@ -42,6 +42,7 @@ func (b *cmdWorkflowBackend) Restore(ctx context.Context, options pve.RestoreOpt
 
 func workflowCmdDeps(t *testing.T, source, target *cmdWorkflowBackend, stdout, stderr *bytes.Buffer) Dependencies {
 	t.Helper()
+	pinPartToken(t)
 	sum := sha256.Sum256([]byte(copyPayload))
 	checksum := hex.EncodeToString(sum[:])
 	sourceRunner := &cmdScriptedRunner{script: map[string]ssh.Result{
@@ -49,11 +50,11 @@ func workflowCmdDeps(t *testing.T, source, target *cmdWorkflowBackend, stdout, s
 		"cat " + copySourceFile:   {ExitCode: 0, Stdout: copyPayload},
 	}}
 	targetRunner := &cmdScriptedRunner{script: map[string]ssh.Result{
-		"pvesm path " + copyTargetVolid:                  {ExitCode: 0, Stdout: copyTargetFile + "\n"},
-		"test -e " + copyTargetFile:                      {ExitCode: 1},
-		"stat -c %s " + copyTargetFile + ".pve-cli-part": {ExitCode: 1},
-		"sha256sum " + copyTargetFile + ".pve-cli-part":  {ExitCode: 0, Stdout: checksum + "  f\n"},
-		"pvesm list backup-dst --content backup":         {ExitCode: 0, Stdout: copyTargetVolid + " tar.zst backup 123\n"},
+		"pvesm path " + copyTargetVolid:          {ExitCode: 0, Stdout: copyTargetFile + "\n"},
+		"test -e " + copyTargetFile:              {ExitCode: 1},
+		"stat -c %s " + copyPartFile:             {ExitCode: 1},
+		"sha256sum " + copyPartFile:              {ExitCode: 0, Stdout: checksum + "  f\n"},
+		"pvesm list backup-dst --content backup": {ExitCode: 0, Stdout: copyTargetVolid + " tar.zst backup 123\n"},
 	}}
 	deps := Dependencies{Stdout: stdout, Stderr: stderr}
 	deps.BackendFactory = func(profile config.Profile, _ pve.ClientOptions) (pve.Backend, error) {

@@ -386,19 +386,20 @@ func crossProfileOutputFormat(c *cli.Context, sides *crossProfileSides) string {
 	return output.NormalizeFormat(format)
 }
 
-// requireSSHNodeBindingForTransfer refuses a host-transfer whose profile
-// SSH host is explicitly bound (ssh.node) to a different PVE node than the
-// one the data lives on — the same wrong-host hazard the pct commands
-// close. An unbound host returns the node for a stderr notice instead: the
-// single-host case is safe by profile identity, multi-node clusters must
-// declare ssh.node.
+// requireSSHNodeBindingForTransfer refuses a host-transfer unless the
+// profile's SSH host is explicitly bound (ssh.node) to the PVE node the
+// data lives on — the same wrong-host hazard the pct commands close, and
+// stricter: every operation that reads, modifies or transfers host data
+// requires the explicit binding. A binding that disagrees with the resolved
+// node is refused as well; single-host setups are safe by declaring the
+// node, multi-node clusters must not guess.
 func requireSSHNodeBindingForTransfer(profile *ssh.Profile, node, command string) (string, error) {
 	if profile == nil {
-		return "", nil
+		return "", fmt.Errorf("%w: %s transfers host data and requires an ssh profile with an explicit ssh.node binding", pve.ErrInvalid, command)
 	}
 	declared := strings.TrimSpace(profile.Node)
 	if declared == "" {
-		return node, nil
+		return "", fmt.Errorf("%w: %s transfers host data and requires an explicit ssh.node binding for the profile host %q; declare the PVE node the SSH host serves", pve.ErrInvalid, command, profile.Host)
 	}
 	if declared != node {
 		return "", fmt.Errorf("%w: the profile ssh host is bound to PVE node %q but %s resolves to node %q; refusing to run host commands there", pve.ErrInvalid, declared, command, node)

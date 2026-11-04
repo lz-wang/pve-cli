@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -17,6 +18,7 @@ const workflowArchive = "local:backup/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst
 
 func workflowHarness(t *testing.T) (*BackupCopyRestoreWorkflow, *fakeBackend, *fakeBackend, *scriptedRunner, *scriptedRunner) {
 	t.Helper()
+	withPartToken(t)
 	source := &fakeBackend{
 		nodes: []output.NodeRow{{Name: "n150", Status: "online"}},
 		lxcs: map[string]map[int]*fakeGuest{"n150": {101: {
@@ -57,8 +59,8 @@ func workflowHarness(t *testing.T) (*BackupCopyRestoreWorkflow, *fakeBackend, *f
 	targetSSH := newScriptedRunner().
 		on("pvesm path "+workflowTargetVolid, ssh.Result{ExitCode: 0, Stdout: "/mnt/backups/dump/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst\n"}).
 		on("test -e /mnt/backups/dump/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst", ssh.Result{ExitCode: 1}).
-		on("stat -c %s /mnt/backups/dump/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst.pve-cli-part", ssh.Result{ExitCode: 1}).
-		on("sha256sum /mnt/backups/dump/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst.pve-cli-part", ssh.Result{ExitCode: 0, Stdout: checksum + "  f\n"}).
+		on("find /mnt/backups/dump -maxdepth 1 -type f -name vzdump-lxc-101-2026_06_06-00_00_00.tar.zst.pve-cli-part-* -size "+fmt.Sprint(len(transferPayload))+"c", ssh.Result{ExitCode: 0}).
+		on("sha256sum /mnt/backups/dump/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst.pve-cli-part-"+testPartToken, ssh.Result{ExitCode: 0, Stdout: checksum + "  f\n"}).
 		on("pvesm list backup-dst --content backup", ssh.Result{ExitCode: 0, Stdout: workflowTargetVolid + " tar.zst backup 123\n"})
 
 	sourceWithDirs := &transferTestAPI{fakeBackend: source, verify: map[string]error{"local": nil}}

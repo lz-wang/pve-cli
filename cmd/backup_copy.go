@@ -54,10 +54,8 @@ func backupCopyCommand(deps Dependencies) *cli.Command {
 					return err
 				}
 			}
-			if bound, bindErr := requireSSHNodeBindingForTransfer(sides.sourceSSHProfile, sourceNode, "backup copy"); bindErr != nil {
+			if _, bindErr := requireSSHNodeBindingForTransfer(sides.sourceSSHProfile, sourceNode, "backup copy"); bindErr != nil {
 				return bindErr
-			} else if bound == "" {
-				fmt.Fprintf(c.App.ErrWriter, "notice: source ssh host is not bound to a node (ssh.node); the archive resolves to node %s\n", sourceNode)
 			}
 			targetContract, ok := sides.targetBackend.(pve.BackupStorageContract)
 			if !ok {

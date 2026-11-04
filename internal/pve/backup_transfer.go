@@ -2,13 +2,16 @@ package pve
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"io"
 	"path"
+	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/lz-wang/pve-cli/v3/internal/output"
 	"github.com/lz-wang/pve-cli/v3/internal/ssh"
@@ -27,6 +30,18 @@ type BackupStorageContract interface {
 type BackupCopyOptions struct {
 	Volid         string // source "storage:backup/file.ext"
 	TargetStorage string // dir storage on the target host
+}
+
+// PartToken generates the unique per-transfer suffix of the temporary part
+// file. Unique names keep concurrent copies isolated: two runs never write
+// into (or delete) each other's temporary state, and the atomic hard-link
+// publish decides the winner. Tests pin it for deterministic scripts.
+var PartToken = func() string {
+	buf := make([]byte, 6)
+	if _, err := rand.Read(buf); err != nil {
+		return strconv.FormatInt(time.Now().UnixNano(), 36)
+	}
+	return hex.EncodeToString(buf)
 }
 
 // BackupTransferService streams a backup archive from one PVE host to
@@ -113,7 +128,10 @@ func (s *BackupTransferService) Copy(ctx context.Context, options BackupCopyOpti
 	if err != nil {
 		return result, err
 	}
-	partPath := finalPath + ".pve-cli-part"
+	// Unique part names per transfer: concurrent copies never share (or
+	// delete) each other's temporary state, and the publish race is decided
+	// by the atomic hard link instead of a shared fixed path.
+	ownPart := finalPath + ".pve-cli-part-" + PartToken()
 	result.TargetPath = finalPath
 
 	// The target never overwrites an existing archive — but an identical,
@@ -143,18 +161,17 @@ func (s *BackupTransferService) Copy(ctx context.Context, options BackupCopyOpti
 		return result, nil
 	}
 
-	// Limited resume: a part file with the complete size skips re-transfer
-	// and is validated by checksum instead.
-	resume := false
-	if run, err := s.targetSSH.Run(ctx, nil, nil, nil, "stat", "-c", "%s", partPath); err == nil && run.ExitCode == 0 {
-		if size := parseLeadingUint(run.Stdout); size == source.Size && size > 0 {
-			resume = true
-		}
-	}
-	result.Resumed = resume
+	// Limited resume: a leftover part with the complete size — from this or
+	// any previous interrupted run — skips re-transfer and is validated by
+	// checksum instead. The lookup is size-exact, so a concurrently growing
+	// part of another run is never adopted.
+	resume := s.findResumablePart(ctx, finalPath, source.Size)
+	result.Resumed = resume != ""
 
 	var sourceSum string
-	if resume {
+	usedPart := ownPart
+	if resume != "" {
+		usedPart = resume
 		result.Bytes = source.Size
 		if sourceSum, err = s.remoteChecksum(ctx, s.sourceSSH, sourceFile); err != nil {
 			return result, err
@@ -165,9 +182,9 @@ func (s *BackupTransferService) Copy(ctx context.Context, options BackupCopyOpti
 		}
 		hasher := sha256.New()
 		progress := &countingWriter{progress: s.Progress}
-		transferred, err := s.stream(ctx, sourceFile, partPath, hasher, progress)
+		transferred, err := s.stream(ctx, sourceFile, ownPart, hasher, progress)
 		if err != nil {
-			_, _ = s.runTarget(ctx, "rm", "-f", partPath)
+			_, _ = s.runTarget(ctx, "rm", "-f", ownPart)
 			result.Status = "failed"
 			result.Error = err.Error()
 			return result, err
@@ -176,13 +193,13 @@ func (s *BackupTransferService) Copy(ctx context.Context, options BackupCopyOpti
 		sourceSum = hex.EncodeToString(hasher.Sum(nil))
 	}
 
-	targetSum, err := s.remoteChecksum(ctx, s.targetSSH, partPath)
+	targetSum, err := s.remoteChecksum(ctx, s.targetSSH, usedPart)
 	if err != nil {
-		_, _ = s.runTarget(ctx, "rm", "-f", partPath)
+		_, _ = s.runTarget(ctx, "rm", "-f", usedPart)
 		return result, err
 	}
 	if sourceSum != targetSum {
-		_, _ = s.runTarget(ctx, "rm", "-f", partPath)
+		_, _ = s.runTarget(ctx, "rm", "-f", usedPart)
 		err := fmt.Errorf("%w: checksum mismatch after transfer: source %s, target %s", ErrConflict, sourceSum, targetSum)
 		result.Status = "failed"
 		result.Error = err.Error()
@@ -193,14 +210,15 @@ func (s *BackupTransferService) Copy(ctx context.Context, options BackupCopyOpti
 	// Publish without any overwrite window: hard-linking the part file is
 	// atomic and fails when the final path appeared concurrently (closing
 	// the test-then-publish TOCTOU gap that mv would silently overwrite).
-	if run, err := s.runTarget(ctx, "ln", partPath, finalPath); err != nil {
+	if run, err := s.runTarget(ctx, "ln", usedPart, finalPath); err != nil {
 		return result, err
 	} else if run.ExitCode != 0 {
 		return result, fmt.Errorf("%w: publishing %s failed (ln exited with %d): the target file may have been created concurrently; nothing was overwritten", ErrConflict, finalPath, run.ExitCode)
 	}
-	// Cleanup is best effort: the archive is already published, and a
-	// leftover part file is picked up by the idempotent continuation above.
-	_, _ = s.runTarget(ctx, "rm", "-f", partPath)
+	// Cleanup is best effort and strictly scoped to this run's own part:
+	// parts of concurrent runs are never touched; a leftover part file is
+	// picked up by the resume lookup above.
+	_, _ = s.runTarget(ctx, "rm", "-f", usedPart)
 
 	// A file PVE cannot list is not a completed copy: the published archive
 	// must be recognized by the target storage inventory (an unrecognized
@@ -212,6 +230,27 @@ func (s *BackupTransferService) Copy(ctx context.Context, options BackupCopyOpti
 	}
 	result.Status = "succeeded"
 	return result, nil
+}
+
+// findResumablePart returns a leftover part file of the exact archive size
+// in the target directory, or "" when none exists. Part names are unique
+// per transfer, so any match is a completed-but-unpublished transfer of an
+// earlier interrupted run.
+func (s *BackupTransferService) findResumablePart(ctx context.Context, finalPath string, size uint64) string {
+	if size == 0 {
+		return ""
+	}
+	run, err := s.targetSSH.Run(ctx, nil, nil, nil, "find", path.Dir(finalPath), "-maxdepth", "1", "-type", "f", "-name", path.Base(finalPath)+".pve-cli-part-*", "-size", fmt.Sprintf("%dc", size))
+	if err != nil || run.ExitCode != 0 {
+		return ""
+	}
+	for line := range strings.SplitSeq(run.Stdout, "\n") {
+		line = strings.TrimSpace(line)
+		if line != "" {
+			return line
+		}
+	}
+	return ""
 }
 
 // resolveVolumePath asks the host for the physical path of a volume id via
@@ -317,17 +356,6 @@ func parseBackupVolid(volid string) (storage, subpath string, err error) {
 		return "", "", fmt.Errorf("%w: invalid volume id %q, expected STORAGE:backup/file", ErrInvalid, volid)
 	}
 	return storage, subpath, nil
-}
-
-func parseLeadingUint(text string) uint64 {
-	var value uint64
-	for _, ch := range text {
-		if ch < '0' || ch > '9' {
-			break
-		}
-		value = value*10 + uint64(ch-'0')
-	}
-	return value
 }
 
 // countingWriter reports observable transfer progress.

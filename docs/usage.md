@@ -165,10 +165,12 @@ never overwrites an existing archive: publication is an atomic hard link
 (fails if the file appeared concurrently), and an existing file is accepted
 only when its checksum matches the source — an idempotent continuation of a
 previous interrupted run. A different existing file conflicts (exit 4).
-Transfers write a `.pve-cli-part` file first; a leftover part with the
-complete size is verified by checksum and resumed (complete-temp-file
-recovery, not byte-range resumption), a checksum mismatch fails and cleans
-the part file up. A completed copy is confirmed against the target storage
+Transfers write a uniquely named `.pve-cli-part-<token>` file per run, so
+concurrent copies never share (or delete) each other's temporary state; a
+leftover part with the complete size is found by size, verified by
+checksum and resumed (complete-temp-file recovery, not byte-range
+resumption), a checksum mismatch fails and cleans the run's own part file
+up. A completed copy is confirmed against the target storage
 inventory (`pvesm list --content backup`): a file PVE does not recognize is
 not a completed copy. Transfer progress (`transferred N`) goes to stderr;
 the result reports bytes, the verified `sha256` and the `resumed` flag.
@@ -187,10 +189,10 @@ reports every stage with its own status (`succeeded`/`skipped`/`failed`/
 `partial`/`warning`) and task ID. A failing stage stops the pipeline;
 nothing rolls back automatically, both sides stay as they are. The source
 node for the transfer is the source guest's API-resolved node (`--node`
-overrides; the SSH host name is never assumed). When a profile's `ssh.node`
-declares a node that disagrees with the resolved source or target node, the
-command refuses before running any host command; an unbound `ssh.node`
-prints a notice instead. An existing target guest
+overrides; the SSH host name is never assumed). Host transfers require an
+explicit `ssh.node` binding on both profiles: a binding that disagrees
+with the resolved source or target node, and an unbound profile alike,
+refuse before any host command runs. An existing target guest
 refuses the workflow outright (conflict, exit 4): the same VMID is not
 proof that this workflow created it, and there is no persisted run
 identity to prove a resume — remove the guest or choose another
