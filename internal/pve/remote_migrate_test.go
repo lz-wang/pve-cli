@@ -68,7 +68,7 @@ func TestRemoteMigrateSubmitsOfflineDefaults(t *testing.T) {
 	svc, out := remoteMigrateSetup(t, guest, false)
 
 	_, err := svc.RemoteMigrate(context.Background(), 101, "n150", RemoteMigrateOptions{
-		TargetEndpointBundle: "apitoken=PVEAPIToken=u@pam!t=secret host=t.lan",
+		TargetEndpointBundle: "apitoken=PVEAPIToken=u@pam!t=secret,host=t.lan",
 		TargetStorageMap:     map[string]string{"local-lvm": "local-lvm"},
 		TargetBridgeMap:      map[string]string{"vmbr2": "vmbr0"},
 		TargetVMID:           201,
@@ -146,17 +146,17 @@ func TestRemoteMigrateHTTPContract(t *testing.T) {
 	svc := NewLXCService(backend, TaskRunner{}, nil, false)
 
 	if _, err := svc.RemoteMigrate(context.Background(), 101, "n150", RemoteMigrateOptions{
-		TargetEndpointBundle: "apitoken=PVEAPIToken=root@pam!tgt=0123456789abcdef host=10.0.0.2:8006 fingerprint=AA:BB:CC",
+		TargetEndpointBundle: "apitoken=PVEAPIToken=root@pam!tgt=0123456789abcdef,host=10.0.0.2,port=8006,fingerprint=AA:BB:CC",
 		TargetStorageMap:     map[string]string{"local-lvm": "local-lvm"},
 		TargetBridgeMap:      map[string]string{"vmbr2": "vmbr0"},
 		TargetVMID:           201,
 	}); err != nil {
 		t.Fatalf("remote migrate: %v", err)
 	}
-	if body["target-endpoint"] != "apitoken=PVEAPIToken=root@pam!tgt=0123456789abcdef host=10.0.0.2:8006 fingerprint=AA:BB:CC" {
+	if body["target-endpoint"] != "apitoken=PVEAPIToken=root@pam!tgt=0123456789abcdef,host=10.0.0.2,port=8006,fingerprint=AA:BB:CC" {
 		t.Fatalf("target-endpoint = %v", body["target-endpoint"])
 	}
-	if body["target-storage"] != "local-lvm=local-lvm" || body["target-bridge"] != "vmbr2=vmbr0" {
+	if body["target-storage"] != "local-lvm:local-lvm" || body["target-bridge"] != "vmbr2:vmbr0" {
 		t.Fatalf("maps = %v %v", body["target-storage"], body["target-bridge"])
 	}
 	if body["target-vmid"] != float64(201) {
@@ -285,8 +285,8 @@ func TestFormatMigrationMaps(t *testing.T) {
 		expected string
 	}{
 		{nil, ""},
-		{map[string]string{"a": "b"}, "a=b"},
-		{map[string]string{"a": "b", "c": "d"}, "a=b,c=d"},
+		{map[string]string{"a": "b"}, "a:b"},
+		{map[string]string{"a": "b", "c": "d"}, "a:b,c:d"},
 	}
 	for _, tc := range cases {
 		if got := formatMigrationMaps(tc.input); got != tc.expected {

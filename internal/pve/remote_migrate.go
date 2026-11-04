@@ -86,7 +86,8 @@ func (s *GuestService) RemoteMigrate(ctx context.Context, vmid int, node string,
 	return operation, runErr
 }
 
-// formatMigrationMaps renders a source=target map in PVE's "a=b,c=d" form.
+// formatMigrationMaps renders a source=target map in PVE's official
+// "source:target" pair form ("a:b,c:d").
 func formatMigrationMaps(m map[string]string) string {
 	if len(m) == 0 {
 		return ""
@@ -98,7 +99,7 @@ func formatMigrationMaps(m map[string]string) string {
 	sort.Strings(names)
 	pairs := make([]string, 0, len(names))
 	for _, name := range names {
-		pairs = append(pairs, name+"="+m[name])
+		pairs = append(pairs, name+":"+m[name])
 	}
 	return strings.Join(pairs, ",")
 }

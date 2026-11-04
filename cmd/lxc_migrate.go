@@ -160,8 +160,9 @@ func lxcMigrateRemoteCommand(deps Dependencies) *cli.Command {
 }
 
 // buildTargetEndpointBundle assembles PVE's remote-migration endpoint string
-// from the target profile. The bundle embeds the target token secret and is
-// only ever passed into the API call.
+// in the official comma-separated attribute format: apitoken=...,host=...[,port=...][,fingerprint=...].
+// A URL without a port defers to PVE's default (8006). The bundle embeds the
+// target token secret and is only ever passed into the API call.
 func buildTargetEndpointBundle(profile config.Profile, fingerprint string) (string, error) {
 	secret, err := config.ResolveTokenSecret(profile)
 	if err != nil {
@@ -171,15 +172,21 @@ func buildTargetEndpointBundle(profile config.Profile, fingerprint string) (stri
 	if err != nil {
 		return "", fmt.Errorf("%w: invalid target endpoint %q: %v", pve.ErrInvalid, profile.Endpoint, err)
 	}
-	host := parsed.Host
+	host := parsed.Hostname()
 	if host == "" {
 		return "", fmt.Errorf("%w: target endpoint %q has no host", pve.ErrInvalid, profile.Endpoint)
 	}
-	bundle := "apitoken=PVEAPIToken=" + profile.TokenID + "=" + secret + " host=" + host
-	if strings.TrimSpace(fingerprint) != "" {
-		bundle += " fingerprint=" + strings.TrimSpace(fingerprint)
+	parts := []string{
+		"apitoken=PVEAPIToken=" + profile.TokenID + "=" + secret,
+		"host=" + host,
 	}
-	return bundle, nil
+	if port := parsed.Port(); port != "" {
+		parts = append(parts, "port="+port)
+	}
+	if trimmed := strings.TrimSpace(fingerprint); trimmed != "" {
+		parts = append(parts, "fingerprint="+trimmed)
+	}
+	return strings.Join(parts, ","), nil
 }
 
 func lxcMigrateCheckCommand(deps Dependencies) *cli.Command {
@@ -327,7 +334,14 @@ func buildCrossProfileSides(c *cli.Context, deps Dependencies, request crossProf
 		return nil, fmt.Errorf("%w: --to must be a different profile than the source", pve.ErrInvalid)
 	}
 
-	sourceBackend, err := crossProfileBackend(c, deps, sourceProfile)
+	// The remote migration hands the target token to the source PVE, so the
+	// source backend's sanitizer must know the target secret: PVE validation
+	// errors echo the submitted endpoint bundle back.
+	targetSecret, err := config.ResolveTokenSecret(targetProfile)
+	if err != nil {
+		return nil, fmt.Errorf("target profile %s: config error: %w", request.to, err)
+	}
+	sourceBackend, err := crossProfileBackend(c, deps, sourceProfile, targetSecret)
 	if err != nil {
 		return nil, fmt.Errorf("source profile %s: %w", sourceProfileName, err)
 	}
@@ -361,7 +375,7 @@ func sshRunnersFor(deps Dependencies, sides *crossProfileSides) (pve.CommandRunn
 	return deps.SSHRunnerFactory(*sides.sourceSSHProfile), deps.SSHRunnerFactory(*sides.targetSSHProfile), nil
 }
 
-func crossProfileBackend(c *cli.Context, deps Dependencies, profile config.Profile) (pve.Backend, error) {
+func crossProfileBackend(c *cli.Context, deps Dependencies, profile config.Profile, extraSecrets ...string) (pve.Backend, error) {
 	secret, err := config.ResolveTokenSecret(profile)
 	if err != nil {
 		return nil, err
@@ -371,8 +385,9 @@ func crossProfileBackend(c *cli.Context, deps Dependencies, profile config.Profi
 		return nil, err
 	}
 	return deps.BackendFactory(profile, pve.ClientOptions{
-		TokenSecret: secret,
-		Timeout:     timeout,
-		Insecure:    boolFlag(c, "insecure"),
+		TokenSecret:  secret,
+		ExtraSecrets: extraSecrets,
+		Timeout:      timeout,
+		Insecure:     boolFlag(c, "insecure"),
 	})
 }

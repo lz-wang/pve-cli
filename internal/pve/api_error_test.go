@@ -147,6 +147,28 @@ func TestAPIErrorPreservesSanitizedFieldErrors(t *testing.T) {
 	}
 }
 
+// P0-4: parameter names that carry whole credential bundles (target-endpoint,
+// apitoken) must have their echoed values redacted as a whole, even when no
+// exact secret is registered for the sanitizer.
+func TestAPIErrorRedactsEndpointBundleFieldsWhole(t *testing.T) {
+	bundle := "apitoken=PVEAPIToken=root@pam!tgt=unregistered-secret-value,host=10.0.0.2,port=8006"
+	transport, req := apiErrorTestTransport(t, http.StatusBadRequest,
+		`{"data":null,"message":"parameter verification failed",`+
+			`"errors":{"target-endpoint":"`+bundle+`"}}`)
+
+	_, err := transport.RoundTrip(req)
+	var apiErr *APIError
+	if !errors.As(err, &apiErr) {
+		t.Fatalf("expected *APIError, got %T", err)
+	}
+	if got := apiErr.FieldErrors["target-endpoint"]; got != "[REDACTED]" {
+		t.Fatalf("target-endpoint = %q, want [REDACTED]", got)
+	}
+	if strings.Contains(err.Error(), "unregistered-secret-value") {
+		t.Fatal("unregistered bundle secret leaked into error output")
+	}
+}
+
 func TestAPIErrorNonJSONBodyIsBounded(t *testing.T) {
 	for name, body := range map[string]string{
 		"html":      "<html><body>502 Bad Gateway nginx</body></html>",

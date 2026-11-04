@@ -201,8 +201,11 @@ func (s *errorSanitizer) text(value string, limit int) string {
 
 // sanitizeFieldName reports whether a field-level validation error may echo
 // the submitted credential value itself; such messages are redacted whole.
+// Endpoint parameters carry whole token bundles, so they are always treated
+// as sensitive regardless of the registered secret list.
 func sanitizeFieldName(name string) bool {
-	return sensitiveConfigKey(name)
+	name = strings.ToLower(name)
+	return sensitiveConfigKey(name) || strings.Contains(name, "endpoint")
 }
 
 // parsePVEErrorBody decodes a bounded slice of a PVE error body. Unknown
