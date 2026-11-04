@@ -1791,7 +1791,7 @@ pve backup copy VOLID
 | `--from` | --from value source profile name **Required.** |
 | `--to` | --to value target profile name **Required.** |
 | `--target-storage` | --target-storage value target dir storage name **Required.** |
-| `--node` | --node value source PVE node name (defaults to the source profile's ssh host) |
+| `--node` | --node value source PVE node name (defaults to API resolution from the archive's storage listing) |
 
 ### `pve backup copy-restore`
 
@@ -1811,6 +1811,7 @@ pve backup copy-restore VMID
 | `--target-storage` | --target-storage value target dir storage name **Required.** |
 | `--target-node` | --target-node value target PVE node name **Required.** |
 | `--target-vmid` | --target-vmid value target VMID (defaults to the source VMID) (default: 0) |
+| `--node` | --node value source PVE node name (defaults to the source guest's API-resolved node) |
 | `--bridge-map` | --bridge-map value [ --bridge-map value ] repeatable source=target bridge rewrite applied after the restore |
 | `--wait` | --wait wait for async task completion (required for the pipeline) (default: false) **Required.** |
 | `--wait-timeout` | --wait-timeout value task wait timeout (default: 0s) |
