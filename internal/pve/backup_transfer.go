@@ -73,14 +73,17 @@ func NewBackupTransferService(sourceAPI BackupReader, sourceNode string, sourceS
 }
 
 // Copy transfers the archive once. The target refuses to overwrite an
-// existing file; a leftover .pve-cli-part of the full size is resumed by
-// verification instead of re-transfer. A checksum mismatch fails and cleans
-// the partial file up, and the published archive must be recognized by the
-// target storage inventory before the copy reports success.
+// existing file; an identical, checksum-verified file is an idempotent
+// reuse. Leftover .pve-cli-part files of other runs are never adopted, and
+// this run's own part is cleaned up on every definite failure. A checksum
+// or byte-count mismatch fails and cleans the partial file up, and the
+// published archive must be recognized by the target storage inventory
+// before the copy reports success.
 func (s *BackupTransferService) Copy(ctx context.Context, options BackupCopyOptions) (output.BackupCopyResult, error) {
-	// Every failure that cannot prove its outcome starts unknown; the
-	// definite-failure branches below upgrade to failed.
-	result := output.BackupCopyResult{Resource: "backup", SourceVolid: options.Volid, TargetStorage: options.TargetStorage, Status: TaskStatusUnknown}
+	// Everything before the first host write is a preflight: any failure
+	// there proves nothing was executed, so the status starts failed and
+	// only upgrades to unknown once the transfer can have had side effects.
+	result := output.BackupCopyResult{Resource: "backup", SourceVolid: options.Volid, TargetStorage: options.TargetStorage, Status: "failed"}
 
 	sourceStorage, subpath, err := parseBackupVolid(options.Volid)
 	if err != nil {
@@ -151,9 +154,15 @@ func (s *BackupTransferService) Copy(ctx context.Context, options BackupCopyOpti
 			return result, sumErr
 		}
 		if sourceSum != targetSum {
+			result.Status = "failed"
 			return result, fmt.Errorf("%w: target file %s already exists and does not match the source archive; delete it first or choose another storage", ErrConflict, finalPath)
 		}
 		if invErr := s.verifyTargetInventory(ctx, targetVolid); invErr != nil {
+			// The identical file demonstrably exists on the target; only its
+			// PVE visibility is unconfirmed. Partial keeps that fact alive —
+			// a bare failed would invite an agent to clean the file up.
+			result.Status = "partial"
+			result.Error = "identical archive already present at " + finalPath + " but its inventory verification failed: " + invErr.Error()
 			return result, invErr
 		}
 		result.Bytes = source.Size
@@ -163,45 +172,51 @@ func (s *BackupTransferService) Copy(ctx context.Context, options BackupCopyOpti
 		return result, nil
 	}
 
-	// Limited resume: a leftover part with the complete size — from this or
-	// any previous interrupted run — skips re-transfer and is validated by
-	// checksum instead. The lookup is size-exact, so a concurrently growing
-	// part of another run is never adopted.
-	resume := s.findResumablePart(ctx, finalPath, source.Size)
-	result.Resumed = resume != ""
-
-	var sourceSum string
-	usedPart := ownPart
-	if resume != "" {
-		usedPart = resume
-		result.Bytes = source.Size
-		if sourceSum, err = s.remoteChecksum(ctx, s.sourceSSH, sourceFile); err != nil {
-			return result, err
-		}
-	} else {
-		if _, err := s.runTarget(ctx, "mkdir", "-p", path.Dir(finalPath)); err != nil {
-			return result, err
-		}
-		hasher := sha256.New()
-		progress := &countingWriter{progress: s.Progress}
-		transferred, err := s.stream(ctx, sourceFile, ownPart, hasher, progress)
-		if err != nil {
-			_, _ = s.runTarget(ctx, "rm", "-f", ownPart)
-			result.Status = "failed"
-			result.Error = err.Error()
-			return result, err
-		}
-		result.Bytes = transferred
-		sourceSum = hex.EncodeToString(hasher.Sum(nil))
+	// A correct size alone never proves a leftover part stopped growing, so
+	// orphan parts of other runs are never adopted: this run always
+	// transfers to its own part file. Published archives are reused through
+	// the checksum-verified branch above.
+	if run, err := s.runTarget(ctx, "mkdir", "-p", path.Dir(finalPath)); err != nil {
+		return result, err
+	} else if run.ExitCode != 0 {
+		return result, fmt.Errorf("%w: mkdir -p %s exited with %d: %s", ErrUnavailable, path.Dir(finalPath), run.ExitCode, strings.TrimSpace(run.Stderr))
 	}
+	// The transfer is the first step that can leave bytes on the target
+	// host: from here on an interrupted run cannot prove its outcome, so
+	// the status is unknown until a definite branch reports otherwise.
+	result.Status = TaskStatusUnknown
 
-	targetSum, err := s.remoteChecksum(ctx, s.targetSSH, usedPart)
+	hasher := sha256.New()
+	progress := &countingWriter{progress: s.Progress}
+	transferred, err := s.stream(ctx, sourceFile, ownPart, hasher, progress)
 	if err != nil {
-		_, _ = s.runTarget(ctx, "rm", "-f", usedPart)
+		_, _ = s.runTarget(ctx, "rm", "-f", ownPart)
+		result.Status = "failed"
+		result.Error = err.Error()
+		return result, err
+	}
+	result.Bytes = transferred
+	// The inventory size is the archive's manifest: a shorter read (the
+	// source truncated mid-transfer) can still checksum-match a partial
+	// file, so byte equality with the manifest is its own publish gate.
+	if transferred != source.Size {
+		_, _ = s.runTarget(ctx, "rm", "-f", ownPart)
+		err := fmt.Errorf("%w: transferred %d bytes but the backup inventory reports %d for %s; refusing to publish an incomplete archive", ErrConflict, transferred, source.Size, options.Volid)
+		result.Status = "failed"
+		result.Error = err.Error()
+		return result, err
+	}
+	sourceSum := hex.EncodeToString(hasher.Sum(nil))
+
+	targetSum, err := s.remoteChecksum(ctx, s.targetSSH, ownPart)
+	if err != nil {
+		_, _ = s.runTarget(ctx, "rm", "-f", ownPart)
+		result.Status = "failed"
+		result.Error = err.Error()
 		return result, err
 	}
 	if sourceSum != targetSum {
-		_, _ = s.runTarget(ctx, "rm", "-f", usedPart)
+		_, _ = s.runTarget(ctx, "rm", "-f", ownPart)
 		err := fmt.Errorf("%w: checksum mismatch after transfer: source %s, target %s", ErrConflict, sourceSum, targetSum)
 		result.Status = "failed"
 		result.Error = err.Error()
@@ -212,7 +227,8 @@ func (s *BackupTransferService) Copy(ctx context.Context, options BackupCopyOpti
 	// Publish without any overwrite window: hard-linking the part file is
 	// atomic and fails when the final path appeared concurrently (closing
 	// the test-then-publish TOCTOU gap that mv would silently overwrite).
-	if run, err := s.runTarget(ctx, "ln", usedPart, finalPath); err != nil {
+	if run, err := s.runTarget(ctx, "ln", ownPart, finalPath); err != nil {
+		// A transport-level failure proves nothing about whether ln ran.
 		return result, err
 	} else if run.ExitCode != 0 {
 		// A failed hard link proves nothing was published.
@@ -221,41 +237,22 @@ func (s *BackupTransferService) Copy(ctx context.Context, options BackupCopyOpti
 		return result, fmt.Errorf("%w: %s", ErrConflict, result.Error)
 	}
 	// Cleanup is best effort and strictly scoped to this run's own part:
-	// parts of concurrent runs are never touched; a leftover part file is
-	// picked up by the resume lookup above.
-	_, _ = s.runTarget(ctx, "rm", "-f", usedPart)
+	// parts of concurrent runs are never touched, and leftover parts of
+	// interrupted runs stay on disk for manual inspection.
+	_, _ = s.runTarget(ctx, "rm", "-f", ownPart)
 
 	// A file PVE cannot list is not a completed copy: the published archive
 	// must be recognized by the target storage inventory (an unrecognized
-	// extension or foreign directory would be invisible to PVE).
+	// extension or foreign directory would be invisible to PVE). The
+	// published fact itself is kept: partial reports an archive at the
+	// published path whose verification did not finish.
 	if invErr := s.verifyTargetInventory(ctx, targetVolid); invErr != nil {
-		result.Status = "failed"
-		result.Error = invErr.Error()
+		result.Status = "partial"
+		result.Error = "archive published to " + finalPath + " but its inventory verification failed: " + invErr.Error()
 		return result, invErr
 	}
 	result.Status = "succeeded"
 	return result, nil
-}
-
-// findResumablePart returns a leftover part file of the exact archive size
-// in the target directory, or "" when none exists. Part names are unique
-// per transfer, so any match is a completed-but-unpublished transfer of an
-// earlier interrupted run.
-func (s *BackupTransferService) findResumablePart(ctx context.Context, finalPath string, size uint64) string {
-	if size == 0 {
-		return ""
-	}
-	run, err := s.targetSSH.Run(ctx, nil, nil, nil, "find", path.Dir(finalPath), "-maxdepth", "1", "-type", "f", "-name", path.Base(finalPath)+".pve-cli-part-*", "-size", fmt.Sprintf("%dc", size))
-	if err != nil || run.ExitCode != 0 {
-		return ""
-	}
-	for line := range strings.SplitSeq(run.Stdout, "\n") {
-		line = strings.TrimSpace(line)
-		if line != "" {
-			return line
-		}
-	}
-	return ""
 }
 
 // resolveVolumePath asks the host for the physical path of a volume id via

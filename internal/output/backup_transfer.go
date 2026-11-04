@@ -17,6 +17,9 @@ type BackupCopyResult struct {
 	TargetPath    string `json:"target_path" yaml:"target_path"`
 	Bytes         uint64 `json:"bytes" yaml:"bytes"`
 	SHA256        string `json:"sha256,omitempty" yaml:"sha256,omitempty"`
+	// Resumed reports that an already published, checksum-identical archive
+	// was reused instead of transferring again. Unfinished part files of
+	// interrupted runs are never adopted.
 	Resumed       bool   `json:"resumed,omitempty" yaml:"resumed,omitempty"`
 }
 

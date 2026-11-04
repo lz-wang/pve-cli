@@ -413,30 +413,6 @@ func TestBackupCopyRefusesOverwrite(t *testing.T) {
 	}
 }
 
-func TestBackupCopyResumesCompletePart(t *testing.T) {
-	sourceSSH := newScriptedRunner().
-		on("sha256sum "+transferFile, ssh.Result{ExitCode: 0, Stdout: dataSHA(transferPayload) + "  file\n"})
-	targetSSH := newScriptedRunner().
-		on("test -e "+targetFile, ssh.Result{ExitCode: 1}).
-		on("find /mnt/backups/dump -maxdepth 1 -type f -name "+transferName+".pve-cli-part-* -size "+fmt.Sprint(len(transferPayload))+"c", ssh.Result{ExitCode: 0, Stdout: targetPart + "\n"}).
-		on("sha256sum "+targetPart, ssh.Result{ExitCode: 0, Stdout: dataSHA(transferPayload) + "  file\n"})
-	svc, _ := newTransferService(t, sourceSSH, targetSSH, nil)
-
-	result, err := svc.Copy(context.Background(), BackupCopyOptions{Volid: transferVolid, TargetStorage: "backup-dst"})
-	if err != nil {
-		t.Fatalf("copy: %v", err)
-	}
-	if !result.Resumed {
-		t.Fatal("expected resumed transfer")
-	}
-	if targetSSH.saw("dd of=") {
-		t.Fatal("complete part must not re-transfer")
-	}
-	if !targetSSH.saw("ln " + targetPart) {
-		t.Fatal("atomic link publish missing on resume")
-	}
-}
-
 func TestBackupCopyHashMismatchCleansUp(t *testing.T) {
 	sourceSSH := newScriptedRunner().on("cat "+transferFile, ssh.Result{ExitCode: 0, Stdout: transferPayload})
 	targetSSH := newScriptedRunner().
@@ -457,29 +433,38 @@ func TestBackupCopyHashMismatchCleansUp(t *testing.T) {
 	}
 }
 
+// P2: a preflight rejection proves nothing was executed — the reported
+// status is failed, never unknown.
 func TestBackupCopyValidations(t *testing.T) {
 	svc, _ := newTransferService(t, newScriptedRunner(), newScriptedRunner(), nil)
 
-	if _, err := svc.Copy(context.Background(), BackupCopyOptions{Volid: "garbage"}); !errors.Is(err, ErrInvalid) {
+	if result, err := svc.Copy(context.Background(), BackupCopyOptions{Volid: "garbage"}); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("err = %v, want invalid volid", err)
+	} else if result.Status != "failed" {
+		t.Fatalf("status = %q, want failed for a rejected preflight", result.Status)
 	}
-	if _, err := svc.Copy(context.Background(), BackupCopyOptions{Volid: "local:backup/missing.tar.zst", TargetStorage: "backup-dst"}); !errors.Is(err, ErrNotFound) {
+	if result, err := svc.Copy(context.Background(), BackupCopyOptions{Volid: "local:backup/missing.tar.zst", TargetStorage: "backup-dst"}); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("err = %v, want missing source backup", err)
+	} else if result.Status != "failed" {
+		t.Fatalf("status = %q, want failed for a missing source archive", result.Status)
 	}
-	if _, err := svc.Copy(context.Background(), BackupCopyOptions{Volid: transferVolid, TargetStorage: "not-dir"}); !errors.Is(err, ErrInvalid) {
+	if result, err := svc.Copy(context.Background(), BackupCopyOptions{Volid: transferVolid, TargetStorage: "not-dir"}); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("err = %v, want non-dir target rejection", err)
+	} else if result.Status != "failed" {
+		t.Fatalf("status = %q, want failed for an unsupported target storage", result.Status)
 	}
-	if _, err := svc.Copy(context.Background(), BackupCopyOptions{Volid: transferVolid, TargetStorage: "  "}); !errors.Is(err, ErrInvalid) {
+	if result, err := svc.Copy(context.Background(), BackupCopyOptions{Volid: transferVolid, TargetStorage: "  "}); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("err = %v, want empty target storage rejection", err)
+	} else if result.Status != "failed" {
+		t.Fatalf("status = %q, want failed for an empty target storage", result.Status)
 	}
 }
 
 func TestBackupCopyReportsProgress(t *testing.T) {
-	sourceSSH := newScriptedRunner().on("cat "+transferFile, ssh.Result{ExitCode: 0, Stdout: "data"})
+	sourceSSH := newScriptedRunner().on("cat "+transferFile, ssh.Result{ExitCode: 0, Stdout: transferPayload})
 	targetSSH := newScriptedRunner().
 		on("test -e "+targetFile, ssh.Result{ExitCode: 1}).
-		on("stat -c %s "+targetPart, ssh.Result{ExitCode: 1}).
-		on("sha256sum "+targetPart, ssh.Result{ExitCode: 0, Stdout: dataSHA("data") + "  f\n"})
+		on("sha256sum "+targetPart, ssh.Result{ExitCode: 0, Stdout: dataSHA(transferPayload) + "  f\n"})
 	var progress bytes.Buffer
 	svc, _ := newTransferService(t, sourceSSH, targetSSH, &progress)
 
@@ -567,21 +552,26 @@ func TestBackupCopyConcurrentCopiesIsolatePartFiles(t *testing.T) {
 	}
 }
 
-// P1-1: a leftover full-size part from an interrupted (possibly different)
-// run is found by size and resumed — no shared fixed part name required.
-func TestBackupCopyResumesLeftoverPartFromAnyRun(t *testing.T) {
+// P1-1: an orphan part file left by another (possibly still running) copy is
+// never adopted: no checksum, publish, or cleanup may touch a part this run
+// did not create. Only the published archive itself is reused, and only
+// after a checksum verification.
+func TestBackupCopyNeverAdoptsLeftoverPart(t *testing.T) {
 	withPartToken(t)
 	stalePart := targetFile + ".pve-cli-part-stale9"
 	sourceAPI, targetAPI := newTransferAPIs()
 	sourceSSH := newScriptedRunner().
 		on("pvesm path "+transferVolid, ssh.Result{ExitCode: 0, Stdout: transferFile + "\n"}).
-		on("sha256sum "+transferFile, ssh.Result{ExitCode: 0, Stdout: dataSHA(transferPayload) + "  f\n"})
+		on("cat "+transferFile, ssh.Result{ExitCode: 0, Stdout: transferPayload})
 	targetSSH := newScriptedRunner().
 		on("pvesm path "+targetVolid, ssh.Result{ExitCode: 0, Stdout: targetFile + "\n"}).
 		on("test -e "+targetFile, ssh.Result{ExitCode: 1}).
+		// The directory scan still reports a full-size orphan part; a
+		// matching size does not prove the file stopped growing.
 		on("find /mnt/backups/dump -maxdepth 1 -type f -name "+transferName+".pve-cli-part-* -size "+fmt.Sprint(len(transferPayload))+"c", ssh.Result{ExitCode: 0, Stdout: stalePart + "\n"}).
 		on("sha256sum "+stalePart, ssh.Result{ExitCode: 0, Stdout: dataSHA(transferPayload) + "  f\n"}).
-		on("ln "+stalePart+" "+targetFile, ssh.Result{ExitCode: 0}).
+		on("sha256sum "+targetPart, ssh.Result{ExitCode: 0, Stdout: dataSHA(transferPayload) + "  f\n"}).
+		on("ln "+targetPart+" "+targetFile, ssh.Result{ExitCode: 0}).
 		on("pvesm list backup-dst --content backup", ssh.Result{ExitCode: 0, Stdout: targetVolid + " tar.zst backup 123\n"})
 	svc := NewBackupTransferService(sourceAPI, "n150", sourceSSH, targetAPI, targetSSH, nil)
 
@@ -589,16 +579,132 @@ func TestBackupCopyResumesLeftoverPartFromAnyRun(t *testing.T) {
 	if err != nil {
 		t.Fatalf("copy: %v", err)
 	}
-	if !result.Resumed {
-		t.Fatalf("result = %+v, want a resumed transfer", result)
+	if result.Status != "succeeded" {
+		t.Fatalf("status = %q, want succeeded", result.Status)
+	}
+	if targetSSH.saw("sha256sum "+stalePart) {
+		t.Fatal("a leftover part from another run must not be checksummed by this run")
+	}
+	if targetSSH.saw("ln "+stalePart) {
+		t.Fatal("a leftover part from another run must not be published by this run")
+	}
+	if targetSSH.saw("rm -f "+stalePart) {
+		t.Fatal("cleanup must never touch a foreign part file")
+	}
+	if !targetSSH.saw("dd of="+targetPart) {
+		t.Fatal("the copy must transfer to its own part file")
+	}
+}
+
+// P2: a transfer that read fewer bytes than the backup inventory reports for
+// the archive (the source file was truncated mid-read) must never be
+// published: both checksums can match while the archive is incomplete.
+func TestBackupCopyRejectsTruncatedSource(t *testing.T) {
+	withPartToken(t)
+	sourceAPI, targetAPI := newTransferAPIs()
+	// The inventory reports a larger archive than the source file serves.
+	sourceAPI.backupRows["n150"]["local"][0].Size = uint64(len(transferPayload)) + 100
+	sourceSSH := newScriptedRunner().
+		on("pvesm path "+transferVolid, ssh.Result{ExitCode: 0, Stdout: transferFile + "\n"}).
+		on("cat "+transferFile, ssh.Result{ExitCode: 0, Stdout: transferPayload})
+	targetSSH := newScriptedRunner().
+		on("pvesm path "+targetVolid, ssh.Result{ExitCode: 0, Stdout: targetFile + "\n"}).
+		on("test -e "+targetFile, ssh.Result{ExitCode: 1}).
+		on("sha256sum "+targetPart, ssh.Result{ExitCode: 0, Stdout: dataSHA(transferPayload) + "  f\n"})
+	svc := NewBackupTransferService(sourceAPI, "n150", sourceSSH, targetAPI, targetSSH, nil)
+
+	result, err := svc.Copy(context.Background(), BackupCopyOptions{Volid: transferVolid, TargetStorage: "backup-dst"})
+	if err == nil || !strings.Contains(err.Error(), "refusing to publish an incomplete archive") {
+		t.Fatalf("err = %v, want a truncated-source rejection", err)
+	}
+	if result.Status != "failed" {
+		t.Fatalf("status = %q, want failed", result.Status)
+	}
+	if !targetSSH.saw("rm -f "+targetPart) {
+		t.Fatal("the incomplete part must be cleaned up")
+	}
+	if targetSSH.saw("ln "+targetPart) {
+		t.Fatal("an incomplete transfer must never be published")
+	}
+}
+
+// P2: key host operations must check the remote exit code, not just the Go
+// transport error — a failed mkdir would otherwise defer the failure into
+// the middle of the transfer.
+func TestBackupCopyFailsOnTargetCommandExitCode(t *testing.T) {
+	withPartToken(t)
+	sourceAPI, targetAPI := newTransferAPIs()
+	sourceSSH := newScriptedRunner().
+		on("pvesm path "+transferVolid, ssh.Result{ExitCode: 0, Stdout: transferFile + "\n"})
+	targetSSH := newScriptedRunner().
+		on("pvesm path "+targetVolid, ssh.Result{ExitCode: 0, Stdout: targetFile + "\n"}).
+		on("test -e "+targetFile, ssh.Result{ExitCode: 1}).
+		on("mkdir -p /mnt/backups/dump", ssh.Result{ExitCode: 1, Stderr: "mkdir: cannot create directory"})
+	svc := NewBackupTransferService(sourceAPI, "n150", sourceSSH, targetAPI, targetSSH, nil)
+
+	result, err := svc.Copy(context.Background(), BackupCopyOptions{Volid: transferVolid, TargetStorage: "backup-dst"})
+	if err == nil {
+		t.Fatal("a failing remote mkdir must fail the copy")
+	}
+	if result.Status != "failed" {
+		t.Fatalf("status = %q, want failed (nothing was written)", result.Status)
 	}
 	if targetSSH.saw("dd of=") {
-		t.Fatal("a complete leftover part must not re-transfer")
+		t.Fatal("no bytes may be transferred when the target directory cannot be created")
 	}
-	if !targetSSH.saw("ln " + stalePart + " " + targetFile) {
-		t.Fatal("the leftover part must be the published file")
+}
+
+// P2: when the archive is published but the target inventory cannot confirm
+// it, the published fact must survive: the result is partial (published,
+// verification unfinished), never a bare failed that invites an agent to
+// clean the file up.
+func TestBackupCopyPublishedArchiveInventoryFailureIsPartial(t *testing.T) {
+	withPartToken(t)
+	sourceAPI, targetAPI := newTransferAPIs()
+	sourceSSH := newScriptedRunner().
+		on("pvesm path "+transferVolid, ssh.Result{ExitCode: 0, Stdout: transferFile + "\n"}).
+		on("cat "+transferFile, ssh.Result{ExitCode: 0, Stdout: transferPayload})
+	targetSSH := newScriptedRunner().
+		on("pvesm path "+targetVolid, ssh.Result{ExitCode: 0, Stdout: targetFile + "\n"}).
+		on("test -e "+targetFile, ssh.Result{ExitCode: 1}).
+		on("sha256sum "+targetPart, ssh.Result{ExitCode: 0, Stdout: dataSHA(transferPayload) + "  f\n"}).
+		on("ln "+targetPart+" "+targetFile, ssh.Result{ExitCode: 0}).
+		on("pvesm list backup-dst --content backup", ssh.Result{ExitCode: 1, Stderr: "storage 'backup-dst' is busy\n"})
+	svc := NewBackupTransferService(sourceAPI, "n150", sourceSSH, targetAPI, targetSSH, nil)
+
+	result, err := svc.Copy(context.Background(), BackupCopyOptions{Volid: transferVolid, TargetStorage: "backup-dst"})
+	if err == nil {
+		t.Fatal("an unverified inventory must fail the copy")
 	}
-	if !targetSSH.saw("rm -f " + stalePart) {
-		t.Fatal("cleanup removes only the part used by this run")
+	if result.Status != "partial" {
+		t.Fatalf("status = %q, want partial (published, verification unfinished)", result.Status)
+	}
+	if result.SHA256 == "" {
+		t.Fatal("the published checksum must be reported")
+	}
+}
+
+// P2: the idempotent reuse of an identical published file keeps the same
+// rule — a target inventory that cannot confirm the archive leaves the
+// result partial, not a bare failed on a file that demonstrably exists.
+func TestBackupCopyExistingFileInventoryFailureIsPartial(t *testing.T) {
+	withPartToken(t)
+	sourceAPI, targetAPI := newTransferAPIs()
+	sourceSSH := newScriptedRunner().
+		on("pvesm path "+transferVolid, ssh.Result{ExitCode: 0, Stdout: transferFile + "\n"}).
+		on("sha256sum "+transferFile, ssh.Result{ExitCode: 0, Stdout: dataSHA(transferPayload) + "  f\n"})
+	targetSSH := newScriptedRunner().
+		on("pvesm path "+targetVolid, ssh.Result{ExitCode: 0, Stdout: targetFile + "\n"}).
+		on("test -e "+targetFile, ssh.Result{ExitCode: 0}).
+		on("sha256sum "+targetFile, ssh.Result{ExitCode: 0, Stdout: dataSHA(transferPayload) + "  f\n"}).
+		on("pvesm list backup-dst --content backup", ssh.Result{ExitCode: 1, Stderr: "storage 'backup-dst' is busy\n"})
+	svc := NewBackupTransferService(sourceAPI, "n150", sourceSSH, targetAPI, targetSSH, nil)
+
+	result, err := svc.Copy(context.Background(), BackupCopyOptions{Volid: transferVolid, TargetStorage: "backup-dst"})
+	if err == nil {
+		t.Fatal("an unverified inventory must fail the copy")
+	}
+	if result.Status != "partial" {
+		t.Fatalf("status = %q, want partial (identical file present, verification unfinished)", result.Status)
 	}
 }

@@ -173,15 +173,27 @@ never overwrites an existing archive: publication is an atomic hard link
 (fails if the file appeared concurrently), and an existing file is accepted
 only when its checksum matches the source — an idempotent continuation of a
 previous interrupted run. A different existing file conflicts (exit 4).
+The hard-link publish is an environment constraint: the target dir storage
+must live on a filesystem that supports hard links (the default for local
+ext4/xfs mounts); pve-cli never falls back to a rename or move, because a
+fallback could silently overwrite a concurrently created archive.
 Transfers write a uniquely named `.pve-cli-part-<token>` file per run, so
-concurrent copies never share (or delete) each other's temporary state; a
-leftover part with the complete size is found by size, verified by
-checksum and resumed (complete-temp-file recovery, not byte-range
-resumption), a checksum mismatch fails and cleans the run's own part file
-up. A completed copy is confirmed against the target storage
+concurrent copies never share (or delete) each other's temporary state.
+A part file whose size already matches the archive can still be growing
+when another copy starts, so unfinished part files are never adopted
+automatically — no checksum, publish or cleanup touches a part file a run
+did not create. Leftover parts of interrupted runs stay on disk for manual
+inspection; delete them by hand after checking no copy is still writing.
+A transfer that read fewer bytes than the backup inventory reports for the
+archive is refused outright (a truncated source can checksum-match an
+incomplete file), a checksum mismatch fails and cleans the run's own part
+file up. A completed copy is confirmed against the target storage
 inventory (`pvesm list --content backup`): a file PVE does not recognize is
-not a completed copy. Transfer progress (`transferred N`) goes to stderr;
-the result reports bytes, the verified `sha256` and the `resumed` flag.
+not a completed copy — the result is then `partial` (published, verification
+unfinished), never a bare failure that hides the existing file. Transfer
+progress (`transferred N`) goes to stderr; the result reports bytes, the
+verified `sha256` and the `resumed` flag (set when an identical published
+archive was reused).
 
 ### Composed backup-copy-restore workflow
 
