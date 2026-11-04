@@ -228,10 +228,14 @@ func (s *BackupTransferService) Copy(ctx context.Context, options BackupCopyOpti
 	// atomic and fails when the final path appeared concurrently (closing
 	// the test-then-publish TOCTOU gap that mv would silently overwrite).
 	if run, err := s.runTarget(ctx, "ln", ownPart, finalPath); err != nil {
-		// A transport-level failure proves nothing about whether ln ran.
+		// A transport-level failure proves nothing about whether ln ran, so
+		// the part file stays for manual inspection.
 		return result, err
 	} else if run.ExitCode != 0 {
-		// A failed hard link proves nothing was published.
+		// A failed hard link proves nothing was published and that this
+		// run's part is exclusively owned: clean it up instead of leaving a
+		// fully transferred archive on the target as invisible garbage.
+		_, _ = s.runTarget(ctx, "rm", "-f", ownPart)
 		result.Status = "failed"
 		result.Error = fmt.Sprintf("publishing %s failed (ln exited with %d): the target file may have been created concurrently; nothing was overwritten", finalPath, run.ExitCode)
 		return result, fmt.Errorf("%w: %s", ErrConflict, result.Error)

@@ -536,6 +536,12 @@ func TestBackupCopyConcurrentCopiesIsolatePartFiles(t *testing.T) {
 	if second.Status == "succeeded" {
 		t.Fatalf("second copy = %+v", second)
 	}
+	// The losing run proves nothing was published, so its own fully
+	// transferred part file must be cleaned up instead of lingering on the
+	// target storage as invisible garbage.
+	if !targetSSH.saw("rm -f "+partB) {
+		t.Fatal("the losing publisher must clean up its own part file")
+	}
 	ddParts := map[string]bool{}
 	for _, call := range targetSSH.calls {
 		if rest, found := strings.CutPrefix(call, "dd of="); found {

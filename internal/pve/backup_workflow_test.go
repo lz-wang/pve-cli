@@ -571,3 +571,40 @@ func TestBackupCopyRestoreWorkflowKeepsPartialOnTransferInventoryFailure(t *test
 		t.Fatalf("transfer stage = %+v, want partial", transfer)
 	}
 }
+
+// P1-3 (review): a post-check that ran and failed against a fully restored
+// guest reports partial: every mutating stage succeeded and the target
+// guest exists — a bare failed would invite an agent to discard the
+// restored guest or rerun the whole pipeline into a VMID conflict.
+func TestBackupCopyRestoreWorkflowReportsPartialWhenPostCheckFails(t *testing.T) {
+	workflow, _, target, _, _ := workflowHarness(t)
+	// The post-check sees a target cluster that turned unreachable right
+	// after the restore completed; the restore backend itself stays healthy.
+	broken := &workflowInventoryBackend{fakeBackend: target, nodesErr: errors.New("connection refused")}
+	closer := NewBackupCopyRestoreWorkflow(workflow.backups, workflow.transfers, workflow.restores, workflow.guests, broken)
+
+	result, err := closer.Run(context.Background(), workflowOptions())
+	if err == nil {
+		t.Fatal("a failing post-check must fail the workflow run")
+	}
+	if result.Status != "partial" {
+		t.Fatalf("status = %q, want partial (restore succeeded, check failed)", result.Status)
+	}
+	var postCheck output.WorkflowStageResult
+	found := false
+	for _, stage := range result.Stages {
+		if stage.Stage == "post-check" {
+			postCheck = stage
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("post-check stage missing: %+v", result.Stages)
+	}
+	if postCheck.Status != "failed" {
+		t.Fatalf("post-check stage = %+v, want failed (the check itself failed)", postCheck)
+	}
+	if !strings.Contains(postCheck.Detail, "target") {
+		t.Fatalf("post-check detail = %q, want the failing check", postCheck.Detail)
+	}
+}

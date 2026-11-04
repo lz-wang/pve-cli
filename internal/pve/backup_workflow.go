@@ -154,14 +154,21 @@ func (w *BackupCopyRestoreWorkflow) Run(ctx context.Context, options BackupCopyR
 		TargetNode: options.TargetNode,
 	})
 	if err != nil {
-		stage := failedStage("post-check", err.Error())
+		// The read-only check could not run; everything before it succeeded.
+		// The unconfirmed safety state is a warning, never a failed that
+		// hides the restored guest.
+		stage := output.WorkflowStageResult{Stage: "post-check", Status: "warning", Detail: err.Error()}
 		result.Stages = append(result.Stages, stage)
-		return fail("failed", fmt.Errorf("post-check stage: %w", err))
+		return fail("warning", fmt.Errorf("post-check stage: %w", err))
 	}
 	detail := fmt.Sprintf("plan status %s (%d checks)", plan.Status, len(plan.Checks))
 	status := "succeeded"
 	switch plan.Status {
 	case "failed":
+		// The check ran and failed, but every mutating stage succeeded and
+		// the restored guest exists: the workflow is partial (its main
+		// effect completed, its safety verification failed) — the stage
+		// keeps the definite check result and the error names the reasons.
 		status = "failed"
 		detail = detail + "; failing checks: " + failingChecks(plan)
 	case "warning":
@@ -172,8 +179,7 @@ func (w *BackupCopyRestoreWorkflow) Run(ctx context.Context, options BackupCopyR
 	}
 	result.Stages = append(result.Stages, output.WorkflowStageResult{Stage: "post-check", Status: status, Detail: detail})
 	if status == "failed" {
-		result.Status = "failed"
-		return result, fmt.Errorf("post-check stage: %s", failingChecks(plan))
+		return fail("partial", fmt.Errorf("post-check stage: %s", failingChecks(plan)))
 	}
 	result.Status = status
 	return result, nil
@@ -184,13 +190,16 @@ func (w *BackupCopyRestoreWorkflow) Run(ctx context.Context, options BackupCopyR
 // its outcome (unknown, or an unwaited submitted task) keeps the workflow
 // unknown — the caller must re-check the submitted tasks instead of
 // rerunning blindly; a stage that completed its main effect while a
-// post-step failed (partial) keeps the completed fact visible.
+// post-step failed (partial) keeps the completed fact visible; a completed
+// pipeline whose safety verification could not run reports warning.
 func aggregateWorkflowStatus(stageStatus string) string {
 	switch stageStatus {
 	case "partial":
 		return "partial"
 	case "unknown", "submitted":
 		return "unknown"
+	case "warning":
+		return "warning"
 	default:
 		return "failed"
 	}
