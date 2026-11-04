@@ -174,11 +174,13 @@ func TestStructuredOutputContracts(t *testing.T) {
 			name: "RestoreResult",
 			value: RestoreResult{
 				Resource: "vm", Status: "succeeded", Error: "example",
+				RestoreStatus: "succeeded", PostConfigStatus: "succeeded",
 				Kind: "vm", VMID: 101, Node: "pve1",
 				Archive: "backup:backup/vzdump-qemu-100.vma.zst", Storage: "local-lvm", Task: "UPID:pve1:restore",
 			},
 			fields: []contractField{
 				{"resource", stringType}, {"status", stringType}, {"error", stringType},
+				{"restore_status", stringType}, {"post_config_status", stringType},
 				{"kind", stringType},
 				{"vmid", uint64Type},
 				{"node", stringType},

@@ -115,9 +115,12 @@ bind mounts, device passthrough) are reported as unknowns by design, and
 the restored guest is never started automatically. A failing preflight
 aborts with the reasons in the error message and exit code 4; a passing
 preflight is silent. With `--wait` and a completed restore, bridge mappings
-are applied to the restored guest's network devices automatically; when
-that post-restore configuration fails, the workflow reports the restore
-stage as `partial` with the succeeded task ID and fails the workflow.
+are applied to the restored guest's network devices automatically. The
+structured result separates the two outcomes: `restore_status` reports the
+archive restore task itself, `post_config_status` reports the bridge
+rewrite (`succeeded`/`failed`/`skipped`), and the overall `status` reads
+`partial` — with a non-zero exit — when the archive restored but the
+post-restore configuration failed.
 
 ### Offline emergency maintenance
 
@@ -200,7 +203,13 @@ identity to prove a resume — remove the guest or choose another
 skips the backup and continues from a named archive; an already-published
 target file is accepted only after a checksum match. A restore task that
 succeeded while its post-restore configuration (bridge mapping) failed
-reports the stage as `partial` and fails the workflow. The post-check
+reports the stage as `partial` and fails the workflow. The workflow's
+target-VMID check is the restore service's global cluster check: a guest on
+any target node — VM or container — refuses the run before any backup or
+transfer is wasted. The backup stage identifies its archive from the vzdump
+task log when the log names one, so a concurrently started backup of the
+same guest can never be misattributed; the task-start time window stays as
+the fallback. The post-check
 always carries unconfirmed risks (MAC/IP, DHCP, autostart are not
 observable via the API): when those remain, the overall result is
 `warning` — not an unconditional `succeeded` — listing the unconfirmed
@@ -233,15 +242,19 @@ failed plan exits 1, warnings and unknowns exit 0. The plain
 `lxc migrate remote` executes the migration through PVE's native
 `remote_migrate` API on top of the same preflight: a failing plan aborts
 before any mutation. It defaults to offline migration, never deletes the
-source container and never starts the target. The command builds the target
-endpoint bundle from the `--to` profile (host, API token) plus an optional
-`--target-fingerprint` for TLS verification of self-signed certificates;
-the target token is passed into the API request only — it never appears in
-logs, structured output or error messages (the error sanitizer also redacts
-it). `--yes` is required and the command prints two notices first: the
-source PVE receives target API credentials for the transfer, and upstream
-remote migration is experimental with no automatic resume after
-interruption — use `task get/log/wait` to recover.
+source container and never starts the target. When `--storage-map` or
+`--bridge-map` is not given, explicit same-name mappings are derived from
+the guest configuration (every referenced storage and bridge maps to
+itself), so the API always receives the mapping parameters it expects
+instead of risking a server-side 400 on omitted ones. The command builds
+the target endpoint bundle from the `--to` profile (host, API token) plus
+an optional `--target-fingerprint` for TLS verification of self-signed
+certificates; the target token is passed into the API request only — it
+never appears in logs, structured output or error messages (the error
+sanitizer also redacts it). `--yes` is required and the command prints two
+notices first: the source PVE receives target API credentials for the
+transfer, and upstream remote migration is experimental with no automatic
+resume after interruption — use `task get/log/wait` to recover.
 
 `lxc migrate check TARGET-VMID` validates both sides after a migration
 (read-only): whether the source guest is still present or running, whether

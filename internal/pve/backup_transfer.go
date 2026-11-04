@@ -78,7 +78,9 @@ func NewBackupTransferService(sourceAPI BackupReader, sourceNode string, sourceS
 // the partial file up, and the published archive must be recognized by the
 // target storage inventory before the copy reports success.
 func (s *BackupTransferService) Copy(ctx context.Context, options BackupCopyOptions) (output.BackupCopyResult, error) {
-	result := output.BackupCopyResult{Resource: "backup", SourceVolid: options.Volid, TargetStorage: options.TargetStorage}
+	// Every failure that cannot prove its outcome starts unknown; the
+	// definite-failure branches below upgrade to failed.
+	result := output.BackupCopyResult{Resource: "backup", SourceVolid: options.Volid, TargetStorage: options.TargetStorage, Status: TaskStatusUnknown}
 
 	sourceStorage, subpath, err := parseBackupVolid(options.Volid)
 	if err != nil {
@@ -213,7 +215,10 @@ func (s *BackupTransferService) Copy(ctx context.Context, options BackupCopyOpti
 	if run, err := s.runTarget(ctx, "ln", usedPart, finalPath); err != nil {
 		return result, err
 	} else if run.ExitCode != 0 {
-		return result, fmt.Errorf("%w: publishing %s failed (ln exited with %d): the target file may have been created concurrently; nothing was overwritten", ErrConflict, finalPath, run.ExitCode)
+		// A failed hard link proves nothing was published.
+		result.Status = "failed"
+		result.Error = fmt.Sprintf("publishing %s failed (ln exited with %d): the target file may have been created concurrently; nothing was overwritten", finalPath, run.ExitCode)
+		return result, fmt.Errorf("%w: %s", ErrConflict, result.Error)
 	}
 	// Cleanup is best effort and strictly scoped to this run's own part:
 	// parts of concurrent runs are never touched; a leftover part file is

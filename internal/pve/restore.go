@@ -116,12 +116,22 @@ func (s *RestoreService) Restore(ctx context.Context, options RestoreOptions) (o
 	operation, err := runner.Execute(ctx, task)
 	result.Resource = operation.Resource
 	result.Status = operation.Status
+	result.RestoreStatus = operation.Status
 	result.Error = operation.Error
-	if err == nil && operation.Status == "succeeded" {
+	// The post-configuration only runs after a completed restore; anything
+	// else reports it as skipped rather than pretending it succeeded.
+	result.PostConfigStatus = "skipped"
+	if len(submitted.BridgeMap) > 0 && err == nil && operation.Status == "succeeded" {
 		if mapErr := s.applyBridgeMap(ctx, submitted); mapErr != nil {
+			// The archive restored but the post-configuration failed: the
+			// operation is partial, never succeeded — the split states and
+			// the returned error keep the exit code honest.
+			result.Status = "partial"
+			result.PostConfigStatus = "failed"
 			result.Error = mapErr.Error()
 			return result, mapErr
 		}
+		result.PostConfigStatus = "succeeded"
 	}
 	return result, err
 }
@@ -148,6 +158,15 @@ func checkRestoreArchiveKind(kind, archive string) error {
 		return fmt.Errorf("archive %s contains a %s backup, not a %s backup", archive, archiveKind, kind)
 	}
 	return nil
+}
+
+// VMIDFree reports whether a VMID is unused anywhere in the cluster: the
+// VMID namespace is shared between VMs and containers on every node. The
+// check fails closed — an unreadable inventory aborts before any mutation.
+// An occupied VMID is a conflict (errors.Is ErrConflict); an unreadable
+// inventory is an availability failure.
+func (s *RestoreService) VMIDFree(ctx context.Context, vmid int) error {
+	return s.ensureVMIDFree(ctx, vmid)
 }
 
 // ensureVMIDFree refuses restores into VMIDs that already exist anywhere in
@@ -178,7 +197,7 @@ func (s *RestoreService) checkVMIDFreeOnNode(ctx context.Context, nodeName strin
 	}
 	for _, row := range vmRows {
 		if row.VMID == uint64(vmid) {
-			return fmt.Errorf("vmid %d already exists on node %s; delete it first or choose another vmid", vmid, nodeName)
+			return fmt.Errorf("%w: vmid %d already exists on node %s; delete it first or choose another vmid", ErrConflict, vmid, nodeName)
 		}
 	}
 
@@ -188,7 +207,7 @@ func (s *RestoreService) checkVMIDFreeOnNode(ctx context.Context, nodeName strin
 	}
 	for _, row := range lxcRows {
 		if row.VMID == uint64(vmid) {
-			return fmt.Errorf("vmid %d already exists on node %s; delete it first or choose another vmid", vmid, nodeName)
+			return fmt.Errorf("%w: vmid %d already exists on node %s; delete it first or choose another vmid", ErrConflict, vmid, nodeName)
 		}
 	}
 	return nil

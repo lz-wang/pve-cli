@@ -7,8 +7,11 @@ import (
 )
 
 // WorkflowStageResult is one stage of a composed workflow. Status is one of
-// succeeded, skipped, failed, unknown — every stage keeps its own result
-// and error state, independent of the others.
+// succeeded, skipped, failed, partial, warning, unknown — every stage keeps
+// its own result and error state, independent of the others. partial means
+// the stage's task completed while its post-step failed; warning means the
+// stage completed with unconfirmed risks that are not observable via the
+// API.
 type WorkflowStageResult struct {
 	Stage  string `json:"stage" yaml:"stage"`
 	Status string `json:"status" yaml:"status"`

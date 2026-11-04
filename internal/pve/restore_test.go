@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/lz-wang/pve-cli/v3/internal/output"
 )
@@ -194,4 +195,106 @@ func (b *fakeRestoreBackend) Restore(_ context.Context, options RestoreOptions) 
 	b.restoreOptions = &options
 	b.restoreTaskUsed = b.task
 	return b.task, nil
+}
+
+// P1-4: a restore task that succeeded while the post-restore configuration
+// (bridge mapping) failed must not report the whole operation succeeded.
+// The split states tell the automation exactly what happened: the archive
+// restored (restore_status succeeded), the bridge rewrite failed
+// (post_config_status failed), the overall operation is partial — and the
+// error keeps the exit code non-zero.
+func TestRestoreServicePartialWhenPostConfigFails(t *testing.T) {
+	backend := &fakeRestoreBackend{
+		fakeBackend: fakeBackend{
+			nodes: []output.NodeRow{{Name: "pve1"}},
+			backupRows: map[string]map[string][]output.BackupRow{
+				"pve1": {"backup": {{VolID: "backup:backup/vzdump-lxc-200.tar.zst", Kind: "lxc", VMID: 200}}},
+			},
+			storageRows: map[string][]output.StorageRow{
+				"pve1": {{Node: "pve1", Storage: "local-lvm", Type: "lvmthin", Active: true, Enabled: true, Content: "rootdir", Avail: 100 << 30}},
+			},
+			networkRows: map[string][]output.NetworkRow{
+				"pve1": {{Node: "pve1", Name: "vmbr0", Type: "bridge", Active: true}},
+			},
+			// A restored guest exists, but this fake has no native config
+			// capability, so the bridge mapping cannot apply.
+			lxcs: map[string]map[int]*fakeGuest{"pve1": {201: {row: output.GuestRow{Kind: "lxc", VMID: 201, Node: "pve1", Status: "stopped"}}}},
+		},
+		task: &fakeTask{upid: "UPID:pve1:restore"},
+	}
+	svc := NewRestoreService(backend, TaskRunner{Wait: true, WaitTimeout: time.Second})
+
+	result, err := svc.Restore(context.Background(), RestoreOptions{
+		Kind: "lxc", Archive: "backup:backup/vzdump-lxc-200.tar.zst",
+		Node: "pve1", VMID: 201, Storage: "local-lvm",
+		BridgeMap: map[string]string{"vmbr0": "vmbr0"},
+	})
+	if err == nil {
+		t.Fatal("post-restore configuration failure must fail the command")
+	}
+	if result.Status != "partial" {
+		t.Fatalf("status = %q, want partial (archive restored, configuration failed)", result.Status)
+	}
+	if result.RestoreStatus != "succeeded" {
+		t.Fatalf("restore_status = %q, want succeeded", result.RestoreStatus)
+	}
+	if result.PostConfigStatus != "failed" {
+		t.Fatalf("post_config_status = %q, want failed", result.PostConfigStatus)
+	}
+	if result.Task != "UPID:pve1:restore" {
+		t.Fatalf("task = %q, want the preserved UPID", result.Task)
+	}
+}
+
+// P1-4: the happy path reports every split state: the archive restored, a
+// requested bridge mapping applied, the operation succeeded. Without a
+// mapping the post-configuration is skipped, not silently "succeeded".
+func TestRestoreServiceSplitStates(t *testing.T) {
+	newBackend := func() *fakeRestoreBackend {
+		return &fakeRestoreBackend{
+			fakeBackend: fakeBackend{
+				nodes: []output.NodeRow{{Name: "pve1"}},
+				backupRows: map[string]map[string][]output.BackupRow{
+					"pve1": {"backup": {{VolID: "backup:backup/vzdump-lxc-200.tar.zst", Kind: "lxc", VMID: 200}}},
+				},
+				storageRows: map[string][]output.StorageRow{
+					"pve1": {{Node: "pve1", Storage: "local-lvm", Type: "lvmthin", Active: true, Enabled: true, Content: "rootdir", Avail: 100 << 30}},
+				},
+				networkRows: map[string][]output.NetworkRow{
+					"pve1": {{Node: "pve1", Name: "vmbr0", Type: "bridge", Active: true}},
+				},
+				lxcs: map[string]map[int]*fakeGuest{"pve1": {201: {row: output.GuestRow{Kind: "lxc", VMID: 201, Node: "pve1", Status: "stopped"}}}},
+			},
+			task: &fakeTask{upid: "UPID:pve1:restore"},
+		}
+	}
+
+	// No bridge mapping: post-configuration skipped.
+	svc := NewRestoreService(newBackend(), TaskRunner{Wait: true, WaitTimeout: time.Second})
+	result, err := svc.Restore(context.Background(), RestoreOptions{
+		Kind: "lxc", Archive: "backup:backup/vzdump-lxc-200.tar.zst",
+		Node: "pve1", VMID: 201, Storage: "local-lvm",
+	})
+	if err != nil {
+		t.Fatalf("restore: %v", err)
+	}
+	if result.Status != "succeeded" || result.RestoreStatus != "succeeded" || result.PostConfigStatus != "skipped" {
+		t.Fatalf("result = %#v, want succeeded/succeeded/skipped", result)
+	}
+
+	// A failed restore task: post-configuration never ran.
+	failed := newBackend()
+	failed.task = &fakeTask{upid: "UPID:pve1:restore", failed: true, exitStatus: "ERROR"}
+	svc = NewRestoreService(failed, TaskRunner{Wait: true, WaitTimeout: time.Second})
+	result, err = svc.Restore(context.Background(), RestoreOptions{
+		Kind: "lxc", Archive: "backup:backup/vzdump-lxc-200.tar.zst",
+		Node: "pve1", VMID: 201, Storage: "local-lvm",
+		BridgeMap: map[string]string{"vmbr0": "vmbr0"},
+	})
+	if err == nil {
+		t.Fatal("expected restore task failure")
+	}
+	if result.RestoreStatus != "failed" || result.PostConfigStatus != "skipped" {
+		t.Fatalf("result = %#v, want restore_status failed / post_config skipped", result)
+	}
 }

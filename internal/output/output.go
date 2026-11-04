@@ -143,8 +143,19 @@ type BackupResult struct {
 
 type RestoreResult struct {
 	Resource string `json:"resource" yaml:"resource"`
-	Status   string `json:"status" yaml:"status"`
-	Error    string `json:"error,omitempty" yaml:"error,omitempty"`
+	// Status is the overall operation outcome: succeeded, submitted,
+	// failed, unknown — or partial when the archive restored but the
+	// post-restore configuration failed. A partial result always pairs
+	// with a non-zero exit.
+	Status string `json:"status" yaml:"status"`
+	Error  string `json:"error,omitempty" yaml:"error,omitempty"`
+	// RestoreStatus reports the archive restore task itself (submitted/
+	// succeeded/failed/unknown), independent of what came after it.
+	RestoreStatus string `json:"restore_status" yaml:"restore_status"`
+	// PostConfigStatus reports the post-restore configuration (bridge
+	// mapping): succeeded, failed, or skipped when no mapping was
+	// requested or the restore never completed.
+	PostConfigStatus string `json:"post_config_status" yaml:"post_config_status"`
 
 	Kind    string `json:"kind" yaml:"kind"`
 	VMID    uint64 `json:"vmid" yaml:"vmid"`

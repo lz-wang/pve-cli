@@ -187,6 +187,8 @@ The following reference is generated from the actual output structs.
 | `resource` | `string` | no |
 | `status` | `string` | no |
 | `error` | `string` | yes |
+| `restore_status` | `string` | no |
+| `post_config_status` | `string` | no |
 | `kind` | `string` | no |
 | `vmid` | `uint64` | no |
 | `node` | `string` | no |

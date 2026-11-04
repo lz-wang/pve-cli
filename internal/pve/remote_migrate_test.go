@@ -33,6 +33,9 @@ func (g *remoteMigrateGuest) RemoteMigrate(_ context.Context, options RemoteMigr
 type remoteMigrateBackend struct {
 	*fakeBackend
 	guest Guest
+	// config backs the native-config read the same-name map derivation
+	// needs; nil means the capability is missing (fail-closed).
+	config map[string]any
 }
 
 func (b *remoteMigrateBackend) LXC(ctx context.Context, node string, vmid int) (Guest, error) {
@@ -40,6 +43,13 @@ func (b *remoteMigrateBackend) LXC(ctx context.Context, node string, vmid int) (
 		return b.guest, nil
 	}
 	return b.fakeBackend.LXC(ctx, node, vmid)
+}
+
+func (b *remoteMigrateBackend) GuestConfig(_ context.Context, _, _ string, _ int) (map[string]any, error) {
+	if b.config == nil {
+		return nil, fmt.Errorf("%w: native config unavailable", ErrUnavailable)
+	}
+	return b.config, nil
 }
 
 func remoteMigrateSetup(t *testing.T, guest *remoteMigrateGuest, wait bool) (*GuestService, *bytes.Buffer) {
@@ -50,6 +60,10 @@ func remoteMigrateSetup(t *testing.T, guest *remoteMigrateGuest, wait bool) (*Gu
 			lxcs:  map[string]map[int]*fakeGuest{"n150": {101: guest.fakeGuest}},
 		},
 		guest: guest,
+		config: map[string]any{
+			"rootfs": "local-lvm:vm-101-disk-0,size=8G",
+			"net0":   "name=eth0,bridge=vmbr2",
+		},
 	}
 	var out bytes.Buffer
 	runner := TaskRunner{Wait: wait, WaitTimeout: time.Second, Format: "json", ResultWriter: &out}
@@ -395,5 +409,47 @@ func TestRemoteMigrateHTTP500StaysUnknown(t *testing.T) {
 				t.Fatalf("HTTP %d: status = %q, want %q", tc.status, result.Status, tc.wantStatus)
 			}
 		})
+	}
+}
+
+// P2: without explicit storage/bridge maps, the service derives explicit
+// same-name mappings from the guest configuration — PVE's remote_migrate
+// API expects the mapping parameters, and omitting them risks a server-side
+// 400 before the migration can even start.
+func TestRemoteMigrateDerivesSameNameMaps(t *testing.T) {
+	guest := newRemoteMigrateGuest()
+	guest.task = &fakeTask{upid: "UPID:n150:rm:101:"}
+	backend := &remoteMigrateBackend{
+		fakeBackend: &fakeBackend{
+			nodes: []output.NodeRow{{Name: "n150", Status: "online"}},
+			lxcs:  map[string]map[int]*fakeGuest{"n150": {101: guest.fakeGuest}},
+		},
+		guest: guest,
+		config: map[string]any{
+			"rootfs":  "local-lvm:vm-101-disk-0,size=8G",
+			"mp0":     "local-lvm:vm-101-disk-1,size=4G,mp=/data",
+			"net0":    "name=eth0,bridge=vmbr2,ip=dhcp",
+			"unused0": "local-lvm:vm-101-disk-2",
+		},
+	}
+	var out bytes.Buffer
+	runner := TaskRunner{Wait: false, WaitTimeout: time.Second, Format: "json", ResultWriter: &out}
+	svc := NewLXCService(backend, runner, nil, false)
+
+	_, err := svc.RemoteMigrate(context.Background(), 101, "n150", RemoteMigrateOptions{
+		TargetEndpointBundle: "apitoken=PVEAPIToken=u@pam!t=secret,host=t.lan",
+		TargetVMID:           201,
+	})
+	if err != nil {
+		t.Fatalf("remote migrate: %v", err)
+	}
+	if guest.options.TargetStorageMap["local-lvm"] != "local-lvm" {
+		t.Fatalf("storage map = %v, want explicit same-name mapping", guest.options.TargetStorageMap)
+	}
+	if guest.options.TargetBridgeMap["vmbr2"] != "vmbr2" {
+		t.Fatalf("bridge map = %v, want explicit same-name mapping", guest.options.TargetBridgeMap)
+	}
+	if len(guest.options.TargetStorageMap) != 1 {
+		t.Fatalf("storage map = %v, exactly the referenced storage must be mapped", guest.options.TargetStorageMap)
 	}
 }

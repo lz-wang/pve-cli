@@ -207,16 +207,19 @@ func TestBackupCopyRestoreWorkflowContinuesFromArchiveAfterTransfer(t *testing.T
 	}
 }
 
-// P0-3: an existing target guest is never treated as a restored resource —
-// the same VMID does not prove it originated from this workflow. The
-// workflow refuses up front (no auto-resume) instead of validating an
-// unrelated container and calling it a success.
+// P0-3/P1-2: an existing target guest is never treated as a restored
+// resource — the same VMID does not prove it originated from this workflow.
+// VMIDs are cluster-global: the check covers every node, so an unrelated
+// guest on a node other than the target node is still refused before any
+// backup or transfer is wasted.
 func TestBackupCopyRestoreWorkflowRejectsExistingTarget(t *testing.T) {
 	workflow, source, target, sourceSSH, targetSSH := workflowHarness(t)
-	// The target guest may be completely unrelated to this workflow.
-	target.lxcs["pve8845"] = map[int]*fakeGuest{201: {
-		row: output.GuestRow{Kind: "lxc", VMID: 201, Node: "pve8845", Status: "stopped"},
-	}}
+	// The target guest may be completely unrelated to this workflow — and
+	// it lives on a DIFFERENT node than the requested target node.
+	target.nodes = append(target.nodes, output.NodeRow{Name: "pve2", Status: "online"})
+	target.lxcRows = map[string][]output.GuestRow{
+		"pve2": {{Kind: "lxc", VMID: 201, Node: "pve2", Status: "stopped"}},
+	}
 
 	result, err := workflow.Run(context.Background(), workflowOptions())
 	if !errors.Is(err, ErrConflict) {
@@ -238,8 +241,10 @@ func TestBackupCopyRestoreWorkflowRejectsExistingTarget(t *testing.T) {
 	}
 }
 
-// P1-1 ruling applied to the workflow: an unreadable target inventory must
-// fail the run closed — it never reads as "target absent, proceed".
+// P1-1/P1-2 ruling applied to the workflow: an unreadable target inventory
+// must fail the run closed — it never reads as "target absent, proceed".
+// The global VMID check lists every node's guests, so a listing failure is
+// an unverifiable target.
 type workflowInventoryBackend struct {
 	*fakeBackend
 	nodesErr error
@@ -253,11 +258,11 @@ func (b *workflowInventoryBackend) Nodes(context.Context) ([]output.NodeRow, err
 	return b.fakeBackend.Nodes(context.Background())
 }
 
-func (b *workflowInventoryBackend) LXC(ctx context.Context, node string, vmid int) (Guest, error) {
+func (b *workflowInventoryBackend) LXCs(ctx context.Context, node string) ([]output.GuestRow, error) {
 	if b.lxcErr != nil {
 		return nil, b.lxcErr
 	}
-	return b.fakeBackend.LXC(ctx, node, vmid)
+	return b.fakeBackend.LXCs(ctx, node)
 }
 
 func TestBackupCopyRestoreWorkflowFailsClosedOnTargetInventoryError(t *testing.T) {
@@ -267,13 +272,16 @@ func TestBackupCopyRestoreWorkflowFailsClosedOnTargetInventoryError(t *testing.T
 		lxcErr   error
 	}{
 		{"node enumeration fails", errors.New("connection refused"), nil},
-		{"guest query fails", nil, errors.New("connection refused")},
+		{"guest listing fails", nil, errors.New("connection refused")},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			workflow, source, target, sourceSSH, _ := workflowHarness(t)
 			wrapped := &workflowInventoryBackend{fakeBackend: target, nodesErr: tc.nodesErr, lxcErr: tc.lxcErr}
-			closer := NewBackupCopyRestoreWorkflow(workflow.backups, workflow.transfers, workflow.restores, workflow.guests, wrapped)
+			// The restore service (the global VMID check) must run against
+			// the same broken inventory the workflow sees.
+			restores := NewRestoreService(wrapped, TaskRunner{Wait: true, WaitTimeout: time.Second})
+			closer := NewBackupCopyRestoreWorkflow(workflow.backups, workflow.transfers, restores, workflow.guests, wrapped)
 
 			result, err := closer.Run(context.Background(), workflowOptions())
 			if err == nil {
@@ -373,9 +381,9 @@ func TestBackupCopyRestoreWorkflowReportsPartialRestore(t *testing.T) {
 // transfer) would waste the whole pipeline.
 func TestBackupCopyRestoreWorkflowRejectsExistingVMTarget(t *testing.T) {
 	workflow, source, target, sourceSSH, targetSSH := workflowHarness(t)
-	target.vms = map[string]map[int]*fakeGuest{"pve8845": {201: {
-		row: output.GuestRow{Kind: "vm", VMID: 201, Node: "pve8845", Status: "stopped"},
-	}}}
+	target.vmRows = map[string][]output.GuestRow{
+		"pve8845": {{Kind: "vm", VMID: 201, Node: "pve8845", Status: "stopped"}},
+	}
 
 	result, err := workflow.Run(context.Background(), workflowOptions())
 	if !errors.Is(err, ErrConflict) {
@@ -390,6 +398,44 @@ func TestBackupCopyRestoreWorkflowRejectsExistingVMTarget(t *testing.T) {
 	if sourceSSH.saw("cat") || targetSSH.saw("test -e") {
 		t.Fatal("transfer ran on a refused workflow")
 	}
+}
+
+// P2: the workflow identifies its archive from the vzdump task log, not the
+// time window: a backup of the same guest that started concurrently (higher
+// ctime, still inside the window) can never be misattributed to this run.
+func TestBackupCopyRestoreWorkflowPicksArchiveFromTaskLog(t *testing.T) {
+	workflow, source, _, sourceSSH, targetSSH := workflowHarness(t)
+	reader := workflow.backups.backend.(*fakeBackend)
+	thisRun := "local:backup/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst"
+	concurrent := "local:backup/vzdump-lxc-101-2026_06_06-00_05_00.tar.zst"
+	now := uint64(time.Now().Unix())
+	reader.backupRows["n150"]["local"] = []output.BackupRow{
+		{Node: "n150", Storage: "local", Kind: "lxc", VMID: 101, VolID: thisRun, Size: uint64(len(transferPayload)), Format: "tar.zst", CTime: now},
+		// A concurrently started backup finished later — the naive time
+		// window would pick this one.
+		{Node: "n150", Storage: "local", Kind: "lxc", VMID: 101, VolID: concurrent, Size: 999, Format: "tar.zst", CTime: now + 60},
+	}
+	// The vzdump task log names the archive THIS run created.
+	const backupUPID = "UPID:n150:0000ABCD:00001234:6839F4A1:vzdump:101:root@pam:"
+	reader.backupTask = &fakeTask{upid: backupUPID}
+	source.lxcs["n150"][101].task = &fakeTask{upid: backupUPID}
+	reader.taskLogPages = map[string][][]output.TaskLogRow{
+		backupUPID: {{
+			{Text: "INFO: Creating vzdump archive '/var/lib/vz/dump/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst'"},
+		}},
+	}
+
+	result, err := workflow.Run(context.Background(), workflowOptions())
+	if err != nil {
+		t.Fatalf("workflow: %v", err)
+	}
+	if result.Archive != thisRun {
+		t.Fatalf("archive = %q, want the task-log-named archive, not the concurrent one", result.Archive)
+	}
+	if !sourceSSH.saw("cat /var/lib/vz/dump/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst") {
+		t.Fatalf("source commands = %v", sourceSSH.calls)
+	}
+	_ = targetSSH
 }
 
 // A failing stage stops the workflow; earlier stages keep their results and

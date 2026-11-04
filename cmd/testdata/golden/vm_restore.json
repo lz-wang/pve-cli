@@ -1,6 +1,8 @@
 {
   "resource": "vm",
   "status": "submitted",
+  "restore_status": "submitted",
+  "post_config_status": "skipped",
   "kind": "vm",
   "vmid": 101,
   "node": "pve1",

@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -73,16 +75,19 @@ func (w *BackupCopyRestoreWorkflow) Run(ctx context.Context, options BackupCopyR
 		return result, stageErr
 	}
 
-	targetExists, err := w.targetGuestExists(ctx, options)
-	if err != nil {
-		detail := fmt.Sprintf("target guest inventory for vmid %d unreadable (%v); refusing to proceed", options.TargetVMID, ClassifyError(err))
+	// The VMID namespace is cluster-global: a VM or container on ANY node
+	// occupies the target VMID. The workflow reuses the restore service's
+	// global check, so the preflight and the restore preflight can never
+	// disagree about what counts as occupied.
+	if vmidErr := w.restores.VMIDFree(ctx, options.TargetVMID); vmidErr != nil {
+		if errors.Is(vmidErr, ErrConflict) {
+			detail := fmt.Sprintf("target vmid %d already exists in the target cluster; it is not known to originate from this workflow — remove it manually or choose another --target-vmid; to reuse a verified archive after cleanup, re-run with --archive", options.TargetVMID)
+			result.Stages = append(result.Stages, output.WorkflowStageResult{Stage: "preflight", Status: "failed", Detail: detail})
+			return fail(fmt.Errorf("%w: %s", ErrConflict, detail))
+		}
+		detail := fmt.Sprintf("target guest inventory for vmid %d unreadable (%v); refusing to proceed", options.TargetVMID, vmidErr)
 		result.Stages = append(result.Stages, output.WorkflowStageResult{Stage: "preflight", Status: "failed", Detail: detail})
 		return fail(fmt.Errorf("%w: %s", ErrUnavailable, detail))
-	}
-	if targetExists {
-		detail := fmt.Sprintf("target vmid %d already exists on target node %s; it is not known to originate from this workflow — remove it manually or choose another --target-vmid; to reuse a verified archive after cleanup, re-run with --archive", options.TargetVMID, options.TargetNode)
-		result.Stages = append(result.Stages, output.WorkflowStageResult{Stage: "preflight", Status: "failed", Detail: detail})
-		return fail(fmt.Errorf("%w: %s", ErrConflict, detail))
 	}
 	archive := strings.TrimSpace(options.Archive)
 	if archive != "" {
@@ -115,14 +120,12 @@ func (w *BackupCopyRestoreWorkflow) Run(ctx context.Context, options BackupCopyR
 		VMID:      options.TargetVMID,
 		BridgeMap: options.BridgeMap,
 	})
+	// The restore service reports the split state itself: status is partial
+	// when the archive restored but the post-restore configuration failed.
 	stage = output.WorkflowStageResult{Stage: "restore", Status: restoreResult.Status, Task: restoreResult.Task, Detail: restoreResult.Archive}
 	if err != nil || restoreResult.Status != "succeeded" {
-		if err != nil && restoreResult.Status == "succeeded" {
-			// The restore task completed but the post-restore configuration
-			// failed: report the stage as partial, name the repair
-			// responsibility, and fail the workflow.
-			stage.Status = "partial"
-			stage.Detail = fmt.Sprintf("%s; post-restore configuration failed: %v — repair the mapping manually (or re-run after fixing) before using the guest", restoreResult.Archive, err)
+		if restoreResult.Status == "partial" {
+			stage.Detail = fmt.Sprintf("%s; post-restore configuration failed: %s — repair the mapping manually (or re-run after fixing) before using the guest", restoreResult.Archive, restoreResult.Error)
 		} else {
 			if stage.Status == "" {
 				stage.Status = "failed"
@@ -184,9 +187,10 @@ func warningChecks(plan output.MigrationPlan) string {
 }
 
 // backupStage creates the backup and resolves the archive this run created.
-// The listing is correlated against the task start time: the newest listing
-// entry proves nothing about its origin, so an archive created before the
-// task is never accepted.
+// The archive is identified from the vzdump task log when the log names one
+// — a concurrently started backup of the same guest can then never be
+// misattributed. The task-start time window stays as the fallback for logs
+// that are unreadable or name no archive.
 func (w *BackupCopyRestoreWorkflow) backupStage(ctx context.Context, options BackupCopyRestoreOptions) (string, output.WorkflowStageResult) {
 	// Clock-skew tolerance between the CLI host and the PVE host: archives
 	// stamped slightly before the observed start still count as this run's.
@@ -214,11 +218,15 @@ func (w *BackupCopyRestoreWorkflow) backupStage(ctx context.Context, options Bac
 	if err != nil {
 		return "", failedStage("backup", err.Error())
 	}
+	// P2: prefer the archive the finished task's log names; the log is the
+	// only record that proves which file vzdump actually wrote.
+	loggedArchive := archiveNameFromTaskLog(ctx, w.backups.backend, backup.Task)
 	var latest output.BackupRow
 	var newestAny output.BackupRow
+	var logMatch *output.BackupRow
 	found := false
 	sawAny := false
-	for _, row := range rows {
+	for i, row := range rows {
 		if row.VMID != uint64(options.VMID) || row.Kind != BackupKindLXC {
 			continue
 		}
@@ -226,10 +234,16 @@ func (w *BackupCopyRestoreWorkflow) backupStage(ctx context.Context, options Bac
 			newestAny = row
 			sawAny = true
 		}
+		if loggedArchive != "" && path.Base(row.VolID) == loggedArchive {
+			logMatch = &rows[i]
+		}
 		if row.CTime >= uint64(started.Unix()) && (!found || row.CTime > latest.CTime) {
 			latest = row
 			found = true
 		}
+	}
+	if logMatch != nil {
+		return logMatch.VolID, output.WorkflowStageResult{Stage: "backup", Status: "succeeded", Task: backup.Task, Detail: logMatch.VolID}
 	}
 	if !found {
 		detail := "backup completed but no archive created by this run was listed"
@@ -242,40 +256,40 @@ func (w *BackupCopyRestoreWorkflow) backupStage(ctx context.Context, options Bac
 	return latest.VolID, output.WorkflowStageResult{Stage: "backup", Status: "succeeded", Task: backup.Task, Detail: latest.VolID}
 }
 
-func (w *BackupCopyRestoreWorkflow) targetGuestExists(ctx context.Context, options BackupCopyRestoreOptions) (bool, error) {
-	nodes, err := w.target.Nodes(ctx)
+// vzdumpArchiveMarker matches the log line vzdump writes when it starts
+// writing the archive file.
+var vzdumpArchiveMarker = regexp.MustCompile(`(?i)creating vzdump archive ['"]([^'"]+)['"]`)
+
+// archiveNameFromTaskLog reads the finished backup task's log and returns
+// the archive file name vzdump reported creating; "" when the log is
+// unavailable or names no archive. Only the base name is compared, so the
+// host-side directory layout stays irrelevant.
+func archiveNameFromTaskLog(ctx context.Context, backend BackupReader, upid string) string {
+	reader, ok := backend.(taskLogReader)
+	if !ok || strings.TrimSpace(upid) == "" {
+		return ""
+	}
+	info, err := ParseUPID(upid)
 	if err != nil {
-		return false, err
+		return ""
 	}
-	for _, node := range nodes {
-		if options.TargetNode != "" && node.Name != options.TargetNode {
-			continue
+	var rows []output.TaskLogRow
+	for start, pages := 0, 0; pages < taskLogMaxPages; start, pages = start+taskLogPageSize, pages+1 {
+		page, err := reader.TaskLog(ctx, info.Node, upid, TaskLogPage{Start: start, Limit: taskLogPageSize})
+		if err != nil {
+			return ""
 		}
-		// The VMID namespace is shared between VMs and containers: a qemu VM
-		// occupying the target VMID is an existing unrelated guest too, and
-		// refusing only at the restore stage would waste the whole pipeline.
-		guest, err := w.target.VM(ctx, node.Name, options.TargetVMID)
-		if err == nil && guest != nil {
-			return true, nil
-		}
-		if guest == nil && err == nil {
-			return true, nil
-		}
-		if !errors.Is(ClassifyError(err), ErrNotFound) {
-			return false, err
-		}
-		guest, err = w.target.LXC(ctx, node.Name, options.TargetVMID)
-		if err == nil && guest != nil {
-			return true, nil
-		}
-		if guest == nil && err == nil {
-			return true, nil
-		}
-		if !errors.Is(ClassifyError(err), ErrNotFound) {
-			return false, err
+		rows = append(rows, page...)
+		if len(page) < taskLogPageSize {
+			break
 		}
 	}
-	return false, nil
+	for _, row := range rows {
+		if match := vzdumpArchiveMarker.FindStringSubmatch(row.Text); match != nil {
+			return path.Base(strings.TrimSpace(match[1]))
+		}
+	}
+	return ""
 }
 
 func skippedStage(name, detail string) output.WorkflowStageResult {

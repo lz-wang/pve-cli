@@ -49,6 +49,23 @@ func (s *GuestService) RemoteMigrate(ctx context.Context, vmid int, node string,
 		return output.OperationResult{}, fmt.Errorf("%w: guest does not support remote migration", ErrInvalid)
 	}
 
+	// The remote_migrate API expects storage and bridge mapping parameters;
+	// omitting them risks a server-side 400 before the migration starts.
+	// With no explicit maps, derive explicit same-name mappings from the
+	// guest configuration — the same semantics, stated instead of implied.
+	if len(options.TargetStorageMap) == 0 || len(options.TargetBridgeMap) == 0 {
+		derivedStorage, derivedBridge, deriveErr := s.deriveSameNameMaps(ctx, guest)
+		if deriveErr != nil {
+			return output.OperationResult{}, deriveErr
+		}
+		if len(options.TargetStorageMap) == 0 {
+			options.TargetStorageMap = derivedStorage
+		}
+		if len(options.TargetBridgeMap) == 0 {
+			options.TargetBridgeMap = derivedBridge
+		}
+	}
+
 	task, err := migrator.RemoteMigrate(ctx, options)
 	runner := s.tasks
 	runner.Resource = s.kind
@@ -88,6 +105,85 @@ func (s *GuestService) RemoteMigrate(ctx context.Context, vmid int, node string,
 		}
 	}
 	return operation, runErr
+}
+
+// deriveSameNameMaps reads the guest configuration and maps every referenced
+// storage and bridge to itself: LXC rootfs/mp volumes and QEMU scsi/sata/
+// virtio/ide disks decide the storage map; net devices decide the bridge
+// map. Bind mounts (host paths) and devices without a bridge contribute
+// nothing.
+func (s *GuestService) deriveSameNameMaps(ctx context.Context, guest Guest) (map[string]string, map[string]string, error) {
+	configBackend, ok := s.backend.(NativeConfigBackend)
+	if !ok {
+		return nil, nil, fmt.Errorf("%w: remote migration needs native config access to derive same-name storage and bridge mappings; pass them explicitly", ErrUnavailable)
+	}
+	row := guest.Row()
+	config, err := configBackend.GuestConfig(ctx, s.kind, row.Node, int(row.VMID))
+	if err != nil {
+		return nil, nil, ClassifyError(err)
+	}
+	storages := map[string]string{}
+	bridges := map[string]string{}
+	for key, value := range config {
+		text, ok := value.(string)
+		if !ok {
+			continue
+		}
+		key = strings.ToLower(strings.TrimSpace(key))
+		if key == "rootfs" || strings.HasPrefix(key, "mp") && s.kind == BackupKindLXC {
+			if volume, _, found := strings.Cut(text, ":"); found {
+				volume = strings.TrimSpace(volume)
+				// Host paths (bind mounts) have no storage to map.
+				if volume != "" && !strings.HasPrefix(volume, "/") {
+					storages[volume] = volume
+				}
+			}
+			continue
+		}
+		if s.kind == BackupKindVM && isQEMUDiskKey(key) {
+			if volume, _, found := strings.Cut(text, ":"); found {
+				volume = strings.TrimSpace(volume)
+				if volume != "" && !strings.HasPrefix(volume, "/") {
+					storages[volume] = volume
+				}
+			}
+			continue
+		}
+		if lxcNetDevicePattern.MatchString(key) || isQEMUNetKey(key) {
+			if bridge := optionAttributeValue(text, "bridge"); bridge != "" {
+				bridges[bridge] = bridge
+			}
+		}
+	}
+	return storages, bridges, nil
+}
+
+// isQEMUDiskKey reports whether a QEMU configuration key is a migrated disk
+// slot. efidisk and tpmstate are not storage-mapped disks.
+func isQEMUDiskKey(key string) bool {
+	for _, prefix := range []string{"scsi", "sata", "virtio", "ide"} {
+		if rest, found := strings.CutPrefix(key, prefix); found {
+			return rest != "" && isAllDigits(rest)
+		}
+	}
+	return false
+}
+
+// isQEMUNetKey reports whether a QEMU configuration key is a network device.
+func isQEMUNetKey(key string) bool {
+	return strings.HasPrefix(key, "net") && isAllDigits(strings.TrimPrefix(key, "net"))
+}
+
+func isAllDigits(value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, ch := range value {
+		if ch < '0' || ch > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 // submissionRejected reports whether an error proves PVE rejected the
