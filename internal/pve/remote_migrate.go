@@ -188,24 +188,22 @@ func isAllDigits(value string) bool {
 }
 
 // submissionRejected reports whether an error proves PVE rejected the
-// migration before it started: a structured APIError in the 4xx family
+// migration before it started: only a structured APIError in the 4xx family
 // (parameter validation, permission, conflict, optimistic-concurrency
-// digest), or a server error whose body names a missing resource — a lookup
-// failure cannot have started anything. HTTP 408 (request timeout) is
-// excluded from the 4xx family: the request may have been processed, so the
-// outcome is as unproven as any server failure. Everything else (5xx,
-// connection interruptions, timeouts) leaves the outcome unproven: the
-// caller must re-check the actual task state instead of trusting a
-// mechanical HTTP classification.
+// digest) does. HTTP 408 (request timeout) is excluded from the 4xx family:
+// the request may have been processed, so the outcome is as unproven as any
+// server failure. No 5xx outcome is ever definite — not even when the body
+// names a missing resource, because that lookup can fail in a phase after
+// the migration already started. The ErrNotFound classification stays a
+// statement about what the server reported, never a proof that nothing
+// happened: the caller must re-check the actual task state instead of
+// trusting a mechanical HTTP classification.
 func submissionRejected(err error) bool {
 	var apiErr *APIError
 	if !errors.As(err, &apiErr) {
 		return false
 	}
-	if apiErr.HTTPStatus >= 400 && apiErr.HTTPStatus < 500 && apiErr.HTTPStatus != http.StatusRequestTimeout {
-		return true
-	}
-	return apiErr.HTTPStatus >= 500 && errors.Is(apiErr, ErrNotFound)
+	return apiErr.HTTPStatus >= 400 && apiErr.HTTPStatus < 500 && apiErr.HTTPStatus != http.StatusRequestTimeout
 }
 
 // formatMigrationMaps renders a source=target map in PVE's official

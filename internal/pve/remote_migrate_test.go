@@ -212,7 +212,10 @@ func TestRemoteMigrateSubmissionFailureNeverReportsSuccess(t *testing.T) {
 		{"http 502", nil, &APIError{HTTPStatus: 502, Category: CategoryUnavailable, kind: ErrUnavailable}, "unknown", nil, ""},
 		{"http 503", nil, &APIError{HTTPStatus: 503, Category: CategoryUnavailable, kind: ErrUnavailable}, "unknown", nil, ""},
 		{"http 504", nil, &APIError{HTTPStatus: 504, Category: CategoryUnavailable, kind: ErrUnavailable}, "unknown", nil, ""},
-		{"http 500 lookup failure", nil, &APIError{HTTPStatus: 500, Category: CategoryNotFound, Message: "no such guest", kind: ErrNotFound}, "failed", nil, ""},
+		// P1-4: a 500 body naming a missing resource is an ErrNotFound
+		// classification, never a proven rejection — the lookup can happen
+		// in a phase after the migration already started.
+		{"http 500 lookup failure", nil, &APIError{HTTPStatus: 500, Category: CategoryNotFound, Message: "no such guest", kind: ErrNotFound}, "unknown", nil, ""},
 		{"network timeout", nil, context.DeadlineExceeded, "unknown", ErrUnavailable, ""},
 		{"nil task without error", nil, nil, "unknown", ErrTaskTimeout, ""},
 		{"empty upid", &fakeTask{}, nil, "unknown", ErrTaskTimeout, ""},
@@ -357,19 +360,25 @@ func TestRemoteMigrateRedactsTargetSecret(t *testing.T) {
 // P0-3 HTTP regression through the real client: an HTTP 500 from
 // remote_migrate leaves the outcome unproven (unknown) — the server may
 // have started the migration before failing — while an HTTP 400 stays a
-// provable rejection (failed).
+// provable rejection (failed). A 500 body naming a missing resource does
+// not change this: the lookup failure can happen in a phase after the
+// migration already started, so every 5xx stays unknown.
 func TestRemoteMigrateHTTP500StaysUnknown(t *testing.T) {
 	for _, tc := range []struct {
+		name       string
 		status     int
+		body       string
 		wantStatus string
 	}{
-		{http.StatusInternalServerError, "unknown"},
-		{http.StatusBadGateway, "unknown"},
-		{http.StatusServiceUnavailable, "unknown"},
-		{http.StatusGatewayTimeout, "unknown"},
-		{http.StatusBadRequest, "failed"},
+		{"Internal Server Error", http.StatusInternalServerError, `{"data":null,"message":"migration server error"}`, "unknown"},
+		{"500 body names missing resource", http.StatusInternalServerError, `{"data":null,"message":"guest '201' not found"}`, "unknown"},
+		{"500 body says does not exist", http.StatusInternalServerError, `{"data":null,"message":"storage 'local' does not exist"}`, "unknown"},
+		{"Bad Gateway", http.StatusBadGateway, `{"data":null,"message":"migration server error"}`, "unknown"},
+		{"Service Unavailable", http.StatusServiceUnavailable, `{"data":null,"message":"migration server error"}`, "unknown"},
+		{"Gateway Timeout", http.StatusGatewayTimeout, `{"data":null,"message":"migration server error"}`, "unknown"},
+		{"Bad Request", http.StatusBadRequest, `{"data":null,"message":"migration server error"}`, "failed"},
 	} {
-		t.Run(http.StatusText(tc.status), func(t *testing.T) {
+		t.Run(tc.name, func(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				switch {
 				case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/lxc/101/status/current"):
@@ -380,7 +389,7 @@ func TestRemoteMigrateHTTP500StaysUnknown(t *testing.T) {
 					_, _ = w.Write([]byte(`{"data":{"status":"online"}}`))
 				case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/lxc/101/remote_migrate"):
 					w.WriteHeader(tc.status)
-					_, _ = w.Write([]byte(`{"data":null,"message":"migration server error"}`))
+					_, _ = w.Write([]byte(tc.body))
 				default:
 					t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
 					w.WriteHeader(http.StatusNotFound)

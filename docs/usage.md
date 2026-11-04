@@ -284,7 +284,13 @@ the target endpoint bundle from the `--to` profile (host, API token) plus
 an optional `--target-fingerprint` for TLS verification of self-signed
 certificates; the target token is passed into the API request only — it
 never appears in logs, structured output or error messages (the error
-sanitizer also redacts it). `--yes` is required and the command prints two
+sanitizer also redacts it). Submission outcomes are honest about what the
+HTTP layer can prove: only a 4xx rejection (validation, permission,
+conflict, digest mismatch) reports `failed`; every 5xx — including bodies
+that name a missing resource — and every transport interruption report
+`unknown`, because the server may have started the migration before
+failing. A UPID returned alongside an error is preserved for
+`task get/log/wait`. `--yes` is required and the command prints two
 notices first: the source PVE receives target API credentials for the
 transfer, and upstream remote migration is experimental with no automatic
 resume after interruption — use `task get/log/wait` to recover.
