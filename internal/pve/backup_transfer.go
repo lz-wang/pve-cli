@@ -14,12 +14,13 @@ import (
 	"github.com/lz-wang/pve-cli/v3/internal/ssh"
 )
 
-// DirStoragePath resolves a host-visible directory for dir-type storages.
-// Only dir storages are supported in this version: the backup archive must
-// be reachable as a plain file on the host filesystem. PBS storages must be
-// handled by their native mechanisms, not file copies.
-type DirStoragePath interface {
-	StorageDirPath(ctx context.Context, storage string) (string, error)
+// BackupStorageContract validates through the PVE API that a storage is a
+// host-filesystem (dir) storage that accepts backup content. Only dir
+// storages are supported for backup copies: the archive must be reachable
+// as a plain file on the host; PBS storages must use their native
+// mechanisms, not file copies.
+type BackupStorageContract interface {
+	VerifyBackupStorage(ctx context.Context, storage string) error
 }
 
 // BackupCopyOptions configures one cross-profile backup archive copy.
@@ -29,36 +30,38 @@ type BackupCopyOptions struct {
 }
 
 // BackupTransferService streams a backup archive from one PVE host to
-// another over the two SSH transports. Data flows source `cat` → local
-// fan-out (sha256 + progress) → pipe → target `dd`; a checksum comparison
-// and an atomic rename publish the file.
+// another over the two SSH transports. The physical archive paths are
+// resolved on each host with `pvesm path`, so the default dump/ directory
+// and custom content-dirs mappings are both honored — the logical volume
+// namespace ("storage:backup/file") is never treated as a filesystem
+// layout. Data flows source `cat` → local fan-out (sha256 + progress) →
+// pipe → target `dd`; a checksum comparison, an atomic hard-link publish,
+// and a target inventory check complete the copy.
 type BackupTransferService struct {
-	sourceAPI  BackupReader
-	sourcePath DirStoragePath
-	sourceNode string
-	sourceSSH  CommandRunner
-	targetPath DirStoragePath
-	targetSSH  CommandRunner
-	Progress   io.Writer
+	sourceAPI      BackupReader
+	sourceNode     string
+	sourceSSH      CommandRunner
+	targetContract BackupStorageContract
+	targetSSH      CommandRunner
+	Progress       io.Writer
 }
 
-func NewBackupTransferService(sourceAPI BackupReader, sourceNode string, sourceSSH CommandRunner, targetPath DirStoragePath, targetSSH CommandRunner, progress io.Writer) *BackupTransferService {
-	sourcePath, _ := sourceAPI.(DirStoragePath)
+func NewBackupTransferService(sourceAPI BackupReader, sourceNode string, sourceSSH CommandRunner, targetContract BackupStorageContract, targetSSH CommandRunner, progress io.Writer) *BackupTransferService {
 	return &BackupTransferService{
-		sourceAPI:  sourceAPI,
-		sourcePath: sourcePath,
-		sourceNode: sourceNode,
-		sourceSSH:  sourceSSH,
-		targetPath: targetPath,
-		targetSSH:  targetSSH,
-		Progress:   progress,
+		sourceAPI:      sourceAPI,
+		sourceNode:     sourceNode,
+		sourceSSH:      sourceSSH,
+		targetContract: targetContract,
+		targetSSH:      targetSSH,
+		Progress:       progress,
 	}
 }
 
 // Copy transfers the archive once. The target refuses to overwrite an
 // existing file; a leftover .pve-cli-part of the full size is resumed by
 // verification instead of re-transfer. A checksum mismatch fails and cleans
-// the partial file up.
+// the partial file up, and the published archive must be recognized by the
+// target storage inventory before the copy reports success.
 func (s *BackupTransferService) Copy(ctx context.Context, options BackupCopyOptions) (output.BackupCopyResult, error) {
 	result := output.BackupCopyResult{Resource: "backup", SourceVolid: options.Volid, TargetStorage: options.TargetStorage}
 
@@ -68,6 +71,22 @@ func (s *BackupTransferService) Copy(ctx context.Context, options BackupCopyOpti
 	}
 	if strings.TrimSpace(options.TargetStorage) == "" {
 		return result, fmt.Errorf("%w: --target-storage is required", ErrInvalid)
+	}
+
+	// The storage contract checks run before any host command: only dir
+	// storages with backup content are in scope for this version.
+	sourceContract, ok := s.sourceAPI.(BackupStorageContract)
+	if !ok {
+		return result, fmt.Errorf("%w: source backend cannot verify backup storages", ErrUnavailable)
+	}
+	if err := sourceContract.VerifyBackupStorage(ctx, sourceStorage); err != nil {
+		return result, err
+	}
+	if s.targetContract == nil {
+		return result, fmt.Errorf("%w: target backend cannot verify backup storages", ErrUnavailable)
+	}
+	if err := s.targetContract.VerifyBackupStorage(ctx, options.TargetStorage); err != nil {
+		return result, err
 	}
 
 	rows, err := s.sourceAPI.Backups(ctx, s.sourceNode, sourceStorage)
@@ -85,17 +104,15 @@ func (s *BackupTransferService) Copy(ctx context.Context, options BackupCopyOpti
 		return result, fmt.Errorf("%w: backup %s not found on node %s", ErrNotFound, options.Volid, s.sourceNode)
 	}
 
-	sourceDir, err := s.sourcePath.StorageDirPath(ctx, sourceStorage)
+	sourceFile, err := resolveVolumePath(ctx, s.sourceSSH, options.Volid)
 	if err != nil {
 		return result, err
 	}
-	targetDir, err := s.targetPath.StorageDirPath(ctx, options.TargetStorage)
+	targetVolid := options.TargetStorage + ":" + subpath
+	finalPath, err := resolveVolumePath(ctx, s.targetSSH, targetVolid)
 	if err != nil {
 		return result, err
 	}
-
-	sourceFile := sourceDir + "/" + subpath
-	finalPath := targetDir + "/" + subpath
 	partPath := finalPath + ".pve-cli-part"
 	result.TargetPath = finalPath
 
@@ -115,6 +132,9 @@ func (s *BackupTransferService) Copy(ctx context.Context, options BackupCopyOpti
 		}
 		if sourceSum != targetSum {
 			return result, fmt.Errorf("%w: target file %s already exists and does not match the source archive; delete it first or choose another storage", ErrConflict, finalPath)
+		}
+		if invErr := s.verifyTargetInventory(ctx, targetVolid); invErr != nil {
+			return result, invErr
 		}
 		result.Bytes = source.Size
 		result.SHA256 = sourceSum
@@ -181,8 +201,57 @@ func (s *BackupTransferService) Copy(ctx context.Context, options BackupCopyOpti
 	// Cleanup is best effort: the archive is already published, and a
 	// leftover part file is picked up by the idempotent continuation above.
 	_, _ = s.runTarget(ctx, "rm", "-f", partPath)
+
+	// A file PVE cannot list is not a completed copy: the published archive
+	// must be recognized by the target storage inventory (an unrecognized
+	// extension or foreign directory would be invisible to PVE).
+	if invErr := s.verifyTargetInventory(ctx, targetVolid); invErr != nil {
+		result.Status = "failed"
+		result.Error = invErr.Error()
+		return result, invErr
+	}
 	result.Status = "succeeded"
 	return result, nil
+}
+
+// resolveVolumePath asks the host for the physical path of a volume id via
+// `pvesm path`. The storage's own configuration decides the directory — the
+// default dump/ layout and content-dirs overrides alike — so the logical
+// volume namespace is never mapped onto the filesystem by this CLI.
+func resolveVolumePath(ctx context.Context, runner CommandRunner, volid string) (string, error) {
+	run, err := runner.Run(ctx, nil, nil, nil, "pvesm", "path", volid)
+	if err != nil {
+		return "", err
+	}
+	if run.ExitCode != 0 {
+		return "", fmt.Errorf("%w: pvesm path %s exited with %d: %s", ErrUnavailable, volid, run.ExitCode, strings.TrimSpace(run.Stderr))
+	}
+	resolved := strings.TrimSpace(run.Stdout)
+	if resolved == "" || !strings.HasPrefix(resolved, "/") || strings.ContainsAny(resolved, "\n\r") {
+		return "", fmt.Errorf("%w: pvesm path %s returned an unusable path %q", ErrInvalid, volid, strings.TrimSpace(run.Stdout))
+	}
+	return resolved, nil
+}
+
+// verifyTargetInventory confirms the target PVE storage inventory lists the
+// published archive volid; only then is the archive usable by the target
+// PVE.
+func (s *BackupTransferService) verifyTargetInventory(ctx context.Context, targetVolid string) error {
+	storage, _, _ := strings.Cut(targetVolid, ":")
+	run, err := s.targetSSH.Run(ctx, nil, nil, nil, "pvesm", "list", storage, "--content", "backup")
+	if err != nil {
+		return err
+	}
+	if run.ExitCode != 0 {
+		return fmt.Errorf("%w: pvesm list %s exited with %d: %s", ErrUnavailable, storage, run.ExitCode, strings.TrimSpace(run.Stderr))
+	}
+	for line := range strings.SplitSeq(run.Stdout, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) > 0 && fields[0] == targetVolid {
+			return nil
+		}
+	}
+	return fmt.Errorf("%w: published archive %s is not listed by the target storage inventory; the file exists at the published path but the target PVE does not recognize it as a backup", ErrConflict, targetVolid)
 }
 
 // stream pipes source `cat` into target `dd` with a local hash and progress

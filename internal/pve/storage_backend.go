@@ -2,6 +2,7 @@ package pve
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"strings"
@@ -54,28 +55,58 @@ func (b *ProxmoxBackend) Storage(ctx context.Context, nodeName, storageName stri
 	return storageRow(storage), nil
 }
 
-// StorageDirPath returns the host directory of a dir-type storage from the
-// cluster storage configuration. Non-dir storages are rejected: backup
-// copies in this version only handle host-filesystem archives.
-func (b *ProxmoxBackend) StorageDirPath(ctx context.Context, storageName string) (string, error) {
+// VerifyBackupStorage asserts through the cluster storage configuration
+// that a storage exists, is a host-filesystem (dir) storage, and accepts
+// backup content. The physical archive path itself is resolved on the host
+// with `pvesm path` — which follows the default dump/ directory and any
+// content-dirs overrides — so this check only guards the supported scope:
+// dir storages with backup content.
+func (b *ProxmoxBackend) VerifyBackupStorage(ctx context.Context, storageName string) error {
 	storageName = strings.TrimSpace(storageName)
 	if storageName == "" {
-		return "", fmt.Errorf("storage is required")
+		return fmt.Errorf("%w: storage is required", ErrInvalid)
 	}
 	var config struct {
-		Type string `json:"type"`
-		Path string `json:"path"`
+		Type    string          `json:"type"`
+		Content json.RawMessage `json:"content"`
 	}
 	if err := b.client.Get(ctx, "/storage/"+url.PathEscape(storageName), &config); err != nil {
-		return "", ClassifyError(err)
+		return ClassifyError(err)
 	}
 	if config.Type != "dir" {
-		return "", fmt.Errorf("%w: storage %s has type %q; only dir storages are supported for backup copies (PBS must use its native mechanisms)", ErrInvalid, storageName, config.Type)
+		return fmt.Errorf("%w: storage %s has type %q; only dir storages are supported for backup copies (PBS must use its native mechanisms)", ErrInvalid, storageName, config.Type)
 	}
-	if strings.TrimSpace(config.Path) == "" {
-		return "", fmt.Errorf("%w: dir storage %s has no path configured", ErrInvalid, storageName)
+	contents := parseStorageContentList(config.Content)
+	if len(contents) == 0 {
+		// An unset content list means PVE does not restrict this storage;
+		// the host-side `pvesm path` resolution stays the authoritative
+		// check.
+		return nil
 	}
-	return strings.TrimSpace(config.Path), nil
+	for _, content := range contents {
+		if strings.TrimSpace(content) == "backup" {
+			return nil
+		}
+	}
+	return fmt.Errorf("%w: storage %s does not accept backup content (content: %s); backup copies need a dir storage with backup content", ErrInvalid, storageName, strings.TrimSpace(string(config.Content)))
+}
+
+// parseStorageContentList decodes a PVE storage content list, which arrives
+// as a comma-separated string or an array depending on the API surface.
+func parseStorageContentList(raw json.RawMessage) []string {
+	trimmed := strings.TrimSpace(string(raw))
+	if trimmed == "" || trimmed == "null" {
+		return nil
+	}
+	var single string
+	if err := json.Unmarshal(raw, &single); err == nil {
+		return strings.Split(single, ",")
+	}
+	var list []string
+	if err := json.Unmarshal(raw, &list); err == nil {
+		return list
+	}
+	return nil
 }
 
 func (b *ProxmoxBackend) StorageContents(ctx context.Context, nodeName, storageName string) ([]output.StorageContentRow, error) {

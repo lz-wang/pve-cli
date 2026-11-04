@@ -59,14 +59,14 @@ func backupCopyCommand(deps Dependencies) *cli.Command {
 			} else if bound == "" {
 				fmt.Fprintf(c.App.ErrWriter, "notice: source ssh host is not bound to a node (ssh.node); the archive resolves to node %s\n", sourceNode)
 			}
-			targetDir, ok := sides.targetBackend.(pve.DirStoragePath)
+			targetContract, ok := sides.targetBackend.(pve.BackupStorageContract)
 			if !ok {
-				return fmt.Errorf("%w: target backend cannot resolve dir storage paths", pve.ErrUnavailable)
+				return fmt.Errorf("%w: target backend cannot verify dir storage contracts", pve.ErrUnavailable)
 			}
 
 			service := pve.NewBackupTransferService(
 				sourceReader, sourceNode, sourceRunner,
-				targetDir, targetRunner, c.App.ErrWriter,
+				targetContract, targetRunner, c.App.ErrWriter,
 			)
 			result, err := service.Copy(c.Context, pve.BackupCopyOptions{
 				Volid:         volid,

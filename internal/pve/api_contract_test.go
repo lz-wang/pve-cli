@@ -165,3 +165,44 @@ func TestHTTPFailuresTypedAndMutationsNotRetried(t *testing.T) {
 		})
 	}
 }
+
+// The storage contract reads the cluster storage configuration: a dir
+// storage with backup content (string or array form) passes; other types
+// or content lists are refused before any host command runs.
+func TestVerifyBackupStorageHTTPContract(t *testing.T) {
+	configs := map[string]string{
+		"/storage/local":    `{"data":{"type":"dir","content":"backup,iso"}}`,
+		"/storage/arrayfor": `{"data":{"type":"dir","content":["iso","backup"]}}`,
+		"/storage/pbs":      `{"data":{"type":"pbs","content":"backup"}}`,
+		"/storage/noarch":   `{"data":{"type":"dir","content":"iso,vztmpl"}}`,
+		"/storage/unset":    `{"data":{"type":"dir"}}`,
+	}
+	b := contractBackend(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "GET" || !strings.HasPrefix(r.URL.Path, "/storage/") {
+			t.Errorf("%s %s", r.Method, r.URL.Path)
+		}
+		body, ok := configs[r.URL.Path]
+		if !ok {
+			t.Errorf("unexpected storage %s", r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		_, _ = w.Write([]byte(body))
+	})
+
+	if err := b.VerifyBackupStorage(context.Background(), "local"); err != nil {
+		t.Fatalf("dir + backup string content: %v", err)
+	}
+	if err := b.VerifyBackupStorage(context.Background(), "arrayfor"); err != nil {
+		t.Fatalf("dir + backup array content: %v", err)
+	}
+	if err := b.VerifyBackupStorage(context.Background(), "unset"); err != nil {
+		t.Fatalf("unset content list means unrestricted: %v", err)
+	}
+	if err := b.VerifyBackupStorage(context.Background(), "pbs"); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("err = %v, want a non-dir rejection", err)
+	}
+	if err := b.VerifyBackupStorage(context.Background(), "noarch"); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("err = %v, want a missing-backup-content rejection", err)
+	}
+}

@@ -50,15 +50,19 @@ func workflowHarness(t *testing.T) (*BackupCopyRestoreWorkflow, *fakeBackend, *f
 
 	sum := sha256.Sum256([]byte(transferPayload))
 	checksum := hex.EncodeToString(sum[:])
+	const workflowTargetVolid = "backup-dst:backup/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst"
 	sourceSSH := newScriptedRunner().
-		on("cat /var/lib/vz/backup/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst", ssh.Result{ExitCode: 0, Stdout: transferPayload})
+		on("pvesm path "+workflowArchive, ssh.Result{ExitCode: 0, Stdout: "/var/lib/vz/dump/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst\n"}).
+		on("cat /var/lib/vz/dump/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst", ssh.Result{ExitCode: 0, Stdout: transferPayload})
 	targetSSH := newScriptedRunner().
-		on("test -e /mnt/backups/backup/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst", ssh.Result{ExitCode: 1}).
-		on("stat -c %s /mnt/backups/backup/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst.pve-cli-part", ssh.Result{ExitCode: 1}).
-		on("sha256sum /mnt/backups/backup/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst.pve-cli-part", ssh.Result{ExitCode: 0, Stdout: checksum + "  f\n"})
+		on("pvesm path "+workflowTargetVolid, ssh.Result{ExitCode: 0, Stdout: "/mnt/backups/dump/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst\n"}).
+		on("test -e /mnt/backups/dump/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst", ssh.Result{ExitCode: 1}).
+		on("stat -c %s /mnt/backups/dump/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst.pve-cli-part", ssh.Result{ExitCode: 1}).
+		on("sha256sum /mnt/backups/dump/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst.pve-cli-part", ssh.Result{ExitCode: 0, Stdout: checksum + "  f\n"}).
+		on("pvesm list backup-dst --content backup", ssh.Result{ExitCode: 0, Stdout: workflowTargetVolid + " tar.zst backup 123\n"})
 
-	sourceWithDirs := &transferTestAPI{fakeBackend: source, dirPaths: map[string]string{"local": "/var/lib/vz"}}
-	targetWithDirs := &transferTestAPI{fakeBackend: target, dirPaths: map[string]string{"backup-dst": "/mnt/backups"}}
+	sourceWithDirs := &transferTestAPI{fakeBackend: source, verify: map[string]error{"local": nil}}
+	targetWithDirs := &transferTestAPI{fakeBackend: target, verify: map[string]error{"backup-dst": nil}}
 
 	transfer := NewBackupTransferService(sourceWithDirs, "n150", sourceSSH, targetWithDirs, targetSSH, nil)
 	backupRunner := TaskRunner{Wait: true, WaitTimeout: time.Second}
@@ -391,7 +395,7 @@ func TestBackupCopyRestoreWorkflowRejectsExistingVMTarget(t *testing.T) {
 func TestBackupCopyRestoreWorkflowStopsOnFailure(t *testing.T) {
 	workflow, _, target, _, targetSSH := workflowHarness(t)
 	// The transfer fails: the target file already exists (conflict).
-	targetSSH.on("test -e /mnt/backups/backup/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst", ssh.Result{ExitCode: 0})
+	targetSSH.on("test -e /mnt/backups/dump/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst", ssh.Result{ExitCode: 0})
 	_ = target
 
 	result, err := workflow.Run(context.Background(), workflowOptions())

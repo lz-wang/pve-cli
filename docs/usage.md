@@ -153,8 +153,12 @@ pve backup copy local:backup/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst \
 `backup copy` streams a backup archive between two independent PVE hosts
 over their SSH transports: source `cat` → local SHA-256 and progress
 fan-out → target `dd`. It requires `ssh` sections on both profiles and only
-supports dir-type storages (host-filesystem archives); PBS storages must use
-their native mechanisms. The source PVE node is resolved from the API by
+supports dir-type storages with backup content (verified through the API
+before any host command); PBS storages must use their native mechanisms.
+Both archive paths are resolved on the hosts with `pvesm path`, so the
+default `dump/` directory and custom `content-dirs` mappings are honored —
+the logical volume namespace (`storage:backup/file`) is never treated as a
+filesystem directory. The source PVE node is resolved from the API by
 finding the node whose storage lists the archive — the SSH host name is
 never assumed to be the node name; pass `--node` to pin it. The target
 never overwrites an existing archive: publication is an atomic hard link
@@ -164,8 +168,10 @@ previous interrupted run. A different existing file conflicts (exit 4).
 Transfers write a `.pve-cli-part` file first; a leftover part with the
 complete size is verified by checksum and resumed (complete-temp-file
 recovery, not byte-range resumption), a checksum mismatch fails and cleans
-the part file up. Transfer progress (`transferred N`) goes to stderr; the
-result reports bytes, the verified `sha256` and the `resumed` flag.
+the part file up. A completed copy is confirmed against the target storage
+inventory (`pvesm list --content backup`): a file PVE does not recognize is
+not a completed copy. Transfer progress (`transferred N`) goes to stderr;
+the result reports bytes, the verified `sha256` and the `resumed` flag.
 
 ### Composed backup-copy-restore workflow
 

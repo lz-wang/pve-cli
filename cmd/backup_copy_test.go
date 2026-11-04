@@ -76,6 +76,14 @@ func writeTwoSSHProfileConfig(t *testing.T) string {
 const copyVolid = "local:backup/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst"
 const copyPayload = "archive-bytes"
 
+// The default dir-storage physical layout: archives live in dump/, and the
+// transfer resolves both volume paths through `pvesm path` on each host.
+const (
+	copyTargetVolid = "backup-dst:backup/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst"
+	copySourceFile  = "/var/lib/vz/dump/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst"
+	copyTargetFile  = "/mnt/backups/dump/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst"
+)
+
 // writeAliasedSSHProfileConfig gives the profiles SSH host aliases that do
 // NOT match their PVE node names — the API, not the SSH name, decides the
 // node for backup copy.
@@ -141,12 +149,15 @@ func TestBackupCopyCommandEndToEnd(t *testing.T) {
 	sum := sha256.Sum256([]byte(copyPayload))
 	checksum := hex.EncodeToString(sum[:])
 	sourceRunner := &cmdScriptedRunner{script: map[string]ssh.Result{
-		"cat /var/lib/vz/backup/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst": {ExitCode: 0, Stdout: copyPayload},
+		"pvesm path " + copyVolid: {ExitCode: 0, Stdout: copySourceFile + "\n"},
+		"cat " + copySourceFile:   {ExitCode: 0, Stdout: copyPayload},
 	}}
 	targetRunner := &cmdScriptedRunner{script: map[string]ssh.Result{
-		"test -e /mnt/backups/backup/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst":                 {ExitCode: 1},
-		"stat -c %s /mnt/backups/backup/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst.pve-cli-part": {ExitCode: 1},
-		"sha256sum /mnt/backups/backup/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst.pve-cli-part":  {ExitCode: 0, Stdout: checksum + "  f\n"},
+		"pvesm path " + copyTargetVolid:                  {ExitCode: 0, Stdout: copyTargetFile + "\n"},
+		"test -e " + copyTargetFile:                      {ExitCode: 1},
+		"stat -c %s " + copyTargetFile + ".pve-cli-part": {ExitCode: 1},
+		"sha256sum " + copyTargetFile + ".pve-cli-part":  {ExitCode: 0, Stdout: checksum + "  f\n"},
+		"pvesm list backup-dst --content backup":         {ExitCode: 0, Stdout: copyTargetVolid + " tar.zst backup 123\n"},
 	}}
 	var stdout, stderr bytes.Buffer
 	deps := copyDeps(source, target, sourceRunner, targetRunner, &stdout, &stderr)
@@ -166,8 +177,11 @@ func TestBackupCopyCommandEndToEnd(t *testing.T) {
 			t.Fatalf("missing %q:\n%s", want, out)
 		}
 	}
-	if !targetRunner.saw("dd of=") || !targetRunner.saw("ln /mnt/backups/backup/") || targetRunner.saw("mv ") {
+	if !targetRunner.saw("dd of=") || !targetRunner.saw("ln /mnt/backups/dump/") || targetRunner.saw("mv ") {
 		t.Fatalf("target commands = %v", targetRunner.calls)
+	}
+	if !targetRunner.saw("pvesm list backup-dst --content backup") {
+		t.Fatal("inventory recognition check missing")
 	}
 }
 
@@ -196,11 +210,13 @@ func TestBackupCopyCommandRefusesOverwrite(t *testing.T) {
 	sum := sha256.Sum256([]byte(copyPayload))
 	checksum := hex.EncodeToString(sum[:])
 	sourceRunner := &cmdScriptedRunner{script: map[string]ssh.Result{
-		"sha256sum /var/lib/vz/backup/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst": {ExitCode: 0, Stdout: checksum + "  f\n"},
+		"pvesm path " + copyVolid:     {ExitCode: 0, Stdout: copySourceFile + "\n"},
+		"sha256sum " + copySourceFile: {ExitCode: 0, Stdout: checksum + "  f\n"},
 	}}
 	targetRunner := &cmdScriptedRunner{script: map[string]ssh.Result{
-		"test -e /mnt/backups/backup/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst":   {ExitCode: 0},
-		"sha256sum /mnt/backups/backup/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst": {ExitCode: 0, Stdout: strings.Repeat("f", 64) + "  f\n"},
+		"pvesm path " + copyTargetVolid: {ExitCode: 0, Stdout: copyTargetFile + "\n"},
+		"test -e " + copyTargetFile:     {ExitCode: 0},
+		"sha256sum " + copyTargetFile:   {ExitCode: 0, Stdout: strings.Repeat("f", 64) + "  f\n"},
 	}}
 	var stdout, stderr bytes.Buffer
 	deps := copyDeps(source, target, sourceRunner, targetRunner, &stdout, &stderr)
@@ -227,12 +243,15 @@ func TestBackupCopyCommandRefusesOverwrite(t *testing.T) {
 func TestBackupCopyCommandResolvesSourceNodeFromAPI(t *testing.T) {
 	source, target := copyTestBackends()
 	sourceRunner := &cmdScriptedRunner{script: map[string]ssh.Result{
-		"cat /var/lib/vz/backup/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst": {ExitCode: 0, Stdout: copyPayload},
+		"pvesm path " + copyVolid: {ExitCode: 0, Stdout: copySourceFile + "\n"},
+		"cat " + copySourceFile:   {ExitCode: 0, Stdout: copyPayload},
 	}}
 	targetRunner := &cmdScriptedRunner{script: map[string]ssh.Result{
-		"test -e /mnt/backups/backup/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst":                 {ExitCode: 1},
-		"stat -c %s /mnt/backups/backup/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst.pve-cli-part": {ExitCode: 1},
-		"sha256sum /mnt/backups/backup/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst.pve-cli-part":  {ExitCode: 0, Stdout: dataChecksum(copyPayload) + "  f\n"},
+		"pvesm path " + copyTargetVolid:                  {ExitCode: 0, Stdout: copyTargetFile + "\n"},
+		"test -e " + copyTargetFile:                      {ExitCode: 1},
+		"stat -c %s " + copyTargetFile + ".pve-cli-part": {ExitCode: 1},
+		"sha256sum " + copyTargetFile + ".pve-cli-part":  {ExitCode: 0, Stdout: dataChecksum(copyPayload) + "  f\n"},
+		"pvesm list backup-dst --content backup":         {ExitCode: 0, Stdout: copyTargetVolid + " tar.zst backup 123\n"},
 	}}
 	var stdout, stderr bytes.Buffer
 	deps := Dependencies{Stdout: &stdout, Stderr: &stderr}
@@ -268,12 +287,15 @@ func TestBackupCopyCommandResolvesSourceNodeFromAPI(t *testing.T) {
 func TestProfileDefaultJSONAppliesToBackupCopy(t *testing.T) {
 	source, target := copyTestBackends()
 	sourceRunner := &cmdScriptedRunner{script: map[string]ssh.Result{
-		"cat /var/lib/vz/backup/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst": {ExitCode: 0, Stdout: copyPayload},
+		"pvesm path " + copyVolid: {ExitCode: 0, Stdout: copySourceFile + "\n"},
+		"cat " + copySourceFile:   {ExitCode: 0, Stdout: copyPayload},
 	}}
 	targetRunner := &cmdScriptedRunner{script: map[string]ssh.Result{
-		"test -e /mnt/backups/backup/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst":                 {ExitCode: 1},
-		"stat -c %s /mnt/backups/backup/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst.pve-cli-part": {ExitCode: 1},
-		"sha256sum /mnt/backups/backup/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst.pve-cli-part":  {ExitCode: 0, Stdout: dataChecksum(copyPayload) + "  f\n"},
+		"pvesm path " + copyTargetVolid:                  {ExitCode: 0, Stdout: copyTargetFile + "\n"},
+		"test -e " + copyTargetFile:                      {ExitCode: 1},
+		"stat -c %s " + copyTargetFile + ".pve-cli-part": {ExitCode: 1},
+		"sha256sum " + copyTargetFile + ".pve-cli-part":  {ExitCode: 0, Stdout: dataChecksum(copyPayload) + "  f\n"},
+		"pvesm list backup-dst --content backup":         {ExitCode: 0, Stdout: copyTargetVolid + " tar.zst backup 123\n"},
 	}}
 	var stdout, stderr bytes.Buffer
 	deps := copyDeps(source, target, sourceRunner, targetRunner, &stdout, &stderr)

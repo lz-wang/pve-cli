@@ -1124,12 +1124,13 @@ func (b *commandBackend) FirewallStatus(_ context.Context, scope pve.FirewallSco
 	return row, nil
 }
 
-// StorageDirPath resolves configured dir storages for backup copy tests.
-func (b *commandBackend) StorageDirPath(_ context.Context, storage string) (string, error) {
-	if path, ok := b.dirPaths[storage]; ok {
-		return path, nil
+// VerifyBackupStorage accepts the storages listed in dirPaths as dir
+// storages with backup content for backup copy tests.
+func (b *commandBackend) VerifyBackupStorage(_ context.Context, storage string) error {
+	if _, ok := b.dirPaths[storage]; ok {
+		return nil
 	}
-	return "", fmt.Errorf("%w: storage %s is not a dir storage", pve.ErrInvalid, storage)
+	return fmt.Errorf("%w: storage %s is not a dir storage", pve.ErrInvalid, storage)
 }
 
 func (b *commandBackend) FirewallRules(_ context.Context, scope pve.FirewallScope) ([]output.FirewallRuleRow, error) {

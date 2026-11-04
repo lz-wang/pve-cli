@@ -77,12 +77,12 @@ func backupCopyRestoreCommand(deps Dependencies) *cli.Command {
 				fmt.Fprintf(c.App.ErrWriter, "notice: target ssh host is not bound to a node (ssh.node); the target node is %s\n", c.String("target-node"))
 			}
 
-			if _, ok := sides.sourceBackend.(pve.DirStoragePath); !ok {
-				return fmt.Errorf("%w: source backend cannot resolve dir storage paths", pve.ErrUnavailable)
+			if _, ok := sides.sourceBackend.(pve.BackupStorageContract); !ok {
+				return fmt.Errorf("%w: source backend cannot verify dir storage contracts", pve.ErrUnavailable)
 			}
-			targetDir, ok := sides.targetBackend.(pve.DirStoragePath)
+			targetContract, ok := sides.targetBackend.(pve.BackupStorageContract)
 			if !ok {
-				return fmt.Errorf("%w: target backend cannot resolve dir storage paths", pve.ErrUnavailable)
+				return fmt.Errorf("%w: target backend cannot verify dir storage contracts", pve.ErrUnavailable)
 			}
 			if _, ok := sides.sourceBackend.(pve.BackupReader); !ok {
 				return fmt.Errorf("%w: source backend cannot list backups", pve.ErrUnavailable)
@@ -96,7 +96,7 @@ func backupCopyRestoreCommand(deps Dependencies) *cli.Command {
 			restoreTasks := pve.TaskRunner{Wait: true, WaitTimeout: waitTimeout, ErrWriter: c.App.ErrWriter}
 
 			transfer := pve.NewBackupTransferService(
-				sides.sourceBackend, sourceNode, sourceRunner, targetDir, targetRunner, c.App.ErrWriter,
+				sides.sourceBackend, sourceNode, sourceRunner, targetContract, targetRunner, c.App.ErrWriter,
 			)
 			workflow := pve.NewBackupCopyRestoreWorkflow(
 				pve.NewBackupService(sides.sourceBackend, backupTasks),
