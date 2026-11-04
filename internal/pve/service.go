@@ -189,11 +189,18 @@ func (s *GuestService) submitAndVerify(ctx context.Context, guest Guest, vmid in
 	case submitErr != nil:
 		operation = output.OperationResult{Resource: s.kind, VMID: vmid, Node: guestNode, Status: "unknown"}
 		priorErr = submitErr
+	case task == nil:
+		// Synchronous PVE write: the HTTP response carried no task UPID, so
+		// the mutation is already applied and no async task exists to wait
+		// for. Fabricating a task-timeout error here would corrupt the
+		// result of an accepted write — state verification decides the
+		// reported outcome (confirmed / mismatched / unverifiable).
+		operation = output.OperationResult{Resource: s.kind, VMID: vmid, Node: guestNode, Status: "succeeded"}
 	default:
 		operation, priorErr = runner.Execute(ctx, task)
 		// Async submissions and failed tasks keep their existing semantics;
-		// verification only applies once the write settled (synchronous
-		// return, completed wait, or a wait whose outcome is unknown).
+		// verification only applies once the write settled (completed wait,
+		// or a wait whose outcome is unknown).
 		if operation.Status == "submitted" || (priorErr != nil && !errors.Is(priorErr, ErrTaskTimeout)) {
 			return s.finishConfig(runner, operation, priorErr)
 		}

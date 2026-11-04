@@ -352,3 +352,165 @@ func TestConfigVerifyHTTPContract500ThenApplied(t *testing.T) {
 		t.Fatalf("put = %d get = %d; must not retry", putCalls, getCalls)
 	}
 }
+
+// P0-2: a synchronous PVE write answers HTTP 200 without a task UPID (the
+// SDK surfaces task=nil, err=nil). The mutation is already applied; the
+// flow must not fabricate an async task-timeout error — verification
+// decides the outcome, and a clean result carries no api_error.
+func TestConfigSyncWriteNoUPIDConfirmedClean(t *testing.T) {
+	guest := &fakeGuest{row: output.GuestRow{Kind: "lxc", VMID: 101, Node: "pve1"}}
+	backend := &verifyingBackend{fakeBackend: &fakeBackend{}, config: map[string]any{"cores": float64(2)}}
+	svc, out := newVerifyService(t, guest, backend, true)
+
+	err := svc.Config(context.Background(), 101, "pve1", map[string]string{"cores": "2"})
+	if err != nil {
+		t.Fatalf("err = %v, want a clean synchronous write", err)
+	}
+	result := decodeOperation(t, out.String())
+	if result.Status != "succeeded" || result.Verified == nil || !*result.Verified {
+		t.Fatalf("result = %+v, want succeeded/verified", result)
+	}
+	if result.APIError != "" {
+		t.Fatalf("api_error = %q, want no fabricated task error", result.APIError)
+	}
+}
+
+// P0-2: credential fields cannot be re-read reliably, so the outcome is
+// unverifiable — but the write itself was accepted (HTTP 200): the command
+// must succeed instead of reporting unknown with a fabricated timeout.
+func TestConfigSyncWriteSensitiveFieldStaysSucceeded(t *testing.T) {
+	guest := &fakeGuest{row: output.GuestRow{Kind: "lxc", VMID: 101, Node: "pve1"}}
+	backend := &verifyingBackend{fakeBackend: &fakeBackend{}, config: map[string]any{"cipassword": "$5$store-hash"}}
+	svc, out := newVerifyService(t, guest, backend, true)
+
+	err := svc.Config(context.Background(), 101, "pve1", map[string]string{"cipassword": "hunter2-secret"})
+	if err != nil {
+		t.Fatalf("err = %v, want success for an accepted synchronous write", err)
+	}
+	if strings.Contains(out.String(), "hunter2-secret") {
+		t.Fatalf("credential leaked: %s", out.String())
+	}
+	result := decodeOperation(t, out.String())
+	if result.Status != "succeeded" || result.Verified != nil {
+		t.Fatalf("result = %+v, want succeeded with verification omitted", result)
+	}
+	if result.APIError != "" {
+		t.Fatalf("api_error = %q, want none", result.APIError)
+	}
+}
+
+// P0-2: an accepted synchronous write whose verification read fails stays
+// succeeded (the mutation landed); the failed read must not downgrade it to
+// unknown or fabricate a task error.
+func TestConfigSyncWriteReadFailureKeepsAcceptedStatus(t *testing.T) {
+	guest := &fakeGuest{row: output.GuestRow{Kind: "lxc", VMID: 101, Node: "pve1"}}
+	backend := &verifyingBackend{fakeBackend: &fakeBackend{}, configErr: fmt.Errorf("%w: read failed", ErrUnavailable)}
+	svc, out := newVerifyService(t, guest, backend, true)
+
+	err := svc.Config(context.Background(), 101, "pve1", map[string]string{"cores": "2"})
+	if err != nil {
+		t.Fatalf("err = %v, want the accepted write to stand", err)
+	}
+	result := decodeOperation(t, out.String())
+	if result.Status != "succeeded" || result.Verified != nil {
+		t.Fatalf("result = %+v, want succeeded/unverified", result)
+	}
+}
+
+// P0-2: the same synchronous semantics for QEMU configuration writes.
+func TestVMConfigSyncWriteNoUPIDConfirmedClean(t *testing.T) {
+	guest := &fakeGuest{row: output.GuestRow{Kind: "vm", VMID: 101, Node: "pve1"}}
+	backend := &verifyingBackend{fakeBackend: &fakeBackend{}, config: map[string]any{"cores": float64(2)}}
+	backend.vms = map[string]map[int]*fakeGuest{"pve1": {101: guest}}
+	backend.nodes = []output.NodeRow{{Name: "pve1", Status: "online"}}
+	var out bytes.Buffer
+	runner := TaskRunner{Wait: true, WaitTimeout: time.Second, Format: "json", ResultWriter: &out}
+	svc := NewVMService(backend, runner, nil, false)
+
+	err := svc.Config(context.Background(), 101, "pve1", map[string]string{"cores": "2"})
+	if err != nil {
+		t.Fatalf("err = %v, want a clean synchronous write", err)
+	}
+	result := decodeOperation(t, out.String())
+	if result.Status != "succeeded" || result.Verified == nil || !*result.Verified || result.APIError != "" {
+		t.Fatalf("result = %+v, want succeeded/verified without api_error", result)
+	}
+}
+
+// P0-2: lxc net set funnels through the same submit flow — an HTTP 200
+// without UPID must not fabricate a task error.
+func TestLXCNetSetSyncWriteNoUPIDConfirmedClean(t *testing.T) {
+	guest := &fakeGuest{row: output.GuestRow{Kind: "lxc", VMID: 101, Node: "pve1"}}
+	merged := "name=eth0,bridge=vmbr0,ip=dhcp"
+	backend := &verifyingBackend{fakeBackend: &fakeBackend{}, config: map[string]any{
+		"net0":   merged,
+		"digest": "abc123",
+	}}
+	backend.lxcs = map[string]map[int]*fakeGuest{"pve1": {101: guest}}
+	backend.nodes = []output.NodeRow{{Name: "pve1", Status: "online"}}
+	var out bytes.Buffer
+	runner := TaskRunner{Wait: true, WaitTimeout: time.Second, Format: "json", ResultWriter: &out}
+	svc := NewLXCService(backend, runner, nil, false)
+
+	err := svc.UpdateLXCNet(context.Background(), 101, LXCNetUpdateOptions{Device: "net0", IP: "dhcp"})
+	if err != nil {
+		t.Fatalf("err = %v, want a clean synchronous net update", err)
+	}
+	result := decodeOperation(t, out.String())
+	if result.Status != "succeeded" || result.Verified == nil || !*result.Verified || result.APIError != "" {
+		t.Fatalf("result = %+v, want succeeded/verified without api_error", result)
+	}
+	if !strings.Contains(guest.configValues["net0"], "ip=dhcp") {
+		t.Fatalf("submitted net0 = %q", guest.configValues["net0"])
+	}
+}
+
+// P0-2, real transport: PVE answers a synchronous config PUT with HTTP 200
+// and data=null — the SDK surfaces task=nil, err=nil, and the flow must
+// report a clean verified write without any fabricated task error.
+func TestConfigHTTP200NullDataSyncWrite(t *testing.T) {
+	putCalls, getCalls := 0, 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPut && strings.HasSuffix(r.URL.Path, "/lxc/101/config"):
+			putCalls++
+			_, _ = w.Write([]byte(`{"data":null}`))
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/lxc/101/config"):
+			getCalls++
+			_, _ = w.Write([]byte(`{"data":{"cores":2}}`))
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/lxc"):
+			_, _ = w.Write([]byte(`{"data":[{"vmid":101,"status":"stopped","name":"ct101","lock":"","type":"lxc"}]}`))
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/lxc/101/status/current"):
+			_, _ = w.Write([]byte(`{"data":{"vmid":101,"status":"stopped","name":"ct101"}}`))
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/status"):
+			_, _ = w.Write([]byte(`{"data":{"status":"online"}}`))
+		default:
+			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	backend, err := NewProxmoxBackend(config.Profile{Endpoint: server.URL, TokenID: "test@pve!cli"}, ClientOptions{TokenSecret: "private-test-token"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	runner := TaskRunner{Format: "json", ResultWriter: &out}
+	svc := NewLXCService(backend, runner, nil, false)
+
+	err = svc.Config(context.Background(), 101, "pve1", map[string]string{"cores": "2"})
+	if err != nil {
+		t.Fatalf("err = %v, want a clean synchronous write", err)
+	}
+	result := decodeOperation(t, out.String())
+	if result.Status != "succeeded" || result.Verified == nil || !*result.Verified {
+		t.Fatalf("result = %+v, want succeeded/verified", result)
+	}
+	if result.APIError != "" || result.Error != "" {
+		t.Fatalf("api_error = %q error = %q, want none", result.APIError, result.Error)
+	}
+	if putCalls != 1 || getCalls != 2 {
+		t.Fatalf("put = %d get = %d; must not retry", putCalls, getCalls)
+	}
+}
