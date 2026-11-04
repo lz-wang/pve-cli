@@ -55,12 +55,13 @@ func (s *GuestService) RemoteMigrate(ctx context.Context, vmid int, node string,
 	runner.VMID = vmid
 	runner.Node = guest.Row().Node
 	if err != nil {
-		// A failed submission must never surface as success. An APIError
-		// proves PVE rejected the request (nothing was committed); any
-		// other failure leaves the submission state unconfirmed.
+		// A failed submission must never surface as success — but only a
+		// provable rejection marks the outcome failed. Server failures
+		// (5xx) and transport errors leave it unknown: HTTP 500 does not
+		// prove the migration did not start. A UPID returned alongside an
+		// error is preserved so the task result can still be queried.
 		status := TaskStatusUnknown
-		var apiErr *APIError
-		if errors.As(err, &apiErr) {
+		if submissionRejected(err) {
 			status = "failed"
 		}
 		operation := output.OperationResult{
@@ -69,6 +70,9 @@ func (s *GuestService) RemoteMigrate(ctx context.Context, vmid int, node string,
 			Node:     runner.Node,
 			Status:   status,
 			Error:    err.Error(),
+		}
+		if task != nil {
+			operation.Task = task.UPID()
 		}
 		if runner.ResultWriter != nil {
 			if writeErr := output.WriteOperation(runner.ResultWriter, runner.Format, operation); writeErr != nil {
@@ -84,6 +88,25 @@ func (s *GuestService) RemoteMigrate(ctx context.Context, vmid int, node string,
 		}
 	}
 	return operation, runErr
+}
+
+// submissionRejected reports whether an error proves PVE rejected the
+// migration before it started: a structured APIError in the 4xx family
+// (parameter validation, permission, conflict, optimistic-concurrency
+// digest), or a server error whose body names a missing resource — a lookup
+// failure cannot have started anything. Everything else (5xx, connection
+// interruptions, timeouts) leaves the outcome unproven: the caller must
+// re-check the actual task state instead of trusting a mechanical HTTP
+// classification.
+func submissionRejected(err error) bool {
+	var apiErr *APIError
+	if !errors.As(err, &apiErr) {
+		return false
+	}
+	if apiErr.HTTPStatus >= 400 && apiErr.HTTPStatus < 500 {
+		return true
+	}
+	return apiErr.HTTPStatus >= 500 && errors.Is(apiErr, ErrNotFound)
 }
 
 // formatMigrationMaps renders a source=target map in PVE's official

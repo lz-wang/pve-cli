@@ -173,24 +173,35 @@ func TestRemoteMigrateHTTPContract(t *testing.T) {
 	}
 }
 
-// P0-1 regression: a failed or unconfirmed submission must never surface as
-// a succeeded result. A structured APIError proves PVE rejected the request
-// (nothing was committed -> failed); any other failure leaves the submission
-// state unconfirmed (unknown). A nil task or an empty UPID can never mean
-// success either.
+// P0-1/P0-3 regression: a failed or unconfirmed submission must never
+// surface as a succeeded result. Only a provable rejection — the 4xx family,
+// or a server error whose body names a missing resource (a lookup failure
+// cannot have started anything) — marks the outcome failed. Server failures
+// (500/502/503/504) and transport errors leave the outcome unproven
+// (unknown): HTTP 500 does not prove the migration did not start. A UPID
+// returned alongside an error is preserved so the task can be queried. A
+// nil task or an empty UPID can never mean success either.
 func TestRemoteMigrateSubmissionFailureNeverReportsSuccess(t *testing.T) {
 	cases := []struct {
-		name       string
-		task       Task
-		err        error
-		wantStatus string
-		wantKind   error
+		name         string
+		task         Task
+		err          error
+		wantStatus   string
+		wantKind     error
+		wantTaskKeep string
 	}{
-		{"http 400", nil, &APIError{HTTPStatus: 400, Category: CategoryInvalid, kind: ErrInvalid}, "failed", nil},
-		{"http 500", nil, &APIError{HTTPStatus: 500, Category: CategoryUnavailable, kind: ErrUnavailable}, "failed", nil},
-		{"network timeout", nil, context.DeadlineExceeded, "unknown", ErrUnavailable},
-		{"nil task without error", nil, nil, "unknown", ErrTaskTimeout},
-		{"empty upid", &fakeTask{}, nil, "unknown", ErrTaskTimeout},
+		{"http 400", nil, &APIError{HTTPStatus: 400, Category: CategoryInvalid, kind: ErrInvalid}, "failed", nil, ""},
+		{"http 409", nil, &APIError{HTTPStatus: 409, Category: CategoryConflict, kind: ErrConflict}, "failed", nil, ""},
+		{"http 412", nil, &APIError{HTTPStatus: 412, Category: CategoryConflict, kind: ErrConflict}, "failed", nil, ""},
+		{"http 500", nil, &APIError{HTTPStatus: 500, Category: CategoryUnavailable, kind: ErrUnavailable}, "unknown", nil, ""},
+		{"http 502", nil, &APIError{HTTPStatus: 502, Category: CategoryUnavailable, kind: ErrUnavailable}, "unknown", nil, ""},
+		{"http 503", nil, &APIError{HTTPStatus: 503, Category: CategoryUnavailable, kind: ErrUnavailable}, "unknown", nil, ""},
+		{"http 504", nil, &APIError{HTTPStatus: 504, Category: CategoryUnavailable, kind: ErrUnavailable}, "unknown", nil, ""},
+		{"http 500 lookup failure", nil, &APIError{HTTPStatus: 500, Category: CategoryNotFound, Message: "no such guest", kind: ErrNotFound}, "failed", nil, ""},
+		{"network timeout", nil, context.DeadlineExceeded, "unknown", ErrUnavailable, ""},
+		{"nil task without error", nil, nil, "unknown", ErrTaskTimeout, ""},
+		{"empty upid", &fakeTask{}, nil, "unknown", ErrTaskTimeout, ""},
+		{"upid preserved on uncertain error", &fakeTask{upid: "UPID:n150:rm:101:"}, context.DeadlineExceeded, "unknown", ErrUnavailable, "UPID:n150:rm:101:"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -230,6 +241,9 @@ func TestRemoteMigrateSubmissionFailureNeverReportsSuccess(t *testing.T) {
 			}
 			if result.Status != tc.wantStatus {
 				t.Fatalf("written status = %q, want %q", result.Status, tc.wantStatus)
+			}
+			if tc.wantTaskKeep != "" && result.Task != tc.wantTaskKeep {
+				t.Fatalf("task = %q, want the preserved UPID %q", result.Task, tc.wantTaskKeep)
 			}
 		})
 	}
@@ -322,5 +336,64 @@ func TestRemoteMigrateRedactsTargetSecret(t *testing.T) {
 	}
 	if strings.Contains(err.Error(), targetSecret) {
 		t.Fatalf("target secret leaked: %v", err)
+	}
+}
+
+// P0-3 HTTP regression through the real client: an HTTP 500 from
+// remote_migrate leaves the outcome unproven (unknown) — the server may
+// have started the migration before failing — while an HTTP 400 stays a
+// provable rejection (failed).
+func TestRemoteMigrateHTTP500StaysUnknown(t *testing.T) {
+	for _, tc := range []struct {
+		status     int
+		wantStatus string
+	}{
+		{http.StatusInternalServerError, "unknown"},
+		{http.StatusBadGateway, "unknown"},
+		{http.StatusServiceUnavailable, "unknown"},
+		{http.StatusGatewayTimeout, "unknown"},
+		{http.StatusBadRequest, "failed"},
+	} {
+		t.Run(http.StatusText(tc.status), func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch {
+				case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/lxc/101/status/current"):
+					_, _ = w.Write([]byte(`{"data":{"vmid":101,"status":"stopped","name":"app"}}`))
+				case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/lxc/101/config"):
+					_, _ = w.Write([]byte(`{"data":{"rootfs":"local-lvm:vm-101-disk-0,size=8G","net0":"name=eth0,bridge=vmbr2"}}`))
+				case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/nodes/n150/status"):
+					_, _ = w.Write([]byte(`{"data":{"status":"online"}}`))
+				case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/lxc/101/remote_migrate"):
+					w.WriteHeader(tc.status)
+					_, _ = w.Write([]byte(`{"data":null,"message":"migration server error"}`))
+				default:
+					t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+					w.WriteHeader(http.StatusNotFound)
+				}
+			}))
+			defer server.Close()
+
+			backend, err := NewProxmoxBackend(config.Profile{Endpoint: server.URL, TokenID: "test@pve!cli"}, ClientOptions{TokenSecret: "private-test-token"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			var out bytes.Buffer
+			svc := NewLXCService(backend, TaskRunner{Format: "json", ResultWriter: &out}, nil, false)
+
+			operation, err := svc.RemoteMigrate(context.Background(), 101, "n150", RemoteMigrateOptions{
+				TargetEndpointBundle: "apitoken=PVEAPIToken=root@pam!tgt=secret host=10.0.0.2:8006",
+				TargetVMID:           201,
+			})
+			if err == nil {
+				t.Fatalf("expected error, got result %+v", operation)
+			}
+			var result output.OperationResult
+			if err := json.Unmarshal(out.Bytes(), &result); err != nil {
+				t.Fatalf("json %q: %v", out.String(), err)
+			}
+			if result.Status != tc.wantStatus {
+				t.Fatalf("HTTP %d: status = %q, want %q", tc.status, result.Status, tc.wantStatus)
+			}
+		})
 	}
 }
