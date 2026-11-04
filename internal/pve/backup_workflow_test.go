@@ -25,7 +25,7 @@ func workflowHarness(t *testing.T) (*BackupCopyRestoreWorkflow, *fakeBackend, *f
 		backupRows: map[string]map[string][]output.BackupRow{
 			"n150": {"local": {{
 				Node: "n150", Storage: "local", Kind: "lxc", VMID: 101, VolID: workflowArchive,
-				Size: uint64(len(transferPayload)), Format: "tar.zst", CTime: 1710000000,
+				Size: uint64(len(transferPayload)), Format: "tar.zst", CTime: uint64(time.Now().Unix()),
 			}}},
 		},
 	}
@@ -159,29 +159,121 @@ func TestBackupCopyRestoreWorkflowSkipsBackupWithArchive(t *testing.T) {
 	}
 }
 
-// An existing target guest skips backup/transfer/restore and only
-// validates — the documented resume semantics for completed workflows.
-func TestBackupCopyRestoreWorkflowResumesAtExistingTarget(t *testing.T) {
-	workflow, _, target, _, _ := workflowHarness(t)
+// P0-3: an existing target guest is never treated as a restored resource —
+// the same VMID does not prove it originated from this workflow. The
+// workflow refuses up front (no auto-resume) instead of validating an
+// unrelated container and calling it a success.
+func TestBackupCopyRestoreWorkflowRejectsExistingTarget(t *testing.T) {
+	workflow, source, target, sourceSSH, targetSSH := workflowHarness(t)
+	// The target guest may be completely unrelated to this workflow.
 	target.lxcs["pve8845"] = map[int]*fakeGuest{201: {
 		row: output.GuestRow{Kind: "lxc", VMID: 201, Node: "pve8845", Status: "stopped"},
 	}}
 
 	result, err := workflow.Run(context.Background(), workflowOptions())
-	if err != nil {
-		t.Fatalf("workflow: %v", err)
+	if !errors.Is(err, ErrConflict) {
+		t.Fatalf("err = %v, want ErrConflict", err)
+	}
+	if result.Status != "failed" {
+		t.Fatalf("status = %q, want failed", result.Status)
+	}
+	for _, stage := range result.Stages {
+		if stage.Status == "succeeded" {
+			t.Fatalf("stage %s succeeded on a refused workflow: %+v", stage.Stage, stage)
+		}
+	}
+	if source.backupCalls != 0 {
+		t.Fatalf("backup ran %d times on a refused workflow", source.backupCalls)
+	}
+	if sourceSSH.saw("cat") || targetSSH.saw("test -e") {
+		t.Fatal("transfer ran on a refused workflow")
+	}
+}
+
+// P1-1 ruling applied to the workflow: an unreadable target inventory must
+// fail the run closed — it never reads as "target absent, proceed".
+type workflowInventoryBackend struct {
+	*fakeBackend
+	nodesErr error
+	lxcErr   error
+}
+
+func (b *workflowInventoryBackend) Nodes(context.Context) ([]output.NodeRow, error) {
+	if b.nodesErr != nil {
+		return nil, b.nodesErr
+	}
+	return b.fakeBackend.Nodes(context.Background())
+}
+
+func (b *workflowInventoryBackend) LXC(ctx context.Context, node string, vmid int) (Guest, error) {
+	if b.lxcErr != nil {
+		return nil, b.lxcErr
+	}
+	return b.fakeBackend.LXC(ctx, node, vmid)
+}
+
+func TestBackupCopyRestoreWorkflowFailsClosedOnTargetInventoryError(t *testing.T) {
+	cases := []struct {
+		name     string
+		nodesErr error
+		lxcErr   error
+	}{
+		{"node enumeration fails", errors.New("connection refused"), nil},
+		{"guest query fails", nil, errors.New("connection refused")},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			workflow, source, target, sourceSSH, _ := workflowHarness(t)
+			wrapped := &workflowInventoryBackend{fakeBackend: target, nodesErr: tc.nodesErr, lxcErr: tc.lxcErr}
+			closer := NewBackupCopyRestoreWorkflow(workflow.backups, workflow.transfers, workflow.restores, workflow.guests, wrapped)
+
+			result, err := closer.Run(context.Background(), workflowOptions())
+			if err == nil {
+				t.Fatalf("workflow proceeded on a broken inventory (status %q)", result.Status)
+			}
+			if result.Status != "failed" {
+				t.Fatalf("status = %q, want failed", result.Status)
+			}
+			if source.backupCalls != 0 {
+				t.Fatalf("backup ran on an unverifiable target: %d calls", source.backupCalls)
+			}
+			if sourceSSH.saw("cat") {
+				t.Fatal("transfer ran on an unverifiable target")
+			}
+		})
+	}
+}
+
+// P1-7: the workflow must only continue from an archive created by THIS
+// run — picking the newest listed archive proves nothing about its origin.
+func TestBackupCopyRestoreWorkflowRejectsStaleArchive(t *testing.T) {
+	workflow, _, _, sourceSSH, targetSSH := workflowHarness(t)
+	// The listing only offers an archive created long before this run.
+	reader := workflow.backups.backend.(*fakeBackend)
+	reader.backupRows["n150"]["local"] = []output.BackupRow{{
+		Node: "n150", Storage: "local", Kind: "lxc", VMID: 101, VolID: workflowArchive,
+		Size: uint64(len(transferPayload)), Format: "tar.zst", CTime: 1710000000,
+	}}
+
+	result, err := workflow.Run(context.Background(), workflowOptions())
+	if err == nil {
+		t.Fatal("stale archive must not silently pass as this run's backup")
+	}
+	if result.Status != "failed" {
+		t.Fatalf("status = %q, want failed", result.Status)
 	}
 	stages := map[string]output.WorkflowStageResult{}
 	for _, stage := range result.Stages {
 		stages[stage.Stage] = stage
 	}
-	for _, name := range []string{"backup", "transfer", "restore"} {
-		if stages[name].Status != "skipped" {
-			t.Fatalf("stage %s = %+v, want skipped", name, stages[name])
-		}
+	if stages["backup"].Status != "failed" {
+		t.Fatalf("backup stage = %+v, want failed", stages["backup"])
 	}
-	if stages["post-check"].Status != "succeeded" {
-		t.Fatalf("post-check = %+v", stages["post-check"])
+	if !strings.Contains(stages["backup"].Detail, "--archive") {
+		t.Fatalf("backup detail = %q, want an exact --archive continuation hint", stages["backup"].Detail)
+	}
+	if sourceSSH.saw("cat") || targetSSH.saw("test -e") {
+		t.Fatal("transfer ran from an uncorrelated archive")
 	}
 }
 

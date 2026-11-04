@@ -2,9 +2,11 @@ package pve
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/lz-wang/pve-cli/v3/internal/output"
 )
@@ -39,10 +41,10 @@ func NewBackupCopyRestoreWorkflow(backups *BackupService, transfers *BackupTrans
 	return &BackupCopyRestoreWorkflow{backups: backups, transfers: transfers, restores: restores, guests: guests, target: target}
 }
 
-// Run executes the pipeline. Stage skip rules: an explicit Archive skips
-// the backup; an already-existing target guest skips backup, transfer and
-// restore entirely (a previous run completed them) and only the post-check
-// runs.
+// Run executes the pipeline. An existing target guest refuses the workflow
+// outright: the same VMID is not proof that this workflow created it, and
+// there is no persisted run identity to prove a resume. An explicit Archive
+// skips the backup stage for documented, operator-verified continuations.
 func (w *BackupCopyRestoreWorkflow) Run(ctx context.Context, options BackupCopyRestoreOptions) (output.WorkflowResult, error) {
 	if options.VMID <= 0 {
 		return output.WorkflowResult{}, fmt.Errorf("%w: invalid vmid %d", ErrInvalid, options.VMID)
@@ -71,61 +73,61 @@ func (w *BackupCopyRestoreWorkflow) Run(ctx context.Context, options BackupCopyR
 		return result, stageErr
 	}
 
-	targetExists := w.targetGuestExists(ctx, options)
-	archive := strings.TrimSpace(options.Archive)
-
-	switch {
-	case targetExists:
-		result.Stages = append(result.Stages,
-			skippedStage("backup", "target guest already exists — a previous run completed the earlier stages"),
-			skippedStage("transfer", "target guest already exists"),
-			skippedStage("restore", "target guest already exists"),
-		)
-	default:
-		if archive != "" {
-			result.Archive = archive
-			result.Stages = append(result.Stages, skippedStage("backup", "explicit archive given"))
-		} else {
-			volid, stage := w.backupStage(ctx, options)
-			result.Stages = append(result.Stages, stage)
-			if stage.Status != "succeeded" {
-				return fail(fmt.Errorf("backup stage: %s", stage.Detail))
-			}
-			archive = volid
-			result.Archive = archive
-		}
-
-		transferResult, err := w.transfers.Copy(ctx, BackupCopyOptions{Volid: archive, TargetStorage: options.TargetStorage})
-		stage := output.WorkflowStageResult{Stage: "transfer", Status: "succeeded", Detail: fmt.Sprintf("%s -> %s (%s, %s)", transferResult.SourceVolid, transferResult.TargetPath, output.FormatBytes(transferResult.Bytes), transferResult.SHA256[:min(12, len(transferResult.SHA256))])}
-		if err != nil {
-			stage.Status = "failed"
-			stage.Detail = err.Error()
-			result.Stages = append(result.Stages, stage)
-			return fail(fmt.Errorf("transfer stage: %w", err))
-		}
-		result.Stages = append(result.Stages, stage)
-
-		restoreResult, err := w.restores.Restore(ctx, RestoreOptions{
-			Kind:      BackupKindLXC,
-			Archive:   fmt.Sprintf("%s:%s", options.TargetStorage, strings.SplitN(archive, ":", 2)[1]),
-			Node:      options.TargetNode,
-			VMID:      options.TargetVMID,
-			BridgeMap: options.BridgeMap,
-		})
-		stage = output.WorkflowStageResult{Stage: "restore", Status: restoreResult.Status, Task: restoreResult.Task, Detail: restoreResult.Archive}
-		if err != nil || restoreResult.Status != "succeeded" {
-			if stage.Status == "" {
-				stage.Status = "failed"
-			}
-			stage.Detail = detailOrError(restoreResult.Error, err)
-			result.Stages = append(result.Stages, stage)
-			if err != nil {
-				return fail(fmt.Errorf("restore stage: %w", err))
-			}
-			return fail(fmt.Errorf("restore stage: %s", restoreResult.Error))
-		}
-		result.Stages = append(result.Stages, stage)
+	targetExists, err := w.targetGuestExists(ctx, options)
+	if err != nil {
+		detail := fmt.Sprintf("target guest inventory for vmid %d unreadable (%v); refusing to proceed", options.TargetVMID, ClassifyError(err))
+		result.Stages = append(result.Stages, output.WorkflowStageResult{Stage: "preflight", Status: "failed", Detail: detail})
+		return fail(fmt.Errorf("%w: %s", ErrUnavailable, detail))
 	}
+	if targetExists {
+		detail := fmt.Sprintf("target vmid %d already exists on target node %s; it is not known to originate from this workflow — remove it manually or choose another --target-vmid; to reuse a verified archive after cleanup, re-run with --archive", options.TargetVMID, options.TargetNode)
+		result.Stages = append(result.Stages, output.WorkflowStageResult{Stage: "preflight", Status: "failed", Detail: detail})
+		return fail(fmt.Errorf("%w: %s", ErrConflict, detail))
+	}
+	archive := strings.TrimSpace(options.Archive)
+	if archive != "" {
+		result.Archive = archive
+		result.Stages = append(result.Stages, skippedStage("backup", "explicit archive given"))
+	} else {
+		volid, stage := w.backupStage(ctx, options)
+		result.Stages = append(result.Stages, stage)
+		if stage.Status != "succeeded" {
+			return fail(fmt.Errorf("backup stage: %s", stage.Detail))
+		}
+		archive = volid
+		result.Archive = archive
+	}
+
+	transferResult, err := w.transfers.Copy(ctx, BackupCopyOptions{Volid: archive, TargetStorage: options.TargetStorage})
+	stage := output.WorkflowStageResult{Stage: "transfer", Status: "succeeded", Detail: fmt.Sprintf("%s -> %s (%s, %s)", transferResult.SourceVolid, transferResult.TargetPath, output.FormatBytes(transferResult.Bytes), transferResult.SHA256[:min(12, len(transferResult.SHA256))])}
+	if err != nil {
+		stage.Status = "failed"
+		stage.Detail = err.Error()
+		result.Stages = append(result.Stages, stage)
+		return fail(fmt.Errorf("transfer stage: %w", err))
+	}
+	result.Stages = append(result.Stages, stage)
+
+	restoreResult, err := w.restores.Restore(ctx, RestoreOptions{
+		Kind:      BackupKindLXC,
+		Archive:   fmt.Sprintf("%s:%s", options.TargetStorage, strings.SplitN(archive, ":", 2)[1]),
+		Node:      options.TargetNode,
+		VMID:      options.TargetVMID,
+		BridgeMap: options.BridgeMap,
+	})
+	stage = output.WorkflowStageResult{Stage: "restore", Status: restoreResult.Status, Task: restoreResult.Task, Detail: restoreResult.Archive}
+	if err != nil || restoreResult.Status != "succeeded" {
+		if stage.Status == "" {
+			stage.Status = "failed"
+		}
+		stage.Detail = detailOrError(restoreResult.Error, err)
+		result.Stages = append(result.Stages, stage)
+		if err != nil {
+			return fail(fmt.Errorf("restore stage: %w", err))
+		}
+		return fail(fmt.Errorf("restore stage: %s", restoreResult.Error))
+	}
+	result.Stages = append(result.Stages, stage)
 
 	plan, err := w.guests.CheckRemoteMigration(ctx, options.TargetVMID, RemoteMigrationCheckOptions{
 		SourceVMID: options.VMID,
@@ -152,9 +154,16 @@ func (w *BackupCopyRestoreWorkflow) Run(ctx context.Context, options BackupCopyR
 	return result, nil
 }
 
-// backupStage creates the backup and resolves the new archive's volume id
-// from the storage listing (latest archive for the guest).
+// backupStage creates the backup and resolves the archive this run created.
+// The listing is correlated against the task start time: the newest listing
+// entry proves nothing about its origin, so an archive created before the
+// task is never accepted.
 func (w *BackupCopyRestoreWorkflow) backupStage(ctx context.Context, options BackupCopyRestoreOptions) (string, output.WorkflowStageResult) {
+	// Clock-skew tolerance between the CLI host and the PVE host: archives
+	// stamped slightly before the observed start still count as this run's.
+	const clockSkewTolerance = 2 * time.Minute
+	started := time.Now().Add(-clockSkewTolerance)
+
 	backup, err := w.backups.BackupGuest(ctx, BackupCreateOptions{
 		Kind:    BackupKindLXC,
 		VMID:    options.VMID,
@@ -177,35 +186,51 @@ func (w *BackupCopyRestoreWorkflow) backupStage(ctx context.Context, options Bac
 		return "", failedStage("backup", err.Error())
 	}
 	var latest output.BackupRow
+	var newestAny output.BackupRow
 	found := false
+	sawAny := false
 	for _, row := range rows {
-		if row.VMID == uint64(options.VMID) && row.Kind == BackupKindLXC {
-			if !found || row.CTime > latest.CTime {
-				latest = row
-				found = true
-			}
+		if row.VMID != uint64(options.VMID) || row.Kind != BackupKindLXC {
+			continue
+		}
+		if !sawAny || row.CTime > newestAny.CTime {
+			newestAny = row
+			sawAny = true
+		}
+		if row.CTime >= uint64(started.Unix()) && (!found || row.CTime > latest.CTime) {
+			latest = row
+			found = true
 		}
 	}
 	if !found {
-		return "", failedStage("backup", "backup completed but the archive is not listed yet; re-run with --archive")
+		detail := "backup completed but no archive created by this run was listed"
+		if newestAny.VolID != "" {
+			detail += fmt.Sprintf("; newest older candidate is %s (created %s)", newestAny.VolID, time.Unix(int64(newestAny.CTime), 0).UTC().Format(time.RFC3339))
+		}
+		detail += "; re-run with --archive <volid> to continue from a verified archive"
+		return "", failedStage("backup", detail)
 	}
 	return latest.VolID, output.WorkflowStageResult{Stage: "backup", Status: "succeeded", Task: backup.Task, Detail: latest.VolID}
 }
 
-func (w *BackupCopyRestoreWorkflow) targetGuestExists(ctx context.Context, options BackupCopyRestoreOptions) bool {
+func (w *BackupCopyRestoreWorkflow) targetGuestExists(ctx context.Context, options BackupCopyRestoreOptions) (bool, error) {
 	nodes, err := w.target.Nodes(ctx)
 	if err != nil {
-		return false
+		return false, err
 	}
 	for _, node := range nodes {
 		if options.TargetNode != "" && node.Name != options.TargetNode {
 			continue
 		}
-		if guest, err := w.target.LXC(ctx, node.Name, options.TargetVMID); err == nil && guest != nil {
-			return true
+		guest, err := w.target.LXC(ctx, node.Name, options.TargetVMID)
+		if err == nil && guest != nil {
+			return true, nil
+		}
+		if !errors.Is(ClassifyError(err), ErrNotFound) {
+			return false, err
 		}
 	}
-	return false
+	return false, nil
 }
 
 func skippedStage(name, detail string) output.WorkflowStageResult {

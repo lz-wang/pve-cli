@@ -5,8 +5,10 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/lz-wang/pve-cli/v3/internal/config"
 	"github.com/lz-wang/pve-cli/v3/internal/output"
@@ -75,7 +77,7 @@ func TestBackupCopyRestoreCommandEndToEnd(t *testing.T) {
 		backups: map[string]map[string][]output.BackupRow{
 			"n150": {"local": {{
 				Node: "n150", Storage: "local", Kind: "lxc", VMID: 101, VolID: copyVolid,
-				Size: uint64(len(copyPayload)), Format: "tar.zst", CTime: 1710000000,
+				Size: uint64(len(copyPayload)), Format: "tar.zst", CTime: uint64(time.Now().Unix()),
 			}}},
 		},
 		dirPaths:   map[string]string{"local": "/var/lib/vz"},
@@ -91,7 +93,7 @@ func TestBackupCopyRestoreCommandEndToEnd(t *testing.T) {
 			"pve8845": {"backup-dst": {{
 				Node: "pve8845", Storage: "backup-dst", Kind: "lxc", VMID: 101,
 				VolID: "backup-dst:backup/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst",
-				Size:  uint64(len(copyPayload)), Format: "tar.zst", CTime: 1710000000,
+				Size:  uint64(len(copyPayload)), Format: "tar.zst", CTime: uint64(time.Now().Unix()),
 			}}},
 		},
 		dirPaths:   map[string]string{"backup-dst": "/mnt/backups"},
@@ -122,6 +124,52 @@ func TestBackupCopyRestoreCommandEndToEnd(t *testing.T) {
 	}
 	if target.restoreOptions.VMID != 201 {
 		t.Fatalf("restore options = %+v", target.restoreOptions)
+	}
+}
+
+// P0-3: an existing target VMID is refused up front — it is not proof that
+// a previous run created it.
+func TestBackupCopyRestoreCommandRejectsExistingTarget(t *testing.T) {
+	lxcRow := output.GuestRow{Kind: "lxc", VMID: 101, Name: "app", Node: "n150", Status: "stopped"}
+	source := &cmdWorkflowBackend{commandBackend: &commandBackend{
+		nodes:     []output.NodeRow{{Name: "n150", Status: "online"}},
+		lxcs:      map[string][]output.GuestRow{"n150": {lxcRow}},
+		lxcGuests: map[string]map[int]*commandGuest{"n150": {101: {row: lxcRow}}},
+		backups: map[string]map[string][]output.BackupRow{
+			"n150": {"local": {{
+				Node: "n150", Storage: "local", Kind: "lxc", VMID: 101, VolID: copyVolid,
+				Size: uint64(len(copyPayload)), Format: "tar.zst", CTime: uint64(time.Now().Unix()),
+			}}},
+		},
+		dirPaths:   map[string]string{"local": "/var/lib/vz"},
+		backupTask: &commandTask{upid: "UPID:n150:vzdump:101:root@pam:"},
+	}}
+	target := &cmdWorkflowBackend{commandBackend: &commandBackend{
+		nodes:     []output.NodeRow{{Name: "pve8845", Status: "online"}},
+		lxcs:      map[string][]output.GuestRow{"pve8845": {{Kind: "lxc", VMID: 201, Node: "pve8845", Status: "stopped"}}},
+		lxcGuests: map[string]map[int]*commandGuest{"pve8845": {201: {row: output.GuestRow{Kind: "lxc", VMID: 201, Node: "pve8845", Status: "stopped"}}}},
+	}}
+	var stdout, stderr bytes.Buffer
+	deps := workflowCmdDeps(t, source, target, &stdout, &stderr)
+
+	err := RunWithDependencies([]string{
+		"pve", "--config", writeTwoSSHProfileConfig(t),
+		"backup", "copy-restore", "101",
+		"--from", "n150", "--to", "pve8845",
+		"--backup-storage", "local",
+		"--target-storage", "backup-dst",
+		"--target-node", "pve8845",
+		"--target-vmid", "201",
+		"--wait", "-o", "json",
+	}, "test", deps)
+	if !errors.Is(err, pve.ErrConflict) {
+		t.Fatalf("err = %v, want ErrConflict", err)
+	}
+	if code := ExitCode(err); code != 4 {
+		t.Fatalf("exit = %d, want 4", code)
+	}
+	if source.backupCalls != 0 {
+		t.Fatalf("backup ran on a refused workflow: %d calls", source.backupCalls)
 	}
 }
 
