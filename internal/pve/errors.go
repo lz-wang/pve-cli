@@ -18,7 +18,12 @@ var (
 	ErrConflict         = errors.New("conflict")
 	ErrTaskFailed       = errors.New("task failed")
 	ErrTaskTimeout      = errors.New("task outcome unknown")
-	ErrInvalid          = errors.New("invalid arguments or configuration")
+	// ErrUncertain marks an operation whose outcome could not be confirmed
+	// (for example a mount whose state cannot be re-verified). The structured
+	// result still carries status "unknown"; the non-nil error keeps
+	// automation from reading exit 0 as success.
+	ErrUncertain = errors.New("outcome unconfirmed")
+	ErrInvalid   = errors.New("invalid arguments or configuration")
 )
 
 // ClassifyError preserves typed errors (including *APIError from the HTTP
@@ -29,7 +34,7 @@ func ClassifyError(err error) error {
 	if err == nil {
 		return nil
 	}
-	for _, kind := range []error{ErrNotFound, ErrAmbiguous, ErrPermissionDenied, ErrUnavailable, ErrConflict, ErrTaskFailed, ErrTaskTimeout, ErrInvalid} {
+	for _, kind := range []error{ErrNotFound, ErrAmbiguous, ErrPermissionDenied, ErrUnavailable, ErrConflict, ErrTaskFailed, ErrTaskTimeout, ErrUncertain, ErrInvalid} {
 		if errors.Is(err, kind) {
 			return err
 		}

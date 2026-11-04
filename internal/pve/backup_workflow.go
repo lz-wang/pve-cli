@@ -117,10 +117,18 @@ func (w *BackupCopyRestoreWorkflow) Run(ctx context.Context, options BackupCopyR
 	})
 	stage = output.WorkflowStageResult{Stage: "restore", Status: restoreResult.Status, Task: restoreResult.Task, Detail: restoreResult.Archive}
 	if err != nil || restoreResult.Status != "succeeded" {
-		if stage.Status == "" {
-			stage.Status = "failed"
+		if err != nil && restoreResult.Status == "succeeded" {
+			// The restore task completed but the post-restore configuration
+			// failed: report the stage as partial, name the repair
+			// responsibility, and fail the workflow.
+			stage.Status = "partial"
+			stage.Detail = fmt.Sprintf("%s; post-restore configuration failed: %v — repair the mapping manually (or re-run after fixing) before using the guest", restoreResult.Archive, err)
+		} else {
+			if stage.Status == "" {
+				stage.Status = "failed"
+			}
+			stage.Detail = detailOrError(restoreResult.Error, err)
 		}
-		stage.Detail = detailOrError(restoreResult.Error, err)
 		result.Stages = append(result.Stages, stage)
 		if err != nil {
 			return fail(fmt.Errorf("restore stage: %w", err))
@@ -141,17 +149,38 @@ func (w *BackupCopyRestoreWorkflow) Run(ctx context.Context, options BackupCopyR
 	}
 	detail := fmt.Sprintf("plan status %s (%d checks)", plan.Status, len(plan.Checks))
 	status := "succeeded"
-	if plan.Status == "failed" {
+	switch plan.Status {
+	case "failed":
 		status = "failed"
 		detail = detail + "; failing checks: " + failingChecks(plan)
+	case "warning":
+		// Unconfirmed risks (MAC/IP, DHCP, autostart) are not observable via
+		// the API: the target must not be reported unconditionally safe.
+		status = "warning"
+		detail = detail + "; unconfirmed checks: " + warningChecks(plan)
 	}
 	result.Stages = append(result.Stages, output.WorkflowStageResult{Stage: "post-check", Status: status, Detail: detail})
 	if status == "failed" {
 		result.Status = "failed"
 		return result, fmt.Errorf("post-check stage: %s", failingChecks(plan))
 	}
-	result.Status = "succeeded"
+	result.Status = status
 	return result, nil
+}
+
+// warningChecks lists the unknown/warning check names for the warning detail.
+func warningChecks(plan output.MigrationPlan) string {
+	var names []string
+	for _, row := range plan.Checks {
+		if row.Status == output.MigrationCheckWarning || row.Status == output.MigrationCheckUnknown {
+			names = append(names, row.Check)
+		}
+	}
+	sort.Strings(names)
+	if len(names) == 0 {
+		return "none"
+	}
+	return strings.Join(names, ", ")
 }
 
 // backupStage creates the backup and resolves the archive this run created.

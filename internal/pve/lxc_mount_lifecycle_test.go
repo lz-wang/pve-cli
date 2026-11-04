@@ -174,8 +174,8 @@ func TestOfflineMaintenanceInterruptedUnmountRetry(t *testing.T) {
 	}
 
 	first, err := service.Unmount(ctx, 101, "pve8845")
-	if err != nil {
-		t.Fatalf("unmount err = %v", err)
+	if !errors.Is(err, ErrUncertain) {
+		t.Fatalf("unmount err = %v, want ErrUncertain on the unconfirmed first attempt", err)
 	}
 	if first.Status != "unknown" || !first.Mounted {
 		t.Fatalf("first unmount = %+v, want unknown/still-mounted", first)

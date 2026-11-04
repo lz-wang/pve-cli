@@ -107,7 +107,10 @@ func workflowOptions() BackupCopyRestoreOptions {
 	}
 }
 
-// The full pipeline records every stage independently.
+// The full pipeline records every stage independently. The post-check
+// always carries unconfirmed risks (MAC/IP and DHCP are not observable via
+// the API), so the overall result is warning — never an unconditional
+// "safe to use" succeeded for an unattended agent.
 func TestBackupCopyRestoreWorkflowAllStages(t *testing.T) {
 	workflow, source, target, _, _ := workflowHarness(t)
 
@@ -119,7 +122,7 @@ func TestBackupCopyRestoreWorkflowAllStages(t *testing.T) {
 	for _, stage := range result.Stages {
 		stages[stage.Stage] = stage
 	}
-	for _, name := range []string{"backup", "transfer", "restore", "post-check"} {
+	for _, name := range []string{"backup", "transfer", "restore"} {
 		if _, ok := stages[name]; !ok {
 			t.Fatalf("missing stage %q: %+v", name, result.Stages)
 		}
@@ -127,8 +130,11 @@ func TestBackupCopyRestoreWorkflowAllStages(t *testing.T) {
 			t.Fatalf("stage %s = %+v", name, stages[name])
 		}
 	}
-	if result.Status != "succeeded" {
-		t.Fatalf("status = %q", result.Status)
+	if stages["post-check"].Status != "warning" {
+		t.Fatalf("post-check = %+v, want warning (unconfirmed MAC/IP risks)", stages["post-check"])
+	}
+	if result.Status != "warning" {
+		t.Fatalf("status = %q, want warning — the target must not be reported unconditionally safe", result.Status)
 	}
 	if result.Archive != workflowArchive {
 		t.Fatalf("archive = %q", result.Archive)
@@ -274,6 +280,49 @@ func TestBackupCopyRestoreWorkflowRejectsStaleArchive(t *testing.T) {
 	}
 	if sourceSSH.saw("cat") || targetSSH.saw("test -e") {
 		t.Fatal("transfer ran from an uncorrelated archive")
+	}
+}
+
+// P1-3: a succeeded restore task with a failed post-restore configuration
+// must not be reported as a fully succeeded restore stage. The stage reads
+// partial, the workflow fails, and the repair responsibility is named.
+func TestBackupCopyRestoreWorkflowReportsPartialRestore(t *testing.T) {
+	workflow, _, _, _, targetSSH := workflowHarness(t)
+	options := workflowOptions()
+	// The bridge mapping applies after the restore task; the workflow's
+	// restore backend lacks native config access, so the mapping fails
+	// while the restore task itself completed.
+	options.BridgeMap = map[string]string{"vmbr0": "vmbr0"}
+
+	result, err := workflow.Run(context.Background(), options)
+	if err == nil {
+		t.Fatal("post-restore configuration failure must fail the workflow")
+	}
+	if result.Status != "failed" {
+		t.Fatalf("status = %q, want failed", result.Status)
+	}
+	var restore output.WorkflowStageResult
+	found := false
+	for _, stage := range result.Stages {
+		if stage.Stage == "restore" {
+			restore = stage
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("restore stage missing: %+v", result.Stages)
+	}
+	if restore.Status != "partial" {
+		t.Fatalf("restore stage = %+v, want partial (task succeeded, configuration failed)", restore)
+	}
+	if restore.Task == "" {
+		t.Fatalf("restore stage must keep the succeeded task UPID: %+v", restore)
+	}
+	if !strings.Contains(restore.Detail, "bridge") {
+		t.Fatalf("restore detail = %q, want the failing configuration step", restore.Detail)
+	}
+	if targetSSH.saw("umount") {
+		t.Fatal("unexpected host interaction")
 	}
 }
 

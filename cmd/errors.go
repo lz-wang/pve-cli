@@ -34,7 +34,7 @@ func ExitCode(err error) int {
 	switch {
 	case errors.Is(err, pve.ErrInvalid):
 		return 2
-	case errors.Is(err, pve.ErrTaskTimeout):
+	case errors.Is(err, pve.ErrTaskTimeout), errors.Is(err, pve.ErrUncertain):
 		return 5
 	case errors.Is(err, pve.ErrNotFound), errors.Is(err, pve.ErrAmbiguous), errors.Is(err, pve.ErrConflict):
 		return 4

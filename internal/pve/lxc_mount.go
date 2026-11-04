@@ -81,7 +81,7 @@ func (s *MountService) Mount(ctx context.Context, vmid int, node string) (output
 	if !confirmed {
 		result.Status = "unknown"
 		result.Message = "pct mount returned success but the mount could not be confirmed; manual cleanup may be required (check locks, run pct unmount)"
-		return result, nil
+		return result, fmt.Errorf("%w: mount state unconfirmed (%s)", ErrUncertain, result.Message)
 	}
 	result.Status = "succeeded"
 	result.Message = "rootfs mounted on the host; container locks are held until unmount"
@@ -133,7 +133,7 @@ func (s *MountService) Unmount(ctx context.Context, vmid int, node string) (outp
 	if stillMounted {
 		result.Status = "unknown"
 		result.Message = "pct unmount returned success but the mount is still present; manual cleanup may be required"
-		return result, nil
+		return result, fmt.Errorf("%w: unmount state unconfirmed (%s)", ErrUncertain, result.Message)
 	}
 	result.Status = "succeeded"
 	result.Message = "rootfs unmounted; locks released"

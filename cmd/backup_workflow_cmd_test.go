@@ -127,6 +127,34 @@ func TestBackupCopyRestoreCommandEndToEnd(t *testing.T) {
 	}
 }
 
+// P1-4: an unconfirmed mount outcome fails the command (exit 5) while the
+// structured result keeps status=unknown.
+func TestLXCMountCommandUnknownOutcomeExitFive(t *testing.T) {
+	row := output.GuestRow{Kind: "lxc", VMID: 101, Node: "pve8845", Status: "stopped"}
+	runner := &mountCmdRunner{sequenced: map[string][]ssh.Result{
+		"mountpoint -q /var/lib/lxc/101/rootfs": {
+			{ExitCode: 1}, // pre: not mounted
+			{ExitCode: 1}, // post: still not mounted -> unconfirmed
+		},
+	}, defaults: ssh.Result{ExitCode: 0, Stdout: "filesystem is mounted successfully at /var/lib/lxc/101/rootfs\n"}}
+	var stdout, stderr bytes.Buffer
+	deps := mountCmdDeps(runner, row, &stdout, &stderr)
+
+	err := RunWithDependencies([]string{
+		"pve", "--config", writeSSHTestConfig(t, "pve8845"),
+		"lxc", "mount", "101", "--node", "pve8845", "-o", "json",
+	}, "test", deps)
+	if !errors.Is(err, pve.ErrUncertain) {
+		t.Fatalf("err = %v, want ErrUncertain", err)
+	}
+	if code := ExitCode(err); code != 5 {
+		t.Fatalf("exit = %d, want 5", code)
+	}
+	if !strings.Contains(stdout.String(), `"status": "unknown"`) {
+		t.Fatalf("stdout must keep the unknown status: %s", stdout.String())
+	}
+}
+
 // P0-3: an existing target VMID is refused up front — it is not proof that
 // a previous run created it.
 func TestBackupCopyRestoreCommandRejectsExistingTarget(t *testing.T) {

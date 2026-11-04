@@ -73,13 +73,15 @@ func TestLXCMountReportsHostPath(t *testing.T) {
 }
 
 // The mount state is re-verified after pct mount; an unverifiable state is
-// reported as unknown with the manual-cleanup hint, never as success.
+// reported as unknown with the manual-cleanup hint AND fails the command —
+// exit code 0 on an unconfirmed outcome would tell automation the mount
+// succeeded.
 func TestLXCMountUnverifiableIsUnknown(t *testing.T) {
 	service, _ := mountSequenceHarness(t, "stopped", false, false, ssh.Result{ExitCode: 0, Stdout: "ok"})
 
 	result, err := service.Mount(context.Background(), 101, "pve8845")
-	if err != nil {
-		t.Fatalf("mount: %v", err)
+	if !errors.Is(err, ErrUncertain) {
+		t.Fatalf("err = %v, want ErrUncertain on an unconfirmed mount", err)
 	}
 	if result.Status != "unknown" || result.Mounted {
 		t.Fatalf("result = %+v, want unknown/unmounted", result)
@@ -178,8 +180,8 @@ func TestLXCUnmountVerifiesState(t *testing.T) {
 	// First mountpoint check (mounted) returns the default exit 0, the
 	// post-unmount verification also returns 0 -> still mounted -> unknown.
 	result, err := service.Unmount(context.Background(), 101, "pve8845")
-	if err != nil {
-		t.Fatalf("unmount: %v", err)
+	if !errors.Is(err, ErrUncertain) {
+		t.Fatalf("err = %v, want ErrUncertain on an unconfirmed unmount", err)
 	}
 	if result.Status != "unknown" || !result.Mounted {
 		t.Fatalf("result = %+v, want unknown/still-mounted", result)
