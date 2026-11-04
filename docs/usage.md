@@ -214,8 +214,16 @@ pve backup copy-restore 101 --from n150 --to pve8845 \
 `backup copy-restore` chains the stages built in this section — backup,
 transfer (with checksum verify), restore (preflighted), post-check — and
 reports every stage with its own status (`succeeded`/`skipped`/`failed`/
-`partial`/`warning`) and task ID. A failing stage stops the pipeline;
-nothing rolls back automatically, both sides stay as they are. The source
+`partial`/`warning`/`unknown`) and task ID. A failing stage stops the
+pipeline; nothing rolls back automatically, both sides stay as they are.
+The overall status carries the stopping stage's own state instead of
+collapsing everything into `failed`: an unconfirmed task wait (backup or
+restore) reports `unknown` — the operation may still be running, so rerun
+only after checking the submitted task — an archive that was published but
+not inventory-verified, or a restore that completed while its
+post-configuration failed, reports `partial`; a preflight rejection or a
+definite stage failure reports `failed`; succeeded stages with unconfirmed
+post-check risks report `warning`. The source
 node for the transfer is the source guest's API-resolved node (`--node`
 overrides; the SSH host name is never assumed). Host transfers require an
 explicit `ssh.node` binding on both profiles: a binding that disagrees

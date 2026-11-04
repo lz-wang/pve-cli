@@ -348,8 +348,11 @@ func TestBackupCopyRestoreWorkflowReportsPartialRestore(t *testing.T) {
 	if err == nil {
 		t.Fatal("post-restore configuration failure must fail the workflow")
 	}
-	if result.Status != "failed" {
-		t.Fatalf("status = %q, want failed", result.Status)
+	// P1-3: the archive restored and the target guest exists — the workflow
+	// is partial (succeeded restore, failed post-configuration), never a
+	// bare failed that hides the restored guest.
+	if result.Status != "partial" {
+		t.Fatalf("status = %q, want partial (restore succeeded, configuration failed)", result.Status)
 	}
 	var restore output.WorkflowStageResult
 	found := false
@@ -487,5 +490,84 @@ func TestBackupCopyRestoreWorkflowValidations(t *testing.T) {
 	}
 	if _, err := workflow.Run(context.Background(), BackupCopyRestoreOptions{VMID: 101, BackupStorage: "local"}); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "target-storage") {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+// P1-3: a backup task whose outcome cannot be confirmed (wait timeout)
+// keeps the whole workflow unknown: rerunning the pipeline blindly could
+// submit a second backup for an operation that may still be running.
+func TestBackupCopyRestoreWorkflowKeepsUnknownOnBackupTimeout(t *testing.T) {
+	workflow, source, _, sourceSSH, _ := workflowHarness(t)
+	source.backupTask = &fakeTask{upid: "UPID:n150:vzdump:101:", waitErr: errors.New("wait deadline exceeded")}
+
+	result, err := workflow.Run(context.Background(), workflowOptions())
+	if err == nil {
+		t.Fatal("an unconfirmed backup wait must fail the workflow run")
+	}
+	if result.Status != "unknown" {
+		t.Fatalf("status = %q, want unknown (backup outcome unconfirmed)", result.Status)
+	}
+	var backup output.WorkflowStageResult
+	for _, stage := range result.Stages {
+		if stage.Stage == "backup" {
+			backup = stage
+		}
+	}
+	if backup.Status != "unknown" || backup.Task != "UPID:n150:vzdump:101:" {
+		t.Fatalf("backup stage = %+v, want unknown with the submitted UPID", backup)
+	}
+	if sourceSSH.saw("cat") {
+		t.Fatal("the pipeline must not transfer on an unconfirmed backup")
+	}
+}
+
+// P1-3: a restore task whose outcome cannot be confirmed keeps the whole
+// workflow unknown: the archive may or may not have restored, and the
+// target VMID may be occupied by an operation still in flight.
+func TestBackupCopyRestoreWorkflowKeepsUnknownOnRestoreTimeout(t *testing.T) {
+	workflow, _, _, _, _ := workflowHarness(t)
+	backend := workflow.restores.backend.(*restoreWorkflowBackend)
+	backend.restoreTask = &fakeTask{upid: "UPID:pve8845:restore", waitErr: errors.New("wait deadline exceeded")}
+
+	result, err := workflow.Run(context.Background(), workflowOptions())
+	if err == nil {
+		t.Fatal("an unconfirmed restore wait must fail the workflow run")
+	}
+	if result.Status != "unknown" {
+		t.Fatalf("status = %q, want unknown (restore outcome unconfirmed)", result.Status)
+	}
+	var restore output.WorkflowStageResult
+	for _, stage := range result.Stages {
+		if stage.Stage == "restore" {
+			restore = stage
+		}
+	}
+	if restore.Status != "unknown" || restore.Task != "UPID:pve8845:restore" {
+		t.Fatalf("restore stage = %+v, want unknown with the submitted UPID", restore)
+	}
+}
+
+// P1-3: a transfer that published the archive but could not verify the
+// target inventory keeps the published fact: the workflow reports partial,
+// never a bare failed that hides the existing archive.
+func TestBackupCopyRestoreWorkflowKeepsPartialOnTransferInventoryFailure(t *testing.T) {
+	workflow, _, _, _, targetSSH := workflowHarness(t)
+	targetSSH.on("pvesm list backup-dst --content backup", ssh.Result{ExitCode: 1, Stderr: "storage busy\n"})
+
+	result, err := workflow.Run(context.Background(), workflowOptions())
+	if err == nil {
+		t.Fatal("an unverified inventory must fail the workflow run")
+	}
+	if result.Status != "partial" {
+		t.Fatalf("status = %q, want partial (archive published, verification unfinished)", result.Status)
+	}
+	var transfer output.WorkflowStageResult
+	for _, stage := range result.Stages {
+		if stage.Stage == "transfer" {
+			transfer = stage
+		}
+	}
+	if transfer.Status != "partial" {
+		t.Fatalf("transfer stage = %+v, want partial", transfer)
 	}
 }

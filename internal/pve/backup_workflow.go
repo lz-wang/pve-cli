@@ -70,8 +70,13 @@ func (w *BackupCopyRestoreWorkflow) Run(ctx context.Context, options BackupCopyR
 		TargetVMID: options.TargetVMID,
 		TargetNode: options.TargetNode,
 	}
-	fail := func(stageErr error) (output.WorkflowResult, error) {
-		result.Status = "failed"
+	// The overall status carries the stopping stage's own status: a stage
+	// that cannot prove its outcome keeps the workflow unknown (rerunning
+	// blindly could duplicate the operation), a stage that completed its
+	// main effect while a post-step failed keeps partial, and only a
+	// definite rejection or failure reports failed.
+	fail := func(stageStatus string, stageErr error) (output.WorkflowResult, error) {
+		result.Status = aggregateWorkflowStatus(stageStatus)
 		return result, stageErr
 	}
 
@@ -83,11 +88,11 @@ func (w *BackupCopyRestoreWorkflow) Run(ctx context.Context, options BackupCopyR
 		if errors.Is(vmidErr, ErrConflict) {
 			detail := fmt.Sprintf("target vmid %d already exists in the target cluster; it is not known to originate from this workflow — remove it manually or choose another --target-vmid; to reuse a verified archive after cleanup, re-run with --archive", options.TargetVMID)
 			result.Stages = append(result.Stages, output.WorkflowStageResult{Stage: "preflight", Status: "failed", Detail: detail})
-			return fail(fmt.Errorf("%w: %s", ErrConflict, detail))
+			return fail("failed", fmt.Errorf("%w: %s", ErrConflict, detail))
 		}
 		detail := fmt.Sprintf("target guest inventory for vmid %d unreadable (%v); refusing to proceed", options.TargetVMID, vmidErr)
 		result.Stages = append(result.Stages, output.WorkflowStageResult{Stage: "preflight", Status: "failed", Detail: detail})
-		return fail(fmt.Errorf("%w: %s", ErrUnavailable, detail))
+		return fail("failed", fmt.Errorf("%w: %s", ErrUnavailable, detail))
 	}
 	archive := strings.TrimSpace(options.Archive)
 	if archive != "" {
@@ -97,7 +102,7 @@ func (w *BackupCopyRestoreWorkflow) Run(ctx context.Context, options BackupCopyR
 		volid, stage := w.backupStage(ctx, options)
 		result.Stages = append(result.Stages, stage)
 		if stage.Status != "succeeded" {
-			return fail(fmt.Errorf("backup stage: %s", stage.Detail))
+			return fail(stage.Status, fmt.Errorf("backup stage: %s", stage.Detail))
 		}
 		archive = volid
 		result.Archive = archive
@@ -106,10 +111,13 @@ func (w *BackupCopyRestoreWorkflow) Run(ctx context.Context, options BackupCopyR
 	transferResult, err := w.transfers.Copy(ctx, BackupCopyOptions{Volid: archive, TargetStorage: options.TargetStorage})
 	stage := output.WorkflowStageResult{Stage: "transfer", Status: "succeeded", Detail: fmt.Sprintf("%s -> %s (%s, %s)", transferResult.SourceVolid, transferResult.TargetPath, output.FormatBytes(transferResult.Bytes), transferResult.SHA256[:min(12, len(transferResult.SHA256))])}
 	if err != nil {
-		stage.Status = "failed"
+		stage.Status = transferResult.Status
+		if stage.Status == "" {
+			stage.Status = "failed"
+		}
 		stage.Detail = err.Error()
 		result.Stages = append(result.Stages, stage)
-		return fail(fmt.Errorf("transfer stage: %w", err))
+		return fail(stage.Status, fmt.Errorf("transfer stage: %w", err))
 	}
 	result.Stages = append(result.Stages, stage)
 
@@ -134,9 +142,9 @@ func (w *BackupCopyRestoreWorkflow) Run(ctx context.Context, options BackupCopyR
 		}
 		result.Stages = append(result.Stages, stage)
 		if err != nil {
-			return fail(fmt.Errorf("restore stage: %w", err))
+			return fail(stage.Status, fmt.Errorf("restore stage: %w", err))
 		}
-		return fail(fmt.Errorf("restore stage: %s", restoreResult.Error))
+		return fail(stage.Status, fmt.Errorf("restore stage: %s", restoreResult.Error))
 	}
 	result.Stages = append(result.Stages, stage)
 
@@ -148,7 +156,7 @@ func (w *BackupCopyRestoreWorkflow) Run(ctx context.Context, options BackupCopyR
 	if err != nil {
 		stage := failedStage("post-check", err.Error())
 		result.Stages = append(result.Stages, stage)
-		return fail(fmt.Errorf("post-check stage: %w", err))
+		return fail("failed", fmt.Errorf("post-check stage: %w", err))
 	}
 	detail := fmt.Sprintf("plan status %s (%d checks)", plan.Status, len(plan.Checks))
 	status := "succeeded"
@@ -169,6 +177,23 @@ func (w *BackupCopyRestoreWorkflow) Run(ctx context.Context, options BackupCopyR
 	}
 	result.Status = status
 	return result, nil
+}
+
+// aggregateWorkflowStatus maps the stopping stage's status onto the overall
+// workflow status. definite failures stay failed; a stage that cannot prove
+// its outcome (unknown, or an unwaited submitted task) keeps the workflow
+// unknown — the caller must re-check the submitted tasks instead of
+// rerunning blindly; a stage that completed its main effect while a
+// post-step failed (partial) keeps the completed fact visible.
+func aggregateWorkflowStatus(stageStatus string) string {
+	switch stageStatus {
+	case "partial":
+		return "partial"
+	case "unknown", "submitted":
+		return "unknown"
+	default:
+		return "failed"
+	}
 }
 
 // warningChecks lists the unknown/warning check names for the warning detail.
