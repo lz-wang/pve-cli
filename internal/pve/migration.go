@@ -105,8 +105,16 @@ func (s *GuestService) checkTargetVMID(ctx context.Context, plan *output.Migrati
 		return
 	}
 	takenOn := ""
+	inventoryErr := error(nil)
 	for _, node := range nodes {
-		for _, guestRow := range targetGuests(ctx, options.Target, node.Name) {
+		rows, err := targetGuests(ctx, options.Target, node.Name)
+		if err != nil {
+			if inventoryErr == nil {
+				inventoryErr = err
+			}
+			continue
+		}
+		for _, guestRow := range rows {
 			if int(guestRow.VMID) == plan.TargetVMID {
 				takenOn = fmt.Sprintf("vmid %d already exists on target node %s", plan.TargetVMID, node.Name)
 				break
@@ -115,6 +123,14 @@ func (s *GuestService) checkTargetVMID(ctx context.Context, plan *output.Migrati
 		if takenOn != "" {
 			break
 		}
+	}
+	if takenOn == "" && inventoryErr != nil {
+		// Fail closed: an unreadable inventory must never read as "vmid free".
+		plan.Checks = append(plan.Checks, output.MigrationCheckRow{
+			Check: "vmid", Status: output.MigrationCheckFail,
+			Message: fmt.Sprintf("target guest inventory unreadable (%v); cannot verify VMID availability — the migration is refused", ClassifyError(inventoryErr)),
+		})
+		return
 	}
 	if takenOn != "" {
 		plan.Checks = append(plan.Checks, output.MigrationCheckRow{
@@ -127,13 +143,16 @@ func (s *GuestService) checkTargetVMID(ctx context.Context, plan *output.Migrati
 	})
 }
 
-func targetGuests(ctx context.Context, target GuestBackend, node string) []output.GuestRow {
+func targetGuests(ctx context.Context, target GuestBackend, node string) ([]output.GuestRow, error) {
 	vms, vmErr := target.VMs(ctx, node)
-	lxcs, lxcErr := target.LXCs(ctx, node)
-	if vmErr != nil || lxcErr != nil {
-		return nil
+	if vmErr != nil {
+		return nil, vmErr
 	}
-	return append(vms, lxcs...)
+	lxcs, lxcErr := target.LXCs(ctx, node)
+	if lxcErr != nil {
+		return nil, lxcErr
+	}
+	return append(vms, lxcs...), nil
 }
 
 // readMigrationConfig fetches the source guest configuration; dependent

@@ -2,6 +2,8 @@ package pve
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -117,6 +119,52 @@ func TestPlanRemoteMigrationTargetVMIDTaken(t *testing.T) {
 	}
 	if findCheck(plan, "vmid").Status != "fail" || plan.Status != "failed" {
 		t.Fatalf("vmid check = %+v overall = %q", findCheck(plan, "vmid"), plan.Status)
+	}
+}
+
+type failingInventoryBackend struct {
+	*fakeBackend
+	inventoryErr error
+}
+
+func (b *failingInventoryBackend) VMs(context.Context, string) ([]output.GuestRow, error) {
+	return nil, b.inventoryErr
+}
+
+func (b *failingInventoryBackend) LXCs(context.Context, string) ([]output.GuestRow, error) {
+	return nil, b.inventoryErr
+}
+
+// P1-1: a failing target guest inventory must fail the VMID check closed —
+// an unknown occupation state is never reported as free.
+func TestPlanRemoteMigrationVMIDFailsClosedOnInventoryError(t *testing.T) {
+	source := &migrationConfigBackend{fakeBackend: migrationSourceBackend(), config: map[string]any{"rootfs": "local-lvm:vm-101-disk-0,size=8G"}}
+	target := &failingInventoryBackend{
+		fakeBackend:  migrationTargetBackend(),
+		inventoryErr: fmt.Errorf("%w: inventory unavailable", ErrUnavailable),
+	}
+
+	plan, err := sourceService(source).PlanRemoteMigration(context.Background(), 101, planOptions(target))
+	if err != nil {
+		t.Fatalf("plan: %v", err)
+	}
+	row := findCheck(plan, "vmid")
+	if row.Status != "fail" {
+		t.Fatalf("vmid check = %+v, want fail (must not report vmid free on a broken inventory)", row)
+	}
+	if plan.Status != "failed" {
+		t.Fatalf("overall = %q, want failed", plan.Status)
+	}
+}
+
+func TestTargetGuestsPropagatesInventoryErrors(t *testing.T) {
+	target := &failingInventoryBackend{
+		fakeBackend:  &fakeBackend{},
+		inventoryErr: errors.New("connection refused"),
+	}
+	rows, err := targetGuests(context.Background(), target, "pve8845")
+	if err == nil {
+		t.Fatalf("rows = %v, want the inventory error", rows)
 	}
 }
 

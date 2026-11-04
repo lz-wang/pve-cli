@@ -86,7 +86,7 @@ func lifecycleService(host *lifecycleHost) (*MountService, *lifecycleBackend) {
 		lxcs:  map[string]map[int]*fakeGuest{"pve8845": {101: host.guest}},
 	}, host: host}
 	guests := NewLXCService(backend, TaskRunner{}, nil, false)
-	return NewMountService(guests, host), backend
+	return NewMountService(guests, host, "pve8845"), backend
 }
 
 // The full lifecycle: mount, read a file through the mount, observe the

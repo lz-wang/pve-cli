@@ -52,7 +52,7 @@ func runMountAction(deps Dependencies, mount bool) func(*cli.Context) error {
 		if rt.sshRunner == nil {
 			return fmt.Errorf("%w: profile has no ssh section; add one to use lxc mount/unmount", pve.ErrInvalid)
 		}
-		service := pve.NewMountService(guestService("lxc", rt), rt.sshRunner)
+		service := pve.NewMountService(guestService("lxc", rt), rt.sshRunner, rt.sshNode)
 		var result output.LXCMountResult
 		if mount {
 			result, err = service.Mount(c.Context, id, node)

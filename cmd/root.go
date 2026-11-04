@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	goruntime "runtime"
+	"strings"
 	"syscall"
 	"time"
 
@@ -49,6 +50,8 @@ type runtime struct {
 	stderr  io.Writer
 	// sshRunner is nil unless the selected profile declares an ssh section.
 	sshRunner pve.CommandRunner
+	// sshNode is the PVE node the profile's ssh section declares (ssh.node).
+	sshNode string
 	// sshProfile records the raw section for error messages.
 	sshConfigured bool
 }
@@ -289,6 +292,7 @@ func buildRuntime(c *cli.Context, deps Dependencies) (*runtime, error) {
 	if profileCfg.SSH != nil {
 		runtimeOut.sshRunner = deps.SSHRunnerFactory(*profileCfg.SSH)
 		runtimeOut.sshConfigured = true
+		runtimeOut.sshNode = strings.TrimSpace(profileCfg.SSH.Node)
 	}
 	return runtimeOut, nil
 }

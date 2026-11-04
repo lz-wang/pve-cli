@@ -250,8 +250,7 @@ func TestMigrateRemoteTargetSecretRedactedThroughCLI(t *testing.T) {
 		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/nodes/n150/status"),
 			r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/nodes/pve8845/status"):
 			_, _ = w.Write([]byte(`{"data":{"status":"online"}}`))
-		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/nodes/pve8845/qemu"),
-			r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/nodes/pve8845/lxc"):
+		case r.Method == http.MethodGet && (strings.HasSuffix(r.URL.Path, "/qemu") || strings.HasSuffix(r.URL.Path, "/lxc")):
 			_, _ = w.Write([]byte(`{"data":[]}`))
 		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/nodes/n150/lxc/101/status/current"):
 			_, _ = w.Write([]byte(`{"data":{"vmid":101,"status":"stopped","name":"app"}}`))

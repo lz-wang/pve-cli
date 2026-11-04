@@ -63,7 +63,7 @@ func newLXCExecCommand(deps Dependencies) *cli.Command {
 				options.Stderr = rt.stderr
 			}
 
-			result, err := pve.NewLXCExecService(guestService("lxc", rt), rt.sshRunner).Exec(c.Context, id, options)
+			result, err := pve.NewLXCExecService(guestService("lxc", rt), rt.sshRunner, rt.sshNode).Exec(c.Context, id, options)
 			if output.NormalizeFormat(c.String("output")) != output.FormatTable {
 				if writeErr := output.WriteAgentExecResult(rt.stdout, rt.format, result); writeErr != nil {
 					return writeErr

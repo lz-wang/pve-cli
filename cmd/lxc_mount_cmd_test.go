@@ -72,7 +72,7 @@ func TestLXCMountCommandEndToEnd(t *testing.T) {
 	deps := mountCmdDeps(runner, row, &stdout, &stderr)
 
 	err := RunWithDependencies([]string{
-		"pve", "--config", writeSSHTestConfig(t),
+		"pve", "--config", writeSSHTestConfig(t, "pve8845"),
 		"lxc", "mount", "101", "--node", "pve8845", "-o", "json",
 	}, "test", deps)
 	if err != nil {
@@ -93,7 +93,7 @@ func TestLXCMountCommandRefusesRunningGuest(t *testing.T) {
 	deps := mountCmdDeps(runner, row, &stdout, &stderr)
 
 	err := RunWithDependencies([]string{
-		"pve", "--config", writeSSHTestConfig(t),
+		"pve", "--config", writeSSHTestConfig(t, "pve8845"),
 		"lxc", "mount", "101", "--node", "pve8845",
 	}, "test", deps)
 	if !errors.Is(err, pve.ErrConflict) {
@@ -107,13 +107,43 @@ func TestLXCMountCommandRefusesRunningGuest(t *testing.T) {
 	}
 }
 
+// P1-2: mount/unmount refuse an SSH host bound to a different PVE node.
+func TestLXCMountCommandRejectsSSHNodeMismatch(t *testing.T) {
+	row := output.GuestRow{Kind: "lxc", VMID: 101, Node: "pve8845", Status: "stopped"}
+	runner := &mountCmdRunner{}
+	var stdout, stderr bytes.Buffer
+	deps := mountCmdDeps(runner, row, &stdout, &stderr)
+
+	err := RunWithDependencies([]string{
+		"pve", "--config", writeSSHTestConfig(t, "n150"),
+		"lxc", "mount", "101", "--node", "pve8845", "-o", "json",
+	}, "test", deps)
+	if err == nil || !strings.Contains(err.Error(), "n150") || !strings.Contains(err.Error(), "pve8845") {
+		t.Fatalf("err = %v, want a node mismatch refusal", err)
+	}
+	if runner.saw("pct") {
+		t.Fatal("pct mount must not run on the wrong SSH host")
+	}
+
+	err = RunWithDependencies([]string{
+		"pve", "--config", writeSSHTestConfig(t, "n150"),
+		"lxc", "unmount", "101", "--node", "pve8845", "-o", "json",
+	}, "test", deps)
+	if err == nil || !strings.Contains(err.Error(), "n150") {
+		t.Fatalf("unmount err = %v, want a node mismatch refusal", err)
+	}
+	if runner.saw("pct") {
+		t.Fatal("pct unmount must not run on the wrong SSH host")
+	}
+}
+
 func TestLXCMountCommandRequiresNodeAndSSH(t *testing.T) {
 	row := output.GuestRow{Kind: "lxc", VMID: 101, Node: "pve8845", Status: "stopped"}
 	runner := &mountCmdRunner{}
 	var stdout, stderr bytes.Buffer
 
 	err := RunWithDependencies([]string{
-		"pve", "--config", writeSSHTestConfig(t),
+		"pve", "--config", writeSSHTestConfig(t, "pve8845"),
 		"lxc", "mount", "101",
 	}, "test", mountCmdDeps(runner, row, &stdout, &stderr))
 	if err == nil || !strings.Contains(err.Error(), "--node") {
@@ -141,7 +171,7 @@ func TestLXCUnmountCommandEndToEnd(t *testing.T) {
 	deps := mountCmdDeps(runner, row, &stdout, &stderr)
 
 	err := RunWithDependencies([]string{
-		"pve", "--config", writeSSHTestConfig(t),
+		"pve", "--config", writeSSHTestConfig(t, "pve8845"),
 		"lxc", "unmount", "101", "--node", "pve8845", "-o", "json",
 	}, "test", deps)
 	if err != nil {

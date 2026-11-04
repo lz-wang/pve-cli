@@ -36,12 +36,51 @@ func (r *fakeCommandRunner) Run(ctx context.Context, stdin io.Reader, stdout, st
 }
 
 func newExecService(runner *fakeCommandRunner) (*GuestService, *LXCExecService) {
+	return newExecServiceBound(runner, "pve1")
+}
+
+func newExecServiceBound(runner *fakeCommandRunner, sshNode string) (*GuestService, *LXCExecService) {
 	backend := &fakeBackend{
 		nodes: []output.NodeRow{{Name: "pve1"}},
 		lxcs:  map[string]map[int]*fakeGuest{"pve1": {101: {row: output.GuestRow{Kind: "lxc", VMID: 101, Node: "pve1"}}}},
 	}
 	guests := NewLXCService(backend, TaskRunner{}, nil, false)
-	return guests, NewLXCExecService(guests, runner)
+	return guests, NewLXCExecService(guests, runner, sshNode)
+}
+
+// P1-2: pct commands must never run on an SSH host whose profile does not
+// declare the PVE node it serves — an unbound ssh section is refused.
+func TestLXCExecRequiresSSHNodeBinding(t *testing.T) {
+	runner := &fakeCommandRunner{}
+	_, svc := newExecServiceBound(runner, "")
+
+	_, err := svc.Exec(context.Background(), 101, LXCExecOptions{Node: "pve1", Command: "true"})
+	if !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "node") {
+		t.Fatalf("err = %v, want a node-binding demand", err)
+	}
+	if runner.called {
+		t.Fatal("no pct command without a node binding")
+	}
+}
+
+// P1-2: API-resolved node and SSH host binding must agree before any pct
+// command runs — both hosts may host the same VMID.
+func TestLXCExecRejectsSSHNodeMismatch(t *testing.T) {
+	runner := &fakeCommandRunner{}
+	_, svc := newExecServiceBound(runner, "n150")
+
+	_, err := svc.Exec(context.Background(), 101, LXCExecOptions{Node: "pve1", Command: "true"})
+	if !errors.Is(err, ErrInvalid) {
+		t.Fatalf("err = %v, want ErrInvalid", err)
+	}
+	for _, name := range []string{"n150", "pve1"} {
+		if !strings.Contains(err.Error(), name) {
+			t.Fatalf("err = %v, want it to name both nodes", err)
+		}
+	}
+	if runner.called {
+		t.Fatal("pct exec must not run on the wrong host")
+	}
 }
 
 // The service translates one exec request into a single pct exec host

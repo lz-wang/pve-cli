@@ -11,6 +11,10 @@ import (
 )
 
 func mountHarness(t *testing.T, status string, script map[string]ssh.Result) (*MountService, *scriptedRunner, *fakeGuest) {
+	return mountHarnessBound(t, status, script, "pve8845")
+}
+
+func mountHarnessBound(t *testing.T, status string, script map[string]ssh.Result, sshNode string) (*MountService, *scriptedRunner, *fakeGuest) {
 	t.Helper()
 	guest := &fakeGuest{row: output.GuestRow{Kind: "lxc", VMID: 101, Node: "pve8845", Status: status}}
 	backend := &fakeBackend{
@@ -22,7 +26,7 @@ func mountHarness(t *testing.T, status string, script map[string]ssh.Result) (*M
 		runner = runner.on(command, result)
 	}
 	guests := NewLXCService(backend, TaskRunner{}, nil, false)
-	return NewMountService(guests, runner), runner, guest
+	return NewMountService(guests, runner, sshNode), runner, guest
 }
 
 // mountSequenceHarness scripts the mountpoint probe per call: first the
@@ -45,7 +49,7 @@ func mountSequenceHarness(t *testing.T, status string, preMounted bool, postMoun
 	runner := newScriptedRunner().
 		onSeq("mountpoint -q "+mountRootfs, pre, post).
 		on("pct mount 101", pctResult)
-	return NewMountService(NewLXCService(backend, TaskRunner{}, nil, false), runner), runner
+	return NewMountService(NewLXCService(backend, TaskRunner{}, nil, false), runner, "pve8845"), runner
 }
 
 const mountRootfs = "/var/lib/lxc/101/rootfs"
@@ -182,5 +186,53 @@ func TestLXCUnmountVerifiesState(t *testing.T) {
 	}
 	if !runner.saw("pct unmount 101") {
 		t.Fatal("pct unmount not invoked")
+	}
+}
+
+// P1-2: mount/unmount must never run pct against an SSH host that does not
+// declare (or does not match) the container's PVE node.
+func TestLXCMountRequiresSSHNodeBinding(t *testing.T) {
+	runner := &scriptedRunner{}
+	service, _, _ := mountHarnessBound(t, "stopped", nil, "")
+
+	result, err := service.Mount(context.Background(), 101, "pve8845")
+	if !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "node") {
+		t.Fatalf("err = %v, want a node-binding demand", err)
+	}
+	if result.Status != "" {
+		t.Fatalf("result = %+v, want no result row", result)
+	}
+	if runner.saw("pct") {
+		t.Fatal("no pct command without a node binding")
+	}
+
+	result, err = service.Unmount(context.Background(), 101, "pve8845")
+	if !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "node") {
+		t.Fatalf("unmount err = %v, want a node-binding demand", err)
+	}
+}
+
+func TestLXCMountRejectsSSHNodeMismatch(t *testing.T) {
+	runner := &scriptedRunner{}
+	service, _, _ := mountHarnessBound(t, "stopped", nil, "n150")
+
+	result, err := service.Mount(context.Background(), 101, "pve8845")
+	if !errors.Is(err, ErrInvalid) {
+		t.Fatalf("err = %v, want ErrInvalid", err)
+	}
+	for _, name := range []string{"n150", "pve8845"} {
+		if !strings.Contains(err.Error(), name) {
+			t.Fatalf("err = %v, want it to name both nodes", err)
+		}
+	}
+	if result.Status != "" {
+		t.Fatalf("result = %+v, want no result row", result)
+	}
+	if runner.saw("pct") {
+		t.Fatal("pct mount must not run on the wrong host")
+	}
+
+	if _, err := service.Unmount(context.Background(), 101, "pve8845"); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("unmount err = %v, want ErrInvalid", err)
 	}
 }

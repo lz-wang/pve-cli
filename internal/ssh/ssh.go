@@ -39,7 +39,10 @@ const (
 // independent from the API token: only key files and the system agent are
 // used (BatchMode), so no secrets are stored here.
 type Profile struct {
-	Host         string `yaml:"host,omitempty"`
+	Host string `yaml:"host,omitempty"`
+	// Node is the PVE node this SSH host runs. pct-bearing commands refuse
+	// to execute unless the API-resolved guest node equals it.
+	Node         string `yaml:"node,omitempty"`
 	User         string `yaml:"user,omitempty"`
 	Port         int    `yaml:"port,omitempty"`
 	IdentityFile string `yaml:"identity_file,omitempty"`
@@ -64,6 +67,7 @@ func (p Profile) Validate() error {
 
 func (p Profile) normalized() Profile {
 	normalized := p
+	normalized.Node = strings.TrimSpace(normalized.Node)
 	if strings.TrimSpace(normalized.User) == "" {
 		normalized.User = defaultUser
 	}

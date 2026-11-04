@@ -18,12 +18,16 @@ var mountPathPattern = regexp.MustCompile(`(/var/lib/lxc/\d+/rootfs)`)
 // while mounted, so every step verifies observable state and refuses
 // ambiguous situations instead of forcing them. There is no --force.
 type MountService struct {
-	guests *GuestService
-	runner CommandRunner
+	guests  *GuestService
+	runner  CommandRunner
+	sshNode string
 }
 
-func NewMountService(guests *GuestService, runner CommandRunner) *MountService {
-	return &MountService{guests: guests, runner: runner}
+// NewMountService takes the PVE node the SSH host runs (ssh.node in the
+// profile); pct mount/unmount are refused unless the resolved guest node
+// matches it.
+func NewMountService(guests *GuestService, runner CommandRunner, sshNode string) *MountService {
+	return &MountService{guests: guests, runner: runner, sshNode: sshNode}
 }
 
 // Mount mounts a stopped container's rootfs on the host and returns the
@@ -36,7 +40,7 @@ func (s *MountService) Mount(ctx context.Context, vmid int, node string) (output
 		return result, fmt.Errorf("%w: --node is required for mount/unmount", ErrInvalid)
 	}
 	result.Node = node
-	guest, err := s.resolveStopped(ctx, vmid, node)
+	guest, err := s.resolveStopped(ctx, vmid, node, "pct mount")
 	if err != nil {
 		return result, err
 	}
@@ -93,7 +97,7 @@ func (s *MountService) Unmount(ctx context.Context, vmid int, node string) (outp
 		return result, fmt.Errorf("%w: --node is required for mount/unmount", ErrInvalid)
 	}
 	result.Node = node
-	guest, err := s.resolveStopped(ctx, vmid, node)
+	guest, err := s.resolveStopped(ctx, vmid, node, "pct unmount")
 	if err != nil {
 		return result, err
 	}
@@ -137,8 +141,9 @@ func (s *MountService) Unmount(ctx context.Context, vmid int, node string) (outp
 }
 
 // resolveStopped requires the container to exist on the named node and be
-// stopped: pct mount on a running container corrupts state.
-func (s *MountService) resolveStopped(ctx context.Context, vmid int, node string) (Guest, error) {
+// stopped: pct mount on a running container corrupts state. The SSH host
+// binding is verified before any host command runs.
+func (s *MountService) resolveStopped(ctx context.Context, vmid int, node, operation string) (Guest, error) {
 	if vmid <= 0 {
 		return nil, fmt.Errorf("%w: invalid vmid %d", ErrInvalid, vmid)
 	}
@@ -148,6 +153,9 @@ func (s *MountService) resolveStopped(ctx context.Context, vmid int, node string
 	}
 	if guest.Row().Status != "stopped" {
 		return nil, fmt.Errorf("%w: container %d is %s; stop it before mounting", ErrConflict, vmid, guest.Row().Status)
+	}
+	if err := requireSSHNodeBinding(s.sshNode, guest.Row().Node, vmid, operation); err != nil {
+		return nil, err
 	}
 	return guest, nil
 }

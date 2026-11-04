@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/lz-wang/pve-cli/v3/internal/output"
@@ -31,14 +32,32 @@ func (e *RemoteExitError) ExitCode() int { return e.Code }
 
 // LXCExecService executes commands inside LXC containers through the host
 // SSH transport (`pct exec`). The REST API has no equivalent endpoint; this
-// path is only taken for the optional SSH-enabled profiles.
+// path is only taken for the optional SSH-enabled profiles. sshNode is the
+// PVE node the SSH host runs (ssh.node in the profile); pct commands are
+// refused unless the API-resolved guest node matches it.
 type LXCExecService struct {
-	guests *GuestService
-	runner CommandRunner
+	guests  *GuestService
+	runner  CommandRunner
+	sshNode string
 }
 
-func NewLXCExecService(guests *GuestService, runner CommandRunner) *LXCExecService {
-	return &LXCExecService{guests: guests, runner: runner}
+func NewLXCExecService(guests *GuestService, runner CommandRunner, sshNode string) *LXCExecService {
+	return &LXCExecService{guests: guests, runner: runner, sshNode: sshNode}
+}
+
+// requireSSHNodeBinding enforces the first-version SSH contract: one SSH
+// profile host maps to exactly one PVE node, declared as ssh.node in the
+// profile. pct commands never run against a host whose node declaration is
+// missing or disagrees with the API-resolved guest node — both hosts may
+// host the same VMID.
+func requireSSHNodeBinding(sshNode, guestNode string, vmid int, operation string) error {
+	if strings.TrimSpace(sshNode) == "" {
+		return fmt.Errorf("%w: the profile ssh section must declare node: <PVE node> before %s can run", ErrInvalid, operation)
+	}
+	if sshNode != guestNode {
+		return fmt.Errorf("%w: the ssh host binds PVE node %q but container %d is on node %q; refusing to run %s there", ErrInvalid, sshNode, vmid, guestNode, operation)
+	}
+	return nil
 }
 
 // LXCExecOptions controls one container command execution.
@@ -66,7 +85,11 @@ func (s *LXCExecService) Exec(ctx context.Context, vmid int, options LXCExecOpti
 		return output.AgentExecResult{}, fmt.Errorf("%w: a command is required after --", ErrInvalid)
 	}
 	// Fail fast when the container does not exist or is ambiguous.
-	if _, err := s.guests.resolve(ctx, vmid, options.Node); err != nil {
+	guest, err := s.guests.resolve(ctx, vmid, options.Node)
+	if err != nil {
+		return output.AgentExecResult{}, err
+	}
+	if err := requireSSHNodeBinding(s.sshNode, guest.Row().Node, vmid, "pct exec"); err != nil {
 		return output.AgentExecResult{}, err
 	}
 
