@@ -55,8 +55,9 @@ func guestRestoreCommand(kind string, deps Dependencies) *cli.Command {
 			})
 			// Write the structured result on success, and also when the
 			// wait fails after the task was submitted, so automation can
-			// inspect the UPID; `task wait` follows the same pattern.
-			if err == nil || result.Task != "" {
+			// inspect the UPID; a failed submission keeps its unknown/failed
+			// status observable the same way RemoteMigrate reports its own.
+			if err == nil || result.Task != "" || result.Status != "" {
 				if writeErr := output.WriteRestoreResult(rt.stdout, rt.format, result); writeErr != nil {
 					return writeErr
 				}

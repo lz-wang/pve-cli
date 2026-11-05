@@ -547,6 +547,60 @@ func TestBackupCopyRestoreWorkflowKeepsUnknownOnRestoreTimeout(t *testing.T) {
 	}
 }
 
+// P1-2: a backup submission that fails without proving PVE rejected it
+// (HTTP 5xx, timeout) keeps the whole workflow unknown, never a bare failed:
+// the backup may still have started, and rerunning blindly could submit a
+// second one.
+func TestBackupCopyRestoreWorkflowKeepsUnknownOnBackupSubmitFailure(t *testing.T) {
+	workflow, source, _, sourceSSH, _ := workflowHarness(t)
+	source.backupSubmitErr = &APIError{HTTPStatus: 500, Category: CategoryUnavailable, Message: "internal error", kind: ErrUnavailable}
+
+	result, err := workflow.Run(context.Background(), workflowOptions())
+	if err == nil {
+		t.Fatal("an unconfirmed backup submission must fail the workflow run")
+	}
+	if result.Status != "unknown" {
+		t.Fatalf("status = %q, want unknown (backup outcome unproven)", result.Status)
+	}
+	var backup output.WorkflowStageResult
+	for _, stage := range result.Stages {
+		if stage.Stage == "backup" {
+			backup = stage
+		}
+	}
+	if backup.Status != "unknown" {
+		t.Fatalf("backup stage = %+v, want unknown", backup)
+	}
+	if sourceSSH.saw("cat") {
+		t.Fatal("the pipeline must not transfer on an unconfirmed backup")
+	}
+}
+
+// P1-2: a restore submission failure without a provable rejection keeps the
+// workflow unknown: the target VMID may be occupied by a restore still in
+// flight.
+func TestBackupCopyRestoreWorkflowKeepsUnknownOnRestoreSubmitFailure(t *testing.T) {
+	workflow, _, target, _, _ := workflowHarness(t)
+	target.restoreSubmitErr = &APIError{HTTPStatus: 500, Category: CategoryUnavailable, Message: "internal error", kind: ErrUnavailable}
+
+	result, err := workflow.Run(context.Background(), workflowOptions())
+	if err == nil {
+		t.Fatal("an unconfirmed restore submission must fail the workflow run")
+	}
+	if result.Status != "unknown" {
+		t.Fatalf("status = %q, want unknown (restore outcome unproven)", result.Status)
+	}
+	var restore output.WorkflowStageResult
+	for _, stage := range result.Stages {
+		if stage.Stage == "restore" {
+			restore = stage
+		}
+	}
+	if restore.Status != "unknown" {
+		t.Fatalf("restore stage = %+v, want unknown", restore)
+	}
+}
+
 // P1-3: a transfer that published the archive but could not verify the
 // target inventory keeps the published fact: the workflow reports partial,
 // never a bare failed that hides the existing archive.

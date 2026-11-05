@@ -187,15 +187,16 @@ func TestRestoreServiceVMIDCheckFailsClosedOnNodeFailure(t *testing.T) {
 
 type fakeRestoreBackend struct {
 	fakeBackend
-	task            Task
-	restoreOptions  *RestoreOptions
-	restoreTaskUsed Task
+	task             Task
+	restoreOptions   *RestoreOptions
+	restoreTaskUsed  Task
+	restoreSubmitErr error
 }
 
 func (b *fakeRestoreBackend) Restore(_ context.Context, options RestoreOptions) (Task, error) {
 	b.restoreOptions = &options
 	b.restoreTaskUsed = b.task
-	return b.task, nil
+	return b.task, b.restoreSubmitErr
 }
 
 // P1-4: a restore task that succeeded while the post-restore configuration
@@ -305,6 +306,71 @@ func TestRestoreServiceSplitStates(t *testing.T) {
 type bridgeMapBackend struct {
 	*fakeRestoreBackend
 	guestConfigs map[string]map[string]any
+}
+
+// P1-2: a restore submission failure that does not prove PVE rejected the
+// request keeps the outcome unknown and any returned UPID — the restore may
+// still be running, and rerunning blindly could duplicate a real restore.
+func TestRestoreSubmissionFailureKeepsUnknown(t *testing.T) {
+	backend := &fakeRestoreBackend{
+		fakeBackend: fakeBackend{
+			nodes: []output.NodeRow{{Name: "pve1"}},
+			backupRows: map[string]map[string][]output.BackupRow{
+				"pve1": {"backup": {{VolID: "backup:backup/vzdump-lxc-200.tar.zst", Kind: "lxc", VMID: 200}}},
+			},
+			storageRows: map[string][]output.StorageRow{
+				"pve1": {{Node: "pve1", Storage: "local-lvm", Type: "lvmthin", Active: true, Enabled: true, Content: "rootdir", Avail: 100 << 30}},
+			},
+		},
+		task:             &fakeTask{upid: "UPID:pve1:restore"},
+		restoreSubmitErr: &APIError{HTTPStatus: 500, Category: CategoryUnavailable, Message: "internal error", kind: ErrUnavailable},
+	}
+	svc := NewRestoreService(backend, TaskRunner{Wait: true})
+
+	result, err := svc.Restore(context.Background(), RestoreOptions{
+		Kind: "lxc", Archive: "backup:backup/vzdump-lxc-200.tar.zst",
+		Node: "pve1", VMID: 201, Storage: "local-lvm",
+	})
+	if err == nil {
+		t.Fatal("a failed submission must fail the command")
+	}
+	if result.Status != "unknown" || result.RestoreStatus != "unknown" {
+		t.Fatalf("status = %q/%q, want unknown/unknown (submission outcome unproven)", result.Status, result.RestoreStatus)
+	}
+	if result.Task != "UPID:pve1:restore" {
+		t.Fatalf("task = %q, want the UPID returned alongside the error", result.Task)
+	}
+}
+
+// P1-2: a provable submission rejection (HTTP 4xx except 408) reports
+// failed — PVE refused the restore before it started, so a corrected rerun
+// is safe.
+func TestRestoreSubmissionRejectionReportsFailed(t *testing.T) {
+	backend := &fakeRestoreBackend{
+		fakeBackend: fakeBackend{
+			nodes: []output.NodeRow{{Name: "pve1"}},
+			backupRows: map[string]map[string][]output.BackupRow{
+				"pve1": {"backup": {{VolID: "backup:backup/vzdump-lxc-200.tar.zst", Kind: "lxc", VMID: 200}}},
+			},
+			storageRows: map[string][]output.StorageRow{
+				"pve1": {{Node: "pve1", Storage: "local-lvm", Type: "lvmthin", Active: true, Enabled: true, Content: "rootdir", Avail: 100 << 30}},
+			},
+		},
+		task:             &fakeTask{upid: "UPID:pve1:restore"},
+		restoreSubmitErr: &APIError{HTTPStatus: 400, Category: CategoryInvalid, Message: "bad archive", kind: ErrInvalid},
+	}
+	svc := NewRestoreService(backend, TaskRunner{Wait: true})
+
+	result, err := svc.Restore(context.Background(), RestoreOptions{
+		Kind: "lxc", Archive: "backup:backup/vzdump-lxc-200.tar.zst",
+		Node: "pve1", VMID: 201, Storage: "local-lvm",
+	})
+	if err == nil {
+		t.Fatal("a rejected submission must fail the command")
+	}
+	if result.Status != "failed" {
+		t.Fatalf("status = %q, want failed (provable rejection)", result.Status)
+	}
 }
 
 // GuestConfig serves the config keyed "kind/node/vmid"; the map is returned

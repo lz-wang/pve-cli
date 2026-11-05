@@ -141,7 +141,31 @@ func (s *BackupService) BackupGuest(ctx context.Context, options BackupCreateOpt
 		Protected:     protected,
 	})
 	if err != nil {
-		return output.BackupResult{}, err
+		// A failed submission must never surface as success — but only a
+		// provable rejection marks the outcome failed. Server failures (5xx)
+		// and transport errors leave it unknown: a timeout does not prove the
+		// backup did not start, so an automated rerun that reads a bare
+		// failure could submit a second backup. A UPID returned alongside an
+		// error is preserved so the task result can still be queried. The
+		// classification mirrors RemoteMigrate's submission contract.
+		status := TaskStatusUnknown
+		if submissionRejected(err) {
+			status = "failed"
+		}
+		result := output.BackupResult{
+			Kind:          kind,
+			VMID:          uint64(options.VMID),
+			Node:          row.Node,
+			Storage:       options.Storage,
+			Mode:          mode,
+			RequestedMode: mode,
+			Status:        status,
+			Error:         err.Error(),
+		}
+		if task != nil {
+			result.Task = task.UPID()
+		}
+		return result, fmt.Errorf("submit backup: %w", ClassifyError(err))
 	}
 
 	result := output.BackupResult{

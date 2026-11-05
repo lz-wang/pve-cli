@@ -64,7 +64,9 @@ func guestBackupCommand(kind string, deps Dependencies) *cli.Command {
 				BwLimit:       c.Uint("bwlimit"),
 				Protected:     protected,
 			})
-			if err == nil || result.Task != "" {
+			// A failed submission keeps its unknown/failed status observable:
+			// the structured result survives exactly like RemoteMigrate's.
+			if err == nil || result.Task != "" || result.Status != "" {
 				if e := output.WriteBackupResult(rt.stdout, rt.format, result); e != nil {
 					return e
 				}

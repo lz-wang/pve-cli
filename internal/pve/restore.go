@@ -101,7 +101,32 @@ func (s *RestoreService) Restore(ctx context.Context, options RestoreOptions) (o
 
 	task, err := s.backend.Restore(ctx, submitted)
 	if err != nil {
-		return output.RestoreResult{}, err
+		// A failed submission must never surface as success — but only a
+		// provable rejection marks the outcome failed. Server failures (5xx)
+		// and transport errors leave it unknown: a timeout does not prove the
+		// restore did not start, so an automated rerun that reads a bare
+		// failure could restore into an occupied VMID. A UPID returned
+		// alongside an error is preserved so the task result can still be
+		// queried. The classification mirrors RemoteMigrate's submission
+		// contract.
+		status := TaskStatusUnknown
+		if submissionRejected(err) {
+			status = "failed"
+		}
+		result := output.RestoreResult{
+			Kind:          kind,
+			VMID:          uint64(options.VMID),
+			Node:          node,
+			Archive:       archive,
+			Storage:       strings.TrimSpace(options.Storage),
+			Status:        status,
+			RestoreStatus: status,
+			Error:         err.Error(),
+		}
+		if task != nil {
+			result.Task = task.UPID()
+		}
+		return result, fmt.Errorf("submit restore: %w", ClassifyError(err))
 	}
 
 	result := output.RestoreResult{

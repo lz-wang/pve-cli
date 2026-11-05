@@ -165,6 +165,63 @@ func TestBackupServiceBackupGuestTaskFailure(t *testing.T) {
 	}
 }
 
+// P1-2: a submission failure that does not prove PVE rejected the request
+// (HTTP 5xx, timeout, connection loss) keeps the outcome unknown and any
+// returned UPID: the backup may still be running, and an automated rerun
+// that reads a bare failure could submit a second backup.
+func TestBackupServiceSubmissionFailureKeepsUnknown(t *testing.T) {
+	task := &fakeTask{upid: "UPID:pve1:backup"}
+	backend := &fakeBackend{
+		vms: map[string]map[int]*fakeGuest{"pve1": {100: {row: output.GuestRow{Kind: "vm", VMID: 100, Node: "pve1"}}}},
+		backupTask: task,
+		backupSubmitErr: &APIError{HTTPStatus: 500, Category: CategoryUnavailable, Message: "internal error", kind: ErrUnavailable},
+	}
+	svc := NewBackupService(backend, TaskRunner{Wait: true})
+
+	result, err := svc.BackupGuest(context.Background(), BackupCreateOptions{
+		Kind:    BackupKindVM,
+		VMID:    100,
+		Node:    "pve1",
+		Storage: "backup",
+	})
+	if err == nil {
+		t.Fatal("a failed submission must fail the command")
+	}
+	if result.Status != "unknown" {
+		t.Fatalf("status = %q, want unknown (submission outcome unproven)", result.Status)
+	}
+	if result.Task != "UPID:pve1:backup" {
+		t.Fatalf("task = %q, want the UPID returned alongside the error", result.Task)
+	}
+	if result.Error == "" {
+		t.Fatal("the structured result must carry the submission error")
+	}
+}
+
+// P1-2: a provable rejection (HTTP 4xx except 408) reports failed: PVE
+// refused the request before the backup started, so a rerun is safe.
+func TestBackupServiceSubmissionRejectionReportsFailed(t *testing.T) {
+	backend := &fakeBackend{
+		vms:        map[string]map[int]*fakeGuest{"pve1": {100: {row: output.GuestRow{Kind: "vm", VMID: 100, Node: "pve1"}}}},
+		backupTask: &fakeTask{upid: "UPID:pve1:backup"},
+		backupSubmitErr: &APIError{HTTPStatus: 400, Category: CategoryInvalid, Message: "bad storage", kind: ErrInvalid},
+	}
+	svc := NewBackupService(backend, TaskRunner{Wait: true})
+
+	result, err := svc.BackupGuest(context.Background(), BackupCreateOptions{
+		Kind:    BackupKindVM,
+		VMID:    100,
+		Node:    "pve1",
+		Storage: "backup",
+	})
+	if err == nil {
+		t.Fatal("a rejected submission must fail the command")
+	}
+	if result.Status != "failed" {
+		t.Fatalf("status = %q, want failed (provable rejection)", result.Status)
+	}
+}
+
 func TestParseBackupOptions(t *testing.T) {
 	if got, err := ParseBackupKind(""); err != nil || got != BackupKindAll {
 		t.Fatalf("kind default = %q/%v", got, err)

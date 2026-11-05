@@ -421,6 +421,7 @@ type fakeBackend struct {
 	backupNode       string
 	backupOptions    BackupOptions
 	backupErrs       map[string]error
+	backupSubmitErr  error
 	vmErrs           map[string]error
 	lxcErrs          map[string]error
 	storageErrs      map[string]error
@@ -431,6 +432,7 @@ type fakeBackend struct {
 	taskHandle       Task
 	restoreOptions   RestoreOptions
 	restoreTask      Task
+	restoreSubmitErr error
 	agentErrs        map[string]error
 	agentNetwork     []output.AgentNetworkRow
 	agentExecOptions AgentExecOptions
@@ -536,7 +538,7 @@ func (b *fakeBackend) BackupGuest(_ context.Context, node string, options Backup
 	b.backupCalls++
 	b.backupNode = node
 	b.backupOptions = options
-	return b.backupTask, nil
+	return b.backupTask, b.backupSubmitErr
 }
 
 func (b *fakeBackend) Storages(_ context.Context, node string) ([]output.StorageRow, error) {
@@ -602,7 +604,7 @@ func (b *fakeBackend) TaskHandle(string) (Task, error) {
 
 func (b *fakeBackend) Restore(_ context.Context, options RestoreOptions) (Task, error) {
 	b.restoreOptions = options
-	return b.restoreTask, nil
+	return b.restoreTask, b.restoreSubmitErr
 }
 
 func (b *fakeBackend) AgentPing(_ context.Context, node string, vmid int) error {
