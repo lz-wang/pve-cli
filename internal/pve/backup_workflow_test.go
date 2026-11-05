@@ -601,6 +601,53 @@ func TestBackupCopyRestoreWorkflowKeepsUnknownOnRestoreSubmitFailure(t *testing.
 	}
 }
 
+// P1-3: the task log names archive A but the storage inventory lists only a
+// different archive B from the same time window: the workflow must fail and
+// never fall back to B — transferring a file the log does not corroborate
+// could publish an archive this run did not create.
+func TestBackupCopyRestoreWorkflowRefusesToGuessWhenLoggedArchiveMissing(t *testing.T) {
+	workflow, source, _, sourceSSH, targetSSH := workflowHarness(t)
+	reader := workflow.backups.backend.(*fakeBackend)
+	const logged = "vzdump-lxc-101-2026_06_06-00_00_00.tar.zst"
+	other := "local:backup/vzdump-lxc-101-2026_06_06-00_05_00.tar.zst"
+	now := uint64(time.Now().Unix())
+	// The inventory lists only the OTHER archive from the same time window.
+	reader.backupRows["n150"]["local"] = []output.BackupRow{
+		{Node: "n150", Storage: "local", Kind: "lxc", VMID: 101, VolID: other, Size: 999, Format: "tar.zst", CTime: now + 60},
+	}
+	const backupUPID = "UPID:n150:0000ABCD:00001234:6839F4A1:vzdump:101:root@pam:"
+	reader.backupTask = &fakeTask{upid: backupUPID}
+	source.lxcs["n150"][101].task = &fakeTask{upid: backupUPID}
+	reader.taskLogPages = map[string][][]output.TaskLogRow{
+		backupUPID: {{
+			{Text: "INFO: Creating vzdump archive '/var/lib/vz/dump/" + logged + "'"},
+		}},
+	}
+
+	result, err := workflow.Run(context.Background(), workflowOptions())
+	if err == nil {
+		t.Fatal("a logged archive missing from the inventory must fail the workflow")
+	}
+	if result.Status != "failed" {
+		t.Fatalf("status = %q, want failed (the log names an archive the inventory does not list)", result.Status)
+	}
+	var backup output.WorkflowStageResult
+	for _, stage := range result.Stages {
+		if stage.Stage == "backup" {
+			backup = stage
+		}
+	}
+	if backup.Status != "failed" || !strings.Contains(backup.Detail, logged) {
+		t.Fatalf("backup stage = %+v, want failed while naming the logged archive %s", backup, logged)
+	}
+	if strings.Contains(backup.Detail, "00_05_00") {
+		t.Fatalf("backup detail must not offer the mismatched archive: %q", backup.Detail)
+	}
+	if sourceSSH.saw("cat") || targetSSH.saw("test -e") {
+		t.Fatal("transfer ran on an archive the task log does not corroborate")
+	}
+}
+
 // P1-3: a transfer that published the archive but could not verify the
 // target inventory keeps the published fact: the workflow reports partial,
 // never a bare failed that hides the existing archive.

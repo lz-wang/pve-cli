@@ -276,7 +276,15 @@ func (w *BackupCopyRestoreWorkflow) backupStage(ctx context.Context, options Bac
 			found = true
 		}
 	}
-	if logMatch != nil {
+	// P1-3: when the task log names a specific archive, the inventory must
+	// list that exact file. Falling back to another archive from the time
+	// window would transfer a file vzdump did not report writing — the
+	// fallback is only for logs that are unreadable or name no archive.
+	if loggedArchive != "" {
+		if logMatch == nil {
+			detail := fmt.Sprintf("backup task log names archive %s but the storage inventory does not list it; refusing to guess another archive; re-run with --archive <volid> to continue from a verified archive", loggedArchive)
+			return "", failedStage("backup", detail)
+		}
 		return logMatch.VolID, output.WorkflowStageResult{Stage: "backup", Status: "succeeded", Task: backup.Task, Detail: logMatch.VolID}
 	}
 	if !found {

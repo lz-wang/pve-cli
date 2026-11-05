@@ -245,7 +245,9 @@ any target node — VM or container — refuses the run before any backup or
 transfer is wasted. The backup stage identifies its archive from the vzdump
 task log when the log names one, so a concurrently started backup of the
 same guest can never be misattributed; the task-start time window stays as
-the fallback. The post-check
+the fallback for logs that are unreadable or name no archive — a log-named
+archive that the storage inventory fails to list fails the stage outright
+instead of guessing another file. The post-check
 always carries unconfirmed risks (MAC/IP, DHCP, autostart are not
 observable via the API): when those remain, the overall result is
 `warning` — not an unconditional `succeeded` — listing the unconfirmed
