@@ -4,6 +4,8 @@ A resource-oriented, single-binary Proxmox VE CLI for a personal HomeLab.
 See [usage](docs/usage.md) for every command, flag, default and argument, and
 [output schema](docs/output-schema.md) for the JSON/YAML contract.
 
+- Read-only status, checks, guest lists, storage usage and tasks support multiple profiles with bounded concurrency and explicit partial results.
+
 ## CLI and profiles
 
 - `pve` executable; `github.com/lz-wang/pve-cli/v3` Go module; urfave/cli/v2.

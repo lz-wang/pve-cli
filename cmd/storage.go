@@ -46,7 +46,8 @@ func storageUsageCommand(deps Dependencies) *cli.Command {
 				return err
 			}
 			rows, err := pve.NewStorageService(rt.backend).List(c.Context, pve.StorageListOptions{
-				Sort: c.String("sort"), Desc: c.Bool("desc"), MinUsedPercent: c.Float64("min-used-percent"),
+				RequireComplete: c.Bool("all-profiles") || c.IsSet("profiles"),
+				Sort:            c.String("sort"), Desc: c.Bool("desc"), MinUsedPercent: c.Float64("min-used-percent"),
 				Node:    c.String("node"),
 				Content: c.String("content"),
 				Type:    c.String("type"),
@@ -87,7 +88,8 @@ func storageListCommand(deps Dependencies) *cli.Command {
 				return err
 			}
 			rows, err := pve.NewStorageService(rt.backend).List(c.Context, pve.StorageListOptions{
-				Sort: c.String("sort"), Desc: c.Bool("desc"), MinUsedPercent: c.Float64("min-used-percent"),
+				RequireComplete: c.Bool("all-profiles") || c.IsSet("profiles"),
+				Sort:            c.String("sort"), Desc: c.Bool("desc"), MinUsedPercent: c.Float64("min-used-percent"),
 				Node:    c.String("node"),
 				Content: c.String("content"),
 				Type:    c.String("type"),

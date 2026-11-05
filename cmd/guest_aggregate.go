@@ -61,11 +61,12 @@ func guestAggregateListCommand(deps Dependencies) *cli.Command {
 
 			svc := pve.NewGuestAggregateService(rt.backend, rt.logger, rt.verbose)
 			rows, err := svc.List(c.Context, pve.GuestListOptions{
-				Node:     c.String("node"),
-				Type:     guestType,
-				Status:   c.String("status"),
-				Tags:     c.StringSlice("tag"),
-				TagMatch: tagMatch,
+				RequireComplete: c.Bool("all-profiles") || c.IsSet("profiles"),
+				Node:            c.String("node"),
+				Type:            guestType,
+				Status:          c.String("status"),
+				Tags:            c.StringSlice("tag"),
+				TagMatch:        tagMatch,
 			})
 			if err != nil {
 				return err

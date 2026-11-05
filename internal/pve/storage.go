@@ -11,14 +11,15 @@ import (
 )
 
 type StorageListOptions struct {
-	Sort           string
-	Desc           bool
-	MinUsedPercent float64
-	Node           string
-	Content        string
-	Type           string
-	Active         bool
-	Enabled        bool
+	RequireComplete bool
+	Sort            string
+	Desc            bool
+	MinUsedPercent  float64
+	Node            string
+	Content         string
+	Type            string
+	Active          bool
+	Enabled         bool
 }
 
 type StorageContentListOptions struct {
@@ -60,6 +61,9 @@ func (s *StorageService) List(ctx context.Context, options StorageListOptions) (
 		}
 		nodeRows, err := s.backend.Storages(ctx, nodeRow.Name)
 		if err != nil {
+			if options.RequireComplete {
+				return nil, fmt.Errorf("complete storage inventory required: %w", err)
+			}
 			if firstErr == nil {
 				firstErr = err
 			}

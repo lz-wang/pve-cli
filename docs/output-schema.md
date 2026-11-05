@@ -41,6 +41,22 @@ The following reference is generated from the actual output structs.
 
 <!-- GENERATED_REFERENCE -->
 
+## ProfileReport
+
+| Field | Go / wire value type | May be omitted |
+|---|---|---|
+| `complete` | `bool` | no |
+| `results` | `[]output.ProfileResult` | no |
+
+## ProfileResult
+
+| Field | Go / wire value type | May be omitted |
+|---|---|---|
+| `profile` | `string` | no |
+| `complete` | `bool` | no |
+| `data` | `interface {}` | no |
+| `error` | `string` | yes |
+
 ## NodeRow
 
 | Field | Go / wire value type | May be omitted |

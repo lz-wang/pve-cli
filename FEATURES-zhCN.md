@@ -4,6 +4,8 @@
 全部命令、参数与默认值见[使用指南](docs/usage.md)，JSON/YAML 契约见
 [输出 Schema](docs/output-schema.md)。
 
+- 状态、健康检查、来宾列表、存储用量和任务列表支持多 profile 只读聚合、受限并发及明确的部分失败结果。
+
 ## CLI 与配置
 
 - 可执行文件为 `pve`，Go Module 为 `github.com/lz-wang/pve-cli/v3`，使用 urfave/cli/v2。

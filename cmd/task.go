@@ -57,10 +57,11 @@ func taskListCommand(deps Dependencies) *cli.Command {
 				return err
 			}
 			rows, err := taskService(rt).List(c.Context, pve.TaskListOptions{
-				Node:   c.String("node"),
-				Type:   c.String("type"),
-				Status: status,
-				Limit:  c.Int("limit"),
+				RequireComplete: c.Bool("all-profiles") || c.IsSet("profiles"),
+				Node:            c.String("node"),
+				Type:            c.String("type"),
+				Status:          status,
+				Limit:           c.Int("limit"),
 			})
 			if err != nil {
 				return err

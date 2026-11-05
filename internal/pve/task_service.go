@@ -25,10 +25,11 @@ func NewTaskService(backend TaskBackend, logger *slog.Logger, verbose bool) *Tas
 
 // TaskListOptions filters aggregated task lists.
 type TaskListOptions struct {
-	Node   string
-	Type   string
-	Status string
-	Limit  int
+	RequireComplete bool
+	Node            string
+	Type            string
+	Status          string
+	Limit           int
 }
 
 // TaskLogOptions controls log retrieval. Tail keeps only the last N lines.
@@ -79,6 +80,9 @@ func (s *TaskService) List(ctx context.Context, options TaskListOptions) ([]outp
 			}
 			nodeRows, err := s.backend.Tasks(ctx, nodeRow.Name, backendOpts)
 			if err != nil {
+				if options.RequireComplete {
+					return nil, fmt.Errorf("complete tasks inventory required: %w", err)
+				}
 				if firstErr == nil {
 					firstErr = err
 				}

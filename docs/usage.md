@@ -520,6 +520,28 @@ node/storage/VMID candidates. A short Context timeout and silent static fallback
 keep unavailable clusters from blocking the shell. Completion never modifies
 PVE resources or prints tokens.
 
+## Multiple profiles
+
+Only `status`, `check`, `guest ls`, `storage usage` and `task ls`
+accept `--all-profiles` or repeatable/comma-separated `--profiles`.
+These options cannot combine with `--profile`.
+Use `--workers 1..8` to limit concurrent profile queries (default 4).
+
+Multi-profile JSON/YAML uses a `complete` flag and sorted `results`.
+Each result contains `profile`, `complete`, `data` and an optional error.
+Guest identity is the enclosing profile plus node, kind and VMID.
+A failed query retains other results and returns nonzero.
+Failed health checks also mark the profile result incomplete.
+Table output groups the existing tables under profile headings.
+Without an explicit output format, multi-profile output uses tables.
+Single-profile output and profile defaults remain unchanged.
+
+```bash
+pve status --all-profiles
+pve guest ls --profiles primary,secondary --type lxc -o json
+pve check --all-profiles --strict
+```
+
 <!-- GENERATED_REFERENCE -->
 
 ## Global flags
@@ -549,6 +571,9 @@ pve status
 | Flag | Description and default |
 |---|---|
 | `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+| `--all-profiles` | --all-profiles query all configured profiles (read-only) (default: false) |
+| `--profiles` | --profiles value [ --profiles value ] profile names, comma-separated or repeatable |
+| `--workers` | --workers value parallel profile queries (1-8) (default: 4) |
 
 ### `pve check`
 
@@ -569,6 +594,9 @@ pve check
 | `--backup-max-age` | --backup-max-age value maximum accepted backup age for tagged guests, for example 36h (default: 0s) |
 | `--strict` | --strict treat warnings as failures for the exit code (default: false) |
 | `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+| `--all-profiles` | --all-profiles query all configured profiles (read-only) (default: false) |
+| `--profiles` | --profiles value [ --profiles value ] profile names, comma-separated or repeatable |
+| `--workers` | --workers value parallel profile queries (1-8) (default: 4) |
 
 ### `pve guest ls`
 
@@ -589,6 +617,9 @@ pve guest ls
 | `--tag` | --tag value [ --tag value ] filter guests by tag, repeatable |
 | `--tag-match` | --tag-match value tag match mode: all,any (default: "all") |
 | `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+| `--all-profiles` | --all-profiles query all configured profiles (read-only) (default: false) |
+| `--profiles` | --profiles value [ --profiles value ] profile names, comma-separated or repeatable |
+| `--workers` | --workers value parallel profile queries (1-8) (default: 4) |
 
 ### `pve guest get`
 
@@ -1718,6 +1749,9 @@ pve task ls
 | `--status` | --status value filter by task status: running,ok,error |
 | `--limit` | --limit value show only the N most recent tasks (default: 0) |
 | `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+| `--all-profiles` | --all-profiles query all configured profiles (read-only) (default: false) |
+| `--profiles` | --profiles value [ --profiles value ] profile names, comma-separated or repeatable |
+| `--workers` | --workers value parallel profile queries (1-8) (default: 4) |
 
 ### `pve task get`
 
@@ -1809,6 +1843,9 @@ pve storage usage
 | `--desc` | --desc (default: false) |
 | `--min-used-percent` | --min-used-percent value minimum known usage percent (default: 0) |
 | `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+| `--all-profiles` | --all-profiles query all configured profiles (read-only) (default: false) |
+| `--profiles` | --profiles value [ --profiles value ] profile names, comma-separated or repeatable |
+| `--workers` | --workers value parallel profile queries (1-8) (default: 4) |
 
 ### `pve storage get`
 

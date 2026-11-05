@@ -143,6 +143,7 @@ func NewAppWithBuildInfoAndDependencies(info BuildInfo, deps Dependencies) *cli.
 			newCompleteCommand(deps),
 		},
 	}
+	enableProfileQueries(app.Commands, "")
 	var configure func([]*cli.Command)
 	configure = func(commands []*cli.Command) {
 		for _, command := range commands {
