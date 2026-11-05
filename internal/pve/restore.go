@@ -62,6 +62,14 @@ func (s *RestoreService) Restore(ctx context.Context, options RestoreOptions) (o
 	if options.VMID <= 0 {
 		return output.RestoreResult{}, fmt.Errorf("invalid vmid %d", options.VMID)
 	}
+	// A bridge map can only be applied to a completed restore, which requires
+	// --wait. The combination is rejected here, before the preflight and
+	// before any submission: an invalid argument combination must never
+	// trigger the real restore, so no task is created and no target resource
+	// changes.
+	if len(options.BridgeMap) > 0 && !s.tasks.Wait {
+		return output.RestoreResult{}, fmt.Errorf("%w: --bridge-map requires --wait", ErrInvalid)
+	}
 	if err := checkRestoreArchiveKind(kind, archive); err != nil {
 		return output.RestoreResult{}, err
 	}
@@ -120,9 +128,8 @@ func (s *RestoreService) Restore(ctx context.Context, options RestoreOptions) (o
 	result.Error = operation.Error
 	// The post-configuration only runs after a completed restore; anything
 	// else reports it as skipped rather than pretending it succeeded. A
-	// bridge map on an unwaited restore is refused instead of skipped: the
-	// operator asked for a configuration change that cannot be applied to
-	// a task still running.
+	// bridge map without --wait never reaches this point: the combination is
+	// rejected before the submission, so the mapping cannot silently lapse.
 	result.PostConfigStatus = "skipped"
 	if len(submitted.BridgeMap) > 0 && err == nil && operation.Status == "succeeded" {
 		if mapErr := s.applyBridgeMap(ctx, submitted); mapErr != nil {
@@ -135,10 +142,6 @@ func (s *RestoreService) Restore(ctx context.Context, options RestoreOptions) (o
 			return result, mapErr
 		}
 		result.PostConfigStatus = "succeeded"
-	} else if len(submitted.BridgeMap) > 0 && err == nil && operation.Status == "submitted" {
-		detail := "--bridge-map was NOT applied: the restore task is still running; repeat the command with --wait (a free VMID is required) or apply the mapping manually after the restore completes"
-		result.Error = detail
-		return result, fmt.Errorf("%w: %s", ErrInvalid, detail)
 	}
 	return result, err
 }

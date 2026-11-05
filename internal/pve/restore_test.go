@@ -423,9 +423,11 @@ func TestRestoreBridgeMapSubmitsWithDigest(t *testing.T) {
 	}
 }
 
-// P1-2: --bridge-map without --wait must not silently skip the mapping:
-// the submitted restore task keeps its UPID, but the command fails and
-// explains that the mapping was not applied.
+// P1-1: --bridge-map without --wait is an invalid argument combination and
+// must be rejected before the restore is submitted: backend.Restore is never
+// called, no task/UPID exists, and the target resource is untouched. The
+// caller sees a plain argument error (exit code 2) instead of a submitted
+// restore hiding behind a non-zero exit.
 func TestRestoreBridgeMapRequiresWait(t *testing.T) {
 	backend := bridgeMapBackendOf("digest-1", "name=eth0,bridge=vmbr2,firewall=1")
 	svc := NewRestoreService(backend, TaskRunner{Wait: false})
@@ -438,10 +440,16 @@ func TestRestoreBridgeMapRequiresWait(t *testing.T) {
 	if err == nil {
 		t.Fatal("a bridge map without --wait must fail the command")
 	}
-	if result.Task != "UPID:pve1:restore" {
-		t.Fatalf("task = %q, want the preserved restore UPID", result.Task)
+	if !errors.Is(err, ErrInvalid) {
+		t.Fatalf("err = %v, want ErrInvalid (exit code 2)", err)
 	}
-	if result.PostConfigStatus == "succeeded" {
-		t.Fatalf("post_config_status = %q, the mapping was never applied", result.PostConfigStatus)
+	if backend.restoreOptions != nil {
+		t.Fatal("restore must never be submitted for a rejected argument combination")
+	}
+	if result.Task != "" {
+		t.Fatalf("task = %q, want no UPID: nothing was submitted", result.Task)
+	}
+	if result.Status != "" {
+		t.Fatalf("status = %q, want empty: the operation never started", result.Status)
 	}
 }

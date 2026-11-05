@@ -35,6 +35,11 @@ func guestRestoreCommand(kind string, deps Dependencies) *cli.Command {
 			if err != nil {
 				return fmt.Errorf("%w: --bridge-map: %v", pve.ErrInvalid, err)
 			}
+			// Fail fast on the rejected argument combination before any
+			// runtime is built: no connection, no submission, no task.
+			if len(bridgeMap) > 0 && !c.Bool("wait") {
+				return fmt.Errorf("%w: --bridge-map requires --wait", pve.ErrInvalid)
+			}
 
 			rt, err := buildRuntime(c, deps)
 			if err != nil {

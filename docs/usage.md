@@ -122,8 +122,9 @@ write submits under the configuration digest so a concurrent change is
 rejected instead of overwritten, and the applied state is verified by
 reading the configuration back — only every mapped device reporting its
 target bridge counts as applied. `--bridge-map` without `--wait` is
-refused: the restore task keeps running, but the command fails and says
-the mapping was not applied. The
+refused before the restore is submitted: the command fails with exit
+code 2, no restore task is created, and the target resource is
+untouched. The
 structured result separates the two outcomes: `restore_status` reports the
 archive restore task itself, `post_config_status` reports the bridge
 rewrite (`succeeded`/`failed`/`skipped`), and the overall `status` reads
