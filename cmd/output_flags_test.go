@@ -15,6 +15,7 @@ import (
 // command gains or loses structured output.
 var structuredOutputCommands = map[string]bool{
 	"backup restore-plan":      true,
+	"backup delete":            true,
 	"backup audit":             true,
 	"vm cloud-init set":        true,
 	"vm cloud-init regenerate": true,

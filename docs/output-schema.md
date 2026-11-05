@@ -41,6 +41,20 @@ The following reference is generated from the actual output structs.
 
 <!-- GENERATED_REFERENCE -->
 
+## BackupDeleteResult
+
+| Field | Go / wire value type | May be omitted |
+|---|---|---|
+| `resource` | `string` | no |
+| `vmid` | `int` | yes |
+| `node` | `string` | yes |
+| `task` | `string` | yes |
+| `status` | `string` | no |
+| `error` | `string` | yes |
+| `verified` | `*bool` | yes |
+| `api_error` | `string` | yes |
+| `archive` | `string` | no |
+
 ## BackupAuditReport
 
 | Field | Go / wire value type | May be omitted |

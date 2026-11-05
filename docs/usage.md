@@ -590,6 +590,30 @@ configuration also returns nonzero. Unknown disk sizes or unavailable target
 inventory remain visible as unknown checks. A warning report does not prove that
 the guest will boot or that its applications and external data can recover.
 
+### Delete an exact backup archive
+
+```bash
+pve --profile source backup delete local:backup/vzdump-lxc-900-example.tar.zst --node source-node --dry-run
+pve --profile source --wait backup delete local:backup/vzdump-lxc-900-example.tar.zst --node source-node
+```
+
+Deletion is permanent. The command requires confirmation with the complete volume
+ID, or explicit `--yes`. It refuses protected archives, filesystem paths, patterns,
+sidecar files, and PBS snapshots. It checks archive size, creation time, kind, and
+VMID again after confirmation. PVE still enforces protection at deletion time.
+
+The command sends one API deletion request. With an asynchronous response, use
+`--wait` to check completion and archive absence. A synchronous response also
+requires an absence check. Failed or unavailable verification reports `unknown`
+and returns nonzero. Submitted tasks retain their UPID. No mutation is retried.
+`--dry-run` reads metadata without confirmation or deletion.
+
+For disposable tests, record the exact guest IDs and archive volume IDs. Delete
+guests with the existing explicit guest commands. Delete recorded archives with
+this command. It does not infer test ownership, prune by age, or remove arbitrary
+SSH files, transfer remnants, or shared storage volumes. PVE handles archive
+removal; the CLI verifies archive inventory, not independent sidecar paths.
+
 <!-- GENERATED_REFERENCE -->
 
 ## Global flags
@@ -1962,6 +1986,23 @@ pve backup audit
 | `--all-profiles` | --all-profiles query all configured profiles (read-only) (default: false) |
 | `--profiles` | --profiles value [ --profiles value ] profile names, comma-separated or repeatable |
 | `--workers` | --workers value parallel profile queries (1-8) (default: 4) |
+
+### `pve backup delete`
+
+Delete one exact unprotected vzdump archive
+
+```text
+pve backup delete ARCHIVE
+```
+
+| Flag | Description and default |
+|---|---|
+| `--node` | --node value **Required.** |
+| `--yes` | --yes skip archive confirmation (default: false) |
+| `--wait` | --wait wait for asynchronous deletion and verify absence (default: false) |
+| `--wait-timeout` | --wait-timeout value task wait timeout (default: 0s) |
+| `--dry-run` | --dry-run inspect without deleting or prompting (default: false) |
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
 
 ### `pve backup restore-plan`
 
