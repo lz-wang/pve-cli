@@ -173,8 +173,8 @@ func TestBackupServiceBackupGuestTaskFailure(t *testing.T) {
 func TestBackupServiceSubmissionFailureKeepsUnknown(t *testing.T) {
 	task := &fakeTask{upid: "UPID:pve1:backup"}
 	backend := &fakeBackend{
-		vms: map[string]map[int]*fakeGuest{"pve1": {100: {row: output.GuestRow{Kind: "vm", VMID: 100, Node: "pve1"}}}},
-		backupTask: task,
+		vms:             map[string]map[int]*fakeGuest{"pve1": {100: {row: output.GuestRow{Kind: "vm", VMID: 100, Node: "pve1"}}}},
+		backupTask:      task,
 		backupSubmitErr: &APIError{HTTPStatus: 500, Category: CategoryUnavailable, Message: "internal error", kind: ErrUnavailable},
 	}
 	svc := NewBackupService(backend, TaskRunner{Wait: true})
@@ -208,8 +208,8 @@ func TestBackupServiceSubmissionFailureKeepsUnknown(t *testing.T) {
 // refused the request before the backup started, so a rerun is safe.
 func TestBackupServiceSubmissionRejectionReportsFailed(t *testing.T) {
 	backend := &fakeBackend{
-		vms:        map[string]map[int]*fakeGuest{"pve1": {100: {row: output.GuestRow{Kind: "vm", VMID: 100, Node: "pve1"}}}},
-		backupTask: &fakeTask{upid: "UPID:pve1:backup"},
+		vms:             map[string]map[int]*fakeGuest{"pve1": {100: {row: output.GuestRow{Kind: "vm", VMID: 100, Node: "pve1"}}}},
+		backupTask:      &fakeTask{upid: "UPID:pve1:backup"},
 		backupSubmitErr: &APIError{HTTPStatus: 400, Category: CategoryInvalid, Message: "bad storage", kind: ErrInvalid},
 	}
 	svc := NewBackupService(backend, TaskRunner{Wait: true})

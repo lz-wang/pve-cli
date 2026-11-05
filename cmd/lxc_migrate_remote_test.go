@@ -220,7 +220,8 @@ func TestLXCMigrateRemoteHTTP500JSONUnknownWithExitFive(t *testing.T) {
 }
 
 // A failing preflight aborts before any mutation.
-func TestLXCMigrateRemoteAbortsOnFailedPreflight(t *testing.T) {	backend := migrationPlanBackends()
+func TestLXCMigrateRemoteAbortsOnFailedPreflight(t *testing.T) {
+	backend := migrationPlanBackends()
 	backend.target.networkRows = map[string][]output.NetworkRow{} // bridge missing
 	guest := &commandGuest{row: backend.source.lxcGuests["n150"][101].row}
 	backend.source.lxcGuests["n150"][101] = guest
