@@ -92,3 +92,17 @@ func TestBackupAuditFutureTimeAndMissingSelection(t *testing.T) {
 		t.Fatalf("%+v", r)
 	}
 }
+
+func TestBackupAuditPBSDoesNotReportMissing(t *testing.T) {
+	b := newAuditBackend()
+	b.storageRows["n"][0].Type = "pbs"
+	r, err := AuditBackups(context.Background(), b, BackupAuditOptions{MaxAge: time.Hour})
+	if err != nil || r.Complete || len(r.Errors) == 0 {
+		t.Fatalf("%+v %v", r, err)
+	}
+	for _, row := range r.Rows {
+		if row.Status != "unknown" {
+			t.Fatalf("unsupported PBS reported as %s", row.Status)
+		}
+	}
+}

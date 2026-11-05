@@ -60,6 +60,13 @@ func AuditBackups(ctx context.Context, b BackupAuditBackend, o BackupAuditOption
 			if !contentIncludes(store.Content, "backup") {
 				continue
 			}
+			// The archive reader recognizes vzdump filenames, not PBS snapshot IDs.
+			// An unsupported inventory cannot prove that a guest has no backup.
+			if store.Type == "pbs" {
+				inventoryComplete = false
+				issue(fmt.Errorf("%s/%s PBS snapshot coverage is not supported", node.Name, store.Storage))
+				continue
+			}
 			if !store.Active || !store.Enabled {
 				inventoryComplete = false
 				issue(fmt.Errorf("%s/%s backup storage unavailable", node.Name, store.Storage))

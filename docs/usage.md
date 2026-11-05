@@ -564,6 +564,9 @@ unknown timestamps and configuration exclusions.
 A strict success only confirms these checks, not complete recovery.
 Multi-profile output uses the same envelope as other read-only queries.
 
+PBS snapshot coverage is not supported by `backup audit`. When a node has PBS backup storage,
+the audit reports unknown coverage and an incomplete result instead of missing backups.
+
 ### Plan a cross-host restore before transfer
 
 ```bash

@@ -10,6 +10,7 @@ See [usage](docs/usage.md) for every command, flag, default and argument, and
   support multiple profiles with bounded concurrency and explicit partial results.
 - `backup audit` reports missing or stale archive candidates and excluded disks,
   host paths, or devices. Identity, off-host copies, and restore evidence remain unknown.
+  PBS snapshot coverage is unsupported and produces an incomplete result.
 - `backup restore-plan` reads archive configuration before transfer. It checks
   declared disk capacity, storage placement, bridges, and external dependencies.
   Capacity uses exact arithmetic. Unreadable inventories cause a nonzero exit.
