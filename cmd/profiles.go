@@ -204,6 +204,11 @@ func renderProfileData(w io.Writer, path string, data any) error {
 		if err = json.Unmarshal(b, &v); err == nil {
 			return output.WriteStorageUsageRows(w, "table", v)
 		}
+	case "backup audit":
+		var v output.BackupAuditReport
+		if err = json.Unmarshal(b, &v); err == nil {
+			return output.WriteBackupAudit(w, "table", v)
+		}
 	case "task ls":
 		var v []output.TaskRow
 		if err = json.Unmarshal(b, &v); err == nil {

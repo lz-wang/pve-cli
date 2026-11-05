@@ -6,6 +6,8 @@ See [usage](docs/usage.md) for every command, flag, default and argument, and
 
 - Read-only status, checks, guest lists, storage usage and tasks support multiple profiles with bounded concurrency and explicit partial results.
 
+- Backup audits inspect all selected guests for missing/stale archive candidates and excluded disks, host paths or devices. Identity, off-host copies and restore evidence remain explicit unknowns.
+
 ## CLI and profiles
 
 - `pve` executable; `github.com/lz-wang/pve-cli/v3` Go module; urfave/cli/v2.

@@ -542,6 +542,28 @@ pve guest ls --profiles primary,secondary --type lxc -o json
 pve check --all-profiles --strict
 ```
 
+## Backup coverage audit
+
+`pve backup audit --all-profiles --max-age 168h -o json` inspects
+all guests except templates. Select guests with `--vmid`, `--type`,
+`--node` or `--tag`. Use `--include-templates` to include templates.
+The audit only reads PVE data. It does not create backups or change tags.
+
+Archive status is `missing`, `stale`, `recent_candidate` or `unknown`.
+Unavailable inventory cannot prove a missing backup.
+Association uses guest kind and VMID within the selected profile and node.
+This is candidate evidence, not proof of archive identity or application consistency.
+Current configuration findings identify excluded disks, bind mounts and external devices.
+They do not describe the historical configuration inside an archive.
+Off-host copies and restore-test evidence remain `unknown`.
+The command never associates archives across profiles by VMID alone.
+
+Incomplete queries return nonzero and preserve observed rows.
+`--strict` also fails for empty selections, missing/stale archives,
+unknown timestamps and configuration exclusions.
+A strict success only confirms these checks, not complete recovery.
+Multi-profile output uses the same envelope as other read-only queries.
+
 <!-- GENERATED_REFERENCE -->
 
 ## Global flags
@@ -1892,6 +1914,28 @@ pve backup ls
 | `--type` | --type value backup type: all,vm,lxc (default: "all") |
 | `--latest` | --latest show only latest backup per guest (default: false) |
 | `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+
+### `pve backup audit`
+
+Audit guest backup freshness and current configuration exclusions (read-only)
+
+```text
+pve backup audit
+```
+
+| Flag | Description and default |
+|---|---|
+| `--node` | --node value |
+| `--type` | --type value all,vm,lxc (default: "all") |
+| `--vmid` | --vmid value [ --vmid value ] selected guest IDs, repeatable |
+| `--tag` | --tag value [ --tag value ] require all selected tags |
+| `--include-templates` | --include-templates include guest templates (default: false) |
+| `--max-age` | --max-age value maximum archive age (default: 168h0m0s) |
+| `--strict` | --strict exit nonzero unless selected guests have recent archives without configuration exclusions (default: false) |
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
+| `--all-profiles` | --all-profiles query all configured profiles (read-only) (default: false) |
+| `--profiles` | --profiles value [ --profiles value ] profile names, comma-separated or repeatable |
+| `--workers` | --workers value parallel profile queries (1-8) (default: 4) |
 
 ### `pve backup copy`
 

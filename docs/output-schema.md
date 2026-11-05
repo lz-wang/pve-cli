@@ -41,6 +41,30 @@ The following reference is generated from the actual output structs.
 
 <!-- GENERATED_REFERENCE -->
 
+## BackupAuditReport
+
+| Field | Go / wire value type | May be omitted |
+|---|---|---|
+| `complete` | `bool` | no |
+| `rows` | `[]output.BackupAuditRow` | no |
+| `errors` | `[]string` | no |
+
+## BackupAuditRow
+
+| Field | Go / wire value type | May be omitted |
+|---|---|---|
+| `node` | `string` | no |
+| `kind` | `string` | no |
+| `vmid` | `uint64` | no |
+| `name` | `string` | no |
+| `status` | `string` | no |
+| `latest_ctime` | `uint64` | yes |
+| `archives` | `[]output.BackupRow` | no |
+| `association` | `string` | no |
+| `off_host_copy` | `string` | no |
+| `restore_verified` | `string` | no |
+| `findings` | `[]string` | no |
+
 ## ProfileReport
 
 | Field | Go / wire value type | May be omitted |

@@ -13,6 +13,7 @@ func newBackupCommand(deps Dependencies) *cli.Command {
 		Usage: "List and copy backup files",
 		Subcommands: []*cli.Command{
 			backupListCommand(deps),
+			backupAuditCommand(deps),
 			backupCopyCommand(deps),
 			backupCopyRestoreCommand(deps),
 		},
