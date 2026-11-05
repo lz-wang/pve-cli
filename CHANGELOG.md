@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+### Added
+
+- Read-only multi-profile queries for status, checks, guests, storage usage,
+  tasks, and backup audits. Bounded workers preserve profile-specific results
+  and report partial failures.
+- `backup audit` reports archive freshness, missing backups, and current guest
+  configuration exclusions. Archive identity and recovery evidence remain unverified.
+- `backup restore-plan` reads source archive configuration before transfer.
+  It checks destination IDs, declared disk capacity, storage content types,
+  bridge mappings, and external dependencies. Per-disk placement is planning only.
+- `backup delete` removes one exact unprotected vzdump archive after confirmation
+  and a metadata recheck. Successful completion requires archive absence verification.
+- `config ssh set/clear` updates SSH settings without replacing API credentials.
+  `doctor --ssh` checks node binding, strict host-key connectivity, and required
+  commands through read-only probes.
+
 ## v3.1.0 - 2026-11-06
 
 ### Added

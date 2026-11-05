@@ -614,6 +614,35 @@ this command. It does not infer test ownership, prune by age, or remove arbitrar
 SSH files, transfer remnants, or shared storage volumes. PVE handles archive
 removal; the CLI verifies archive inventory, not independent sidecar paths.
 
+### Configure SSH and check host capabilities
+
+```bash
+pve config ssh set lab --host pve.example --node pve-node --user root --port 22
+pve config ssh set lab --identity-file ~/.ssh/id_ed25519 --known-hosts ~/.ssh/known_hosts
+pve config show lab
+pve --profile lab doctor --ssh
+pve config ssh clear lab
+```
+
+`config ssh set NAME` changes only specified SSH fields on an existing profile.
+It preserves API credentials, other profiles, and the selected profile. The first
+update requires an explicit host and node binding. Empty identity-file or
+known-hosts values remove that override. `config ssh clear NAME` removes only the
+local SSH section. Neither command creates keys, connects to PVE, or modifies
+remote authorization. Configuration files retain private permissions.
+
+`doctor --ssh` adds SSH diagnostics to the API checks. It checks configured file
+paths, API node membership, remote hostname, remote user ID, and required commands.
+The probes check tools for backup transfer and container host operations. Tool
+presence does not prove storage write permissions or operation success.
+
+Doctor uses strict host-key checking and does not add hosts to known_hosts.
+Establish trusted host keys separately before this check. Remote stdout, stderr,
+and private key contents are not included in the diagnostic report. A wrong node
+binding prevents capability probes. Missing tools or failed SSH checks return
+nonzero after the structured report. `--offline --ssh` skips SSH connections.
+Without `--ssh`, doctor retains its existing API and local configuration checks.
+
 <!-- GENERATED_REFERENCE -->
 
 ## Global flags
@@ -2178,6 +2207,31 @@ Select the current profile
 pve config use NAME
 ```
 
+### `pve config ssh set`
+
+Set or update SSH fields on an existing profile
+
+```text
+pve config ssh set NAME
+```
+
+| Flag | Description and default |
+|---|---|
+| `--host` | --host value SSH hostname or address |
+| `--node` | --node value PVE node served by this SSH host |
+| `--user` | --user value SSH user (default: root) |
+| `--port` | --port value SSH port (default: 22) (default: 0) |
+| `--identity-file` | --identity-file value existing private key path; empty clears the override |
+| `--known-hosts` | --known-hosts value known_hosts path; empty uses OpenSSH defaults |
+
+### `pve config ssh clear`
+
+Remove the local SSH section from an existing profile
+
+```text
+pve config ssh clear NAME
+```
+
 ### `pve doctor`
 
 Diagnose pve config and Proxmox API connectivity
@@ -2188,6 +2242,7 @@ pve doctor
 
 | Flag | Description and default |
 |---|---|
+| `--ssh` | --ssh run read-only SSH node and tool probes with strict host-key checking (default: false) |
 | `--offline` | --offline check local config only without connecting to Proxmox VE (default: false) |
 | `--node` | --node value verify that a node exists during online checks |
 | `--output`, `-o` | --output value, -o value output format: table,json,yaml |

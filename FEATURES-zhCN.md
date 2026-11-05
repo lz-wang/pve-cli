@@ -1,5 +1,7 @@
 # pve v3 功能清单
 
+- `config ssh set/clear` 独立维护 SSH 配置；`doctor --ssh` 只读检查节点绑定、连通性及所需主机工具。
+
 - `backup delete` 精确删除单个未受保护的 vzdump 归档，提供预览、确认、元数据复查与删除后验证。
 
 - `backup restore-plan` 在跨主机传输前读取归档配置，检查声明磁盘容量、存储映射、网桥及外部依赖；逐磁盘映射仅用于规划。

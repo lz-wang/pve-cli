@@ -15,6 +15,7 @@ func newDoctorCommand(deps Dependencies) *cli.Command {
 		Usage: "Diagnose pve config and Proxmox API connectivity",
 		Flags: append(
 			[]cli.Flag{
+				&cli.BoolFlag{Name: "ssh", Usage: "run read-only SSH node and tool probes with strict host-key checking"},
 				&cli.BoolFlag{Name: "offline", Usage: "check local config only without connecting to Proxmox VE"},
 				&cli.StringFlag{Name: "node", Usage: "verify that a node exists during online checks"},
 			},
@@ -34,10 +35,11 @@ func newDoctorCommand(deps Dependencies) *cli.Command {
 				}
 			}
 
-			result := pve.NewDoctorService(deps.BackendFactory).Run(c.Context, pve.DoctorOptions{
+			result := pve.NewDoctorService(deps.BackendFactory).WithSSH(deps.SSHRunnerFactory).Run(c.Context, pve.DoctorOptions{
 				ConfigPath:  c.String("config"),
 				ProfileName: c.String("profile"),
 				Offline:     c.Bool("offline"),
+				SSH:         c.Bool("ssh"),
 				Node:        c.String("node"),
 				Timeout:     durationFlag(c, "api-timeout"),
 				Insecure:    boolFlag(c, "insecure"),

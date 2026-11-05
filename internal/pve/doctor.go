@@ -11,12 +11,14 @@ import (
 
 	"github.com/lz-wang/pve-cli/v3/internal/config"
 	"github.com/lz-wang/pve-cli/v3/internal/output"
+	"github.com/lz-wang/pve-cli/v3/internal/ssh"
 )
 
 type DoctorOptions struct {
 	ConfigPath  string
 	ProfileName string
 	Offline     bool
+	SSH         bool
 	Node        string
 	Timeout     time.Duration
 	Insecure    bool
@@ -31,7 +33,8 @@ type DoctorResult struct {
 }
 
 type DoctorService struct {
-	backendFactory func(config.Profile, ClientOptions) (Backend, error)
+	sshRunnerFactory func(ssh.Profile) CommandRunner
+	backendFactory   func(config.Profile, ClientOptions) (Backend, error)
 }
 
 func NewDoctorService(backendFactory func(config.Profile, ClientOptions) (Backend, error)) *DoctorService {
@@ -41,8 +44,8 @@ func NewDoctorService(backendFactory func(config.Profile, ClientOptions) (Backen
 	return &DoctorService{backendFactory: backendFactory}
 }
 
-func (s *DoctorService) Run(ctx context.Context, options DoctorOptions) DoctorResult {
-	result := DoctorResult{Format: output.FormatTable}
+func (s *DoctorService) Run(ctx context.Context, options DoctorOptions) (result DoctorResult) {
+	result = DoctorResult{Format: output.FormatTable}
 	if options.OutputSet {
 		result.Format = output.NormalizeFormat(options.Output)
 	}
@@ -92,6 +95,9 @@ func (s *DoctorService) Run(ctx context.Context, options DoctorOptions) DoctorRe
 		return result
 	}
 	result.add("CURRENT_PROFILE", output.DoctorStatusOK, profileName)
+	var nodes []output.NodeRow
+	nodesKnown := false
+	defer func() { result.checkSSH(ctx, profile.SSH, options, nodes, nodesKnown, s.sshRunnerFactory) }()
 
 	fieldsOK := result.checkProfileFields(profile)
 	tokenSecret, tokenOK := result.checkTokenSecret(profile)
@@ -125,7 +131,7 @@ func (s *DoctorService) Run(ctx context.Context, options DoctorOptions) DoctorRe
 		return result
 	}
 
-	nodes, err := backend.Nodes(ctx)
+	nodes, err = backend.Nodes(ctx)
 	if err != nil {
 		result.add("API_CONNECTIVITY", output.DoctorStatusFail, "list nodes: "+strings.ReplaceAll(err.Error(), tokenSecret, "[REDACTED]"))
 		result.add("NODES", output.DoctorStatusSkip, "skipped due to API_CONNECTIVITY failure")
@@ -133,6 +139,7 @@ func (s *DoctorService) Run(ctx context.Context, options DoctorOptions) DoctorRe
 		return result
 	}
 
+	nodesKnown = true
 	result.add("API_CONNECTIVITY", output.DoctorStatusOK, "connected")
 	result.add("NODES", output.DoctorStatusOK, fmt.Sprintf("%d node(s)", len(nodes)))
 	result.checkNode(options.Node, nodes)

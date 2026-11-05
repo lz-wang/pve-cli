@@ -26,6 +26,7 @@ func newConfigCommand(deps Dependencies) *cli.Command {
 			newConfigAddCommand(deps),
 			newConfigSetCommand(deps),
 			newConfigUseCommand(),
+			newConfigSSHCommand(),
 		},
 	}
 }
@@ -108,6 +109,9 @@ func newConfigShowCommand(deps Dependencies) *cli.Command {
 				}
 				if profile.SSH != nil {
 					row.SSHHost = profile.SSH.Host
+					row.SSHNode = profile.SSH.Node
+					row.SSHPort = profile.SSH.Port
+					row.SSHKnownHosts = profile.SSH.KnownHosts
 					row.SSHUser = profile.SSH.User
 					row.SSHIdentityFile = profile.SSH.IdentityFile
 				}

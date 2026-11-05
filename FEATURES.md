@@ -1,5 +1,7 @@
 # pve v3 features
 
+- `config ssh set/clear` updates SSH settings independently. `doctor --ssh` checks node binding, connectivity, and required host tools without remote mutations.
+
 - `backup delete` removes one exact unprotected vzdump archive with preview, confirmation, metadata recheck, and absence verification.
 
 - `backup restore-plan` reads archive configuration before cross-host transfer and checks declared disk capacity, placement, bridges, and external dependencies. Per-disk placement is planning only.

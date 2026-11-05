@@ -20,6 +20,9 @@ type ConfigProfileRow struct {
 	Timeout            string
 	DefaultOutput      string
 	SSHHost            string
+	SSHNode            string
+	SSHPort            int
+	SSHKnownHosts      string
 	SSHUser            string
 	SSHIdentityFile    string
 }
@@ -67,8 +70,14 @@ func WriteConfigProfiles(w io.Writer, rows []ConfigProfileRow) error {
 			{"Default output", row.DefaultOutput},
 		}
 		if row.SSHHost != "" {
+			if row.SSHPort == 0 {
+				row.SSHPort = 22
+			}
 			fields = append(fields,
 				[2]string{"SSH host", row.SSHHost},
+				[2]string{"SSH node", row.SSHNode},
+				[2]string{"SSH port", fmt.Sprint(row.SSHPort)},
+				[2]string{"SSH known hosts", row.SSHKnownHosts},
 				[2]string{"SSH user", row.SSHUser},
 				[2]string{"SSH identity file", row.SSHIdentityFile},
 			)
