@@ -94,3 +94,20 @@ func TestArchiveConfigHTTPAndParser(t *testing.T) {
 		}
 	}
 }
+
+func TestArchiveDiskSizeExactArithmetic(t *testing.T) {
+	for _, tc := range []struct {
+		raw  string
+		want uint64
+		ok   bool
+	}{
+		{"0.1G", 107374183, true}, {"9007199254740993", 9007199254740993, true},
+		{"18446744073709551615", 18446744073709551615, true}, {"18446744073709551616", 0, false},
+		{"16777216T", 0, false},
+	} {
+		got, ok := safeArchiveDiskSize("size=" + tc.raw)
+		if ok != tc.ok || got != tc.want {
+			t.Fatalf("%s: got %d %t", tc.raw, got, ok)
+		}
+	}
+}

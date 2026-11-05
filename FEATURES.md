@@ -1,18 +1,23 @@
 # pve v3 features
 
-- `config ssh set/clear` updates SSH settings independently. `doctor --ssh` checks node binding, connectivity, and required host tools without remote mutations.
-
-- `backup delete` removes one exact unprotected vzdump archive with preview, confirmation, metadata recheck, and absence verification.
-
-- `backup restore-plan` reads archive configuration before cross-host transfer and checks declared disk capacity, placement, bridges, and external dependencies. Per-disk placement is planning only.
-
 A resource-oriented, single-binary Proxmox VE CLI for a personal HomeLab.
 See [usage](docs/usage.md) for every command, flag, default and argument, and
 [output schema](docs/output-schema.md) for the JSON/YAML contract.
 
-- Read-only status, checks, guest lists, storage usage and tasks support multiple profiles with bounded concurrency and explicit partial results.
+## Independent HomeLab hosts
 
-- Backup audits inspect all selected guests for missing/stale archive candidates and excluded disks, host paths or devices. Identity, off-host copies and restore evidence remain explicit unknowns.
+- Read-only status, checks, guest lists, storage usage, tasks, and backup audits
+  support multiple profiles with bounded concurrency and explicit partial results.
+- `backup audit` reports missing or stale archive candidates and excluded disks,
+  host paths, or devices. Identity, off-host copies, and restore evidence remain unknown.
+- `backup restore-plan` reads archive configuration before transfer. It checks
+  declared disk capacity, storage placement, bridges, and external dependencies.
+  Capacity uses exact arithmetic. Unreadable inventories cause a nonzero exit.
+  Per-disk placement is planning only.
+- `backup delete` removes one exact unprotected vzdump archive. It provides
+  preview, confirmation, a metadata recheck, and absence verification.
+- `config ssh set/clear` updates SSH settings independently. `doctor --ssh` checks
+  node binding, connectivity, and required host tools without remote mutations.
 
 ## CLI and profiles
 

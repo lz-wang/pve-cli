@@ -586,8 +586,8 @@ EFI, TPM, and onboot settings require target compatibility checks. MAC addresses
 IP addresses, and application identity can conflict after a restore.
 
 Failed checks return a nonzero exit status after the report. An unreadable archive
-configuration also returns nonzero. Unknown disk sizes or unavailable target
-inventory remain visible as unknown checks. A warning report does not prove that
+configuration or unavailable target storage/network inventory also returns nonzero.
+Unknown disk sizes remain visible as unknown checks. A warning report does not prove that
 the guest will boot or that its applications and external data can recover.
 
 ### Delete an exact backup archive

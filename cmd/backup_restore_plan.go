@@ -57,8 +57,8 @@ func backupRestorePlanCommand(deps Dependencies) *cli.Command {
 			return fmt.Errorf("%w: restore plan contains failed checks", pve.ErrConflict)
 		}
 		for _, r := range plan.Checks {
-			if r.Check == "archive_config" && r.Status == "unknown" {
-				return fmt.Errorf("restore plan could not read archive configuration")
+			if (r.Check == "archive_config" || r.Check == "storage" || r.Check == "network") && r.Status == "unknown" {
+				return fmt.Errorf("restore plan inventory incomplete: %s", r.Check)
 			}
 		}
 		return nil

@@ -2,14 +2,17 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"github.com/lz-wang/pve-cli/v3/internal/config"
 	"github.com/lz-wang/pve-cli/v3/internal/output"
 	"github.com/lz-wang/pve-cli/v3/internal/pve"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 func TestProfileQueriesPreservePartialResults(t *testing.T) {
@@ -74,5 +77,88 @@ func TestProfileQueriesRespectFiltersAndDeduplicate(t *testing.T) {
 	}})
 	if err != nil || calls.Load() != 1 || strings.Contains(out.String(), "drop") || !strings.Contains(out.String(), "keep") {
 		t.Fatalf("%v %d %s", err, calls.Load(), out.String())
+	}
+}
+
+func TestProfileQueriesWorkerLimit(t *testing.T) {
+	for _, workers := range []int{1, 2} {
+		t.Run(strconv.Itoa(workers), func(t *testing.T) {
+			var active, maxActive atomic.Int32
+			entered := make(chan struct{}, 2)
+			release := make(chan struct{})
+			done := make(chan error, 1)
+			var out bytes.Buffer
+			deps := Dependencies{Stdout: &out, Stderr: &bytes.Buffer{}, BackendFactory: func(config.Profile, pve.ClientOptions) (pve.Backend, error) {
+				now := active.Add(1)
+				for old := maxActive.Load(); now > old; old = maxActive.Load() {
+					if maxActive.CompareAndSwap(old, now) {
+						break
+					}
+				}
+				entered <- struct{}{}
+				<-release
+				active.Add(-1)
+				return &commandBackend{nodes: []output.NodeRow{{Name: "n"}}}, nil
+			}}
+			args := []string{"pve", "--config", writeTwoProfileConfig(t), "guest", "ls", "--all-profiles", "--workers", strconv.Itoa(workers), "-o", "json"}
+			go func() { done <- RunWithDependencies(args, "test", deps) }()
+			for i := 0; i < workers; i++ {
+				select {
+				case <-entered:
+				case <-time.After(5 * time.Second):
+					close(release)
+					t.Fatal("workers did not start")
+				}
+			}
+			close(release)
+			select {
+			case err := <-done:
+				if err != nil {
+					t.Fatal(err)
+				}
+			case <-time.After(5 * time.Second):
+				t.Fatal("workers did not finish")
+			}
+			if maxActive.Load() != int32(workers) {
+				t.Fatalf("max active %d, workers %d", maxActive.Load(), workers)
+			}
+		})
+	}
+}
+func TestProfileQueriesCancellation(t *testing.T) {
+	var out bytes.Buffer
+	app := NewAppWithDependencies("test", Dependencies{Stdout: &out, Stderr: &bytes.Buffer{}, BackendFactory: func(config.Profile, pve.ClientOptions) (pve.Backend, error) {
+		t.Fatal("cancelled query connected")
+		return nil, nil
+	}})
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	err := app.RunContext(ctx, []string{"pve", "--config", writeTwoProfileConfig(t), "guest", "ls", "--all-profiles", "-o", "json"})
+	var r output.ProfileReport
+	if err == nil || json.Unmarshal(out.Bytes(), &r) != nil || r.Complete || len(r.Results) != 2 {
+		t.Fatalf("%v %s", err, out.String())
+	}
+	for _, row := range r.Results {
+		if row.Complete || !strings.Contains(row.Error, "canceled") {
+			t.Fatalf("%+v", row)
+		}
+	}
+}
+func TestProfileQueriesDoNotHideNodeFailures(t *testing.T) {
+	for _, command := range [][]string{{"storage", "usage"}, {"task", "ls"}} {
+		var out bytes.Buffer
+		b := &commandBackend{nodes: []output.NodeRow{{Name: "good"}, {Name: "bad"}}, storageErrs: map[string]error{"bad": errors.New("storage denied")}, taskErrs: map[string]error{"bad": errors.New("task denied")}}
+		args := append([]string{"pve", "--config", writeTwoProfileConfig(t)}, command...)
+		args = append(args, "--all-profiles", "-o", "json")
+		err := RunWithDependencies(args, "test", Dependencies{Stdout: &out, Stderr: &bytes.Buffer{}, BackendFactory: func(config.Profile, pve.ClientOptions) (pve.Backend, error) { return b, nil }})
+		var r output.ProfileReport
+		if err == nil || json.Unmarshal(out.Bytes(), &r) != nil || r.Complete {
+			t.Fatalf("%v %s", err, out.String())
+		}
+		for _, row := range r.Results {
+			if row.Complete || !strings.Contains(row.Error, "denied") {
+				t.Fatalf("%+v", row)
+			}
+		}
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"math/big"
 	"net/url"
 	"regexp"
 	"sort"
@@ -204,7 +205,7 @@ func planArchiveDisks(ctx context.Context, b StorageBackend, o ArchivePlanOption
 		totals[target] += size
 		add("disk."+key, "ok", fmt.Sprintf("target %s; declared virtual size %d bytes", target, size))
 	}
-	for key := range o.DiskStorage {
+	for _, key := range sortedMappingKeys(o.DiskStorage) {
 		if !seen[key] {
 			add("disk_map."+key, "fail", "mapping does not select a backed-up disk")
 		}
@@ -230,17 +231,34 @@ func planArchiveDisks(ctx context.Context, b StorageBackend, o ArchivePlanOption
 		add("disk_mapping", "warning", "per-disk mapping is planning only; existing restore commands accept one destination storage")
 	}
 }
+
+var archiveSizePattern = regexp.MustCompile(`^[0-9]+(?:\.[0-9]+)?[KMGT]?$`)
+
 func safeArchiveDiskSize(value string) (uint64, bool) {
-	raw := optionAttributeValue(value, "size")
-	if !regexp.MustCompile(`^[0-9]+(?:\.[0-9]+)?[KMGT]?$`).MatchString(strings.ToUpper(raw)) {
+	raw := strings.ToUpper(optionAttributeValue(value, "size"))
+	if !archiveSizePattern.MatchString(raw) {
 		return 0, false
 	}
-	size, ok := parseSizeBytes(raw)
-	// parseSizeBytes uses float64; bound the conversion before accepting it.
-	if !ok || size == 0 || size >= math.MaxInt64 {
+	multiplier := int64(1)
+	if unit := strings.IndexByte("KMGT", raw[len(raw)-1]); unit >= 0 {
+		multiplier <<= uint(10 * (unit + 1))
+		raw = raw[:len(raw)-1]
+	}
+	size, ok := new(big.Rat).SetString(raw)
+	if !ok || size.Sign() <= 0 {
 		return 0, false
 	}
-	return size, true
+	size.Mul(size, new(big.Rat).SetInt64(multiplier))
+	// Round fractional bytes up. Never underestimate or convert overflowing floats.
+	bytes, remainder := new(big.Int), new(big.Int)
+	bytes.QuoRem(size.Num(), size.Denom(), remainder)
+	if remainder.Sign() != 0 {
+		bytes.Add(bytes, big.NewInt(1))
+	}
+	if !bytes.IsUint64() {
+		return 0, false
+	}
+	return bytes.Uint64(), true
 }
 func planArchiveNetworks(ctx context.Context, b NetworkBackend, o ArchivePlanOptions, cfg map[string]any, add func(string, string, string)) {
 	rows, err := b.Networks(ctx, o.Node, NetworkListOptions{})
@@ -279,9 +297,18 @@ func planArchiveNetworks(ctx context.Context, b NetworkBackend, o ArchivePlanOpt
 		}
 		add("network."+key, status, fmt.Sprintf("bridge %s -> %s", src, dst))
 	}
-	for src := range o.BridgeMap {
+	for _, src := range sortedMappingKeys(o.BridgeMap) {
 		if !seen[src] {
 			add("bridge_map."+src, "fail", "source bridge does not occur in the archive")
 		}
 	}
+}
+
+func sortedMappingKeys(m map[string]string) []string {
+	keys := make([]string, 0, len(m))
+	for key := range m {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
 }
