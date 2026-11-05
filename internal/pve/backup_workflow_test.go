@@ -725,3 +725,23 @@ func TestBackupCopyRestoreWorkflowReportsPartialWhenPostCheckFails(t *testing.T)
 		t.Fatalf("post-check detail = %q, want the failing check", postCheck.Detail)
 	}
 }
+
+func TestBackupCopyRestoreWorkflowSeparatesRestoreStorage(t *testing.T) {
+	for _, storage := range []string{"", "local-lvm"} {
+		t.Run("storage="+storage, func(t *testing.T) {
+			workflow, _, target, _, _ := workflowHarness(t)
+			target.storageRows["pve8845"] = append(target.storageRows["pve8845"], output.StorageRow{
+				Node: "pve8845", Storage: "local-lvm", Type: "lvmthin", Active: true, Enabled: true, Content: "rootdir", Avail: 10 << 30,
+			})
+			options := workflowOptions()
+			options.RestoreStorage = storage
+			result, err := workflow.Run(context.Background(), options)
+			if err != nil {
+				t.Fatalf("workflow: %v (%+v)", err, result)
+			}
+			if target.restoreOptions.Storage != storage || target.restoreOptions.Archive != "backup-dst:backup/vzdump-lxc-101-2026_06_06-00_00_00.tar.zst" {
+				t.Fatalf("restore options = %+v", target.restoreOptions)
+			}
+		})
+	}
+}

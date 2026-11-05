@@ -24,6 +24,7 @@ func backupCopyRestoreCommand(deps Dependencies) *cli.Command {
 			&cli.StringFlag{Name: "backup-storage", Usage: "source dir storage for the backup stage"},
 			&cli.StringFlag{Name: "archive", Usage: "existing source archive volid; skips the backup stage (resume)"},
 			&cli.StringFlag{Name: "target-storage", Usage: "target dir storage name", Required: true},
+			&cli.StringFlag{Name: "restore-storage", Usage: "target guest disk storage (default: PVE default storage)"},
 			&cli.StringFlag{Name: "target-node", Usage: "target PVE node name", Required: true},
 			&cli.IntFlag{Name: "target-vmid", Usage: "target VMID (defaults to the source VMID)"},
 			&cli.StringFlag{Name: "node", Usage: "source PVE node name (defaults to the source guest's API-resolved node)"},
@@ -103,13 +104,14 @@ func backupCopyRestoreCommand(deps Dependencies) *cli.Command {
 			)
 
 			result, err := workflow.Run(c.Context, pve.BackupCopyRestoreOptions{
-				VMID:          vmid,
-				BackupStorage: c.String("backup-storage"),
-				Archive:       c.String("archive"),
-				TargetStorage: c.String("target-storage"),
-				TargetNode:    c.String("target-node"),
-				TargetVMID:    c.Int("target-vmid"),
-				BridgeMap:     bridgeMap,
+				VMID:           vmid,
+				BackupStorage:  c.String("backup-storage"),
+				Archive:        c.String("archive"),
+				TargetStorage:  c.String("target-storage"),
+				RestoreStorage: c.String("restore-storage"),
+				TargetNode:     c.String("target-node"),
+				TargetVMID:     c.Int("target-vmid"),
+				BridgeMap:      bridgeMap,
 			})
 			if writeErr := output.WriteWorkflowResult(c.App.Writer, crossProfileOutputFormat(c, sides), result); writeErr != nil {
 				return writeErr

@@ -91,7 +91,7 @@ func TestBackupCopyRestoreCommandEndToEnd(t *testing.T) {
 		nodes: []output.NodeRow{{Name: "pve8845", Status: "online"}},
 		lxcs:  map[string][]output.GuestRow{},
 		storages: map[string][]output.StorageRow{
-			"pve8845": {{Node: "pve8845", Storage: "backup-dst", Type: "dir", Active: true, Enabled: true, Content: "backup", Avail: 1 << 30}},
+			"pve8845": {{Node: "pve8845", Storage: "backup-dst", Type: "dir", Active: true, Enabled: true, Content: "backup", Avail: 1 << 30}, {Node: "pve8845", Storage: "local-lvm", Type: "lvmthin", Active: true, Enabled: true, Content: "rootdir", Avail: 10 << 30}},
 		},
 		backups: map[string]map[string][]output.BackupRow{
 			"pve8845": {"backup-dst": {{
@@ -112,6 +112,7 @@ func TestBackupCopyRestoreCommandEndToEnd(t *testing.T) {
 		"--from", "n150", "--to", "pve8845",
 		"--backup-storage", "local",
 		"--target-storage", "backup-dst",
+		"--restore-storage", "local-lvm",
 		"--target-node", "pve8845",
 		"--target-vmid", "201",
 		"--wait",
@@ -126,7 +127,7 @@ func TestBackupCopyRestoreCommandEndToEnd(t *testing.T) {
 			t.Fatalf("missing %q:\n%s", want, out)
 		}
 	}
-	if target.restoreOptions.VMID != 201 {
+	if target.restoreOptions.VMID != 201 || target.restoreOptions.Storage != "local-lvm" || target.restoreOptions.Archive != copyTargetVolid {
 		t.Fatalf("restore options = %+v", target.restoreOptions)
 	}
 }

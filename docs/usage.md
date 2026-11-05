@@ -214,9 +214,14 @@ archive was reused).
 
 ```bash
 pve backup copy-restore 101 --from n150 --to pve8845 \
-  --backup-storage local --target-storage backup-dst \
+  --backup-storage local --target-storage backup-dst --restore-storage local-lvm \
   --target-node pve8845 --target-vmid 201 --wait
 ```
+
+`--target-storage` selects the target directory storage for the archive.
+`--restore-storage` selects the target storage for guest disks, such as
+`local-lvm`. When omitted, PVE selects its default storage.
+That default must support container directories for LXC restores.
 
 `backup copy-restore` chains the stages built in this section — backup,
 transfer (with checksum verify), restore (preflighted), post-check — and
@@ -1883,6 +1888,7 @@ pve backup copy-restore VMID
 | `--backup-storage` | --backup-storage value source dir storage for the backup stage |
 | `--archive` | --archive value existing source archive volid; skips the backup stage (resume) |
 | `--target-storage` | --target-storage value target dir storage name **Required.** |
+| `--restore-storage` | --restore-storage value target guest disk storage (default: PVE default storage) |
 | `--target-node` | --target-node value target PVE node name **Required.** |
 | `--target-vmid` | --target-vmid value target VMID (defaults to the source VMID) (default: 0) |
 | `--node` | --node value source PVE node name (defaults to the source guest's API-resolved node) |

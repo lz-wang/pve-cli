@@ -20,11 +20,12 @@ type BackupCopyRestoreOptions struct {
 	BackupStorage string // source dir storage for the backup stage
 	// Archive starts the workflow from an existing archive (backup stage
 	// skipped); used to resume interrupted runs.
-	Archive       string
-	TargetStorage string // dir storage on the target host
-	TargetNode    string
-	TargetVMID    int
-	BridgeMap     map[string]string
+	Archive        string
+	TargetStorage  string // dir storage on the target host
+	RestoreStorage string // guest disk storage on the target host; empty uses the PVE default
+	TargetNode     string
+	TargetVMID     int
+	BridgeMap      map[string]string
 }
 
 // BackupCopyRestoreWorkflow composes the existing services. Every stage
@@ -135,6 +136,7 @@ func (w *BackupCopyRestoreWorkflow) Run(ctx context.Context, options BackupCopyR
 		Node:      options.TargetNode,
 		VMID:      options.TargetVMID,
 		BridgeMap: options.BridgeMap,
+		Storage:   options.RestoreStorage,
 	})
 	// The restore service reports the split state itself: status is partial
 	// when the archive restored but the post-restore configuration failed.

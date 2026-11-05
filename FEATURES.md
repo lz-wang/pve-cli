@@ -111,6 +111,8 @@ See [usage](docs/usage.md) for every command, flag, default and argument, and
 - `config set` verifies write outcomes by re-reading state: additive
   `verified`/`api_error` fields distinguish confirmed, mismatched and unknown
   results; uncertain writes are never retried.
+- Backup-copy-restore accepts separate archive and guest disk storages through
+  `--target-storage` and `--restore-storage`.
 - Restore bridge mapping requires a non-empty digest and digest-protected
   updates. Missing protection reports a partial restore without a configuration write.
 - Submission errors retain the guest resource. Backup reports an unknown
