@@ -131,6 +131,12 @@ rewrite (`succeeded`/`failed`/`skipped`), and the overall `status` reads
 `partial` — with a non-zero exit — when the archive restored but the
 post-restore configuration failed.
 
+Bridge mapping requires a non-empty configuration digest and a guest that supports
+digest-protected updates. If either is unavailable, no configuration write occurs.
+The completed restore remains `restore_status=succeeded`, with overall
+`status=partial` and `post_config_status=failed`. Inspect the restored guest
+before configuring its network. Do not repeat the restore.
+
 ### Offline emergency maintenance
 
 ```bash

@@ -111,6 +111,8 @@ See [usage](docs/usage.md) for every command, flag, default and argument, and
 - `config set` verifies write outcomes by re-reading state: additive
   `verified`/`api_error` fields distinguish confirmed, mismatched and unknown
   results; uncertain writes are never retried.
+- Restore bridge mapping requires a non-empty digest and digest-protected
+  updates. Missing protection reports a partial restore without a configuration write.
 - Submission errors retain the guest resource. Backup reports an unknown
   effective mode. Restore reports skipped post-configuration.
 - Backup results report `requested_mode` plus `effective_mode` from task-log

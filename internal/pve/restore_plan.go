@@ -273,12 +273,14 @@ func (s *RestoreService) applyBridgeMap(ctx context.Context, options RestoreOpti
 	// write between this read and the submit is rejected by PVE instead of
 	// silently overwritten.
 	digest, _ := config["digest"].(string)
-	var task Task
-	if submitter, ok := guest.(DigestConfigSubmitter); ok && strings.TrimSpace(digest) != "" {
-		task, err = submitter.ConfigWithDigest(ctx, values, digest)
-	} else {
-		task, err = guest.Config(ctx, values)
+	submitter, ok := guest.(DigestConfigSubmitter)
+	if !ok {
+		return fmt.Errorf("%w: bridge mapping requires digest-protected configuration updates. Inspect the restored guest before configuring its network", ErrUnavailable)
 	}
+	if strings.TrimSpace(digest) == "" {
+		return fmt.Errorf("%w: bridge mapping requires a non-empty configuration digest. Inspect the restored guest before configuring its network", ErrUnavailable)
+	}
+	task, err := submitter.ConfigWithDigest(ctx, values, digest)
 	if err != nil {
 		return fmt.Errorf("bridge mapping: update config: %w", ClassifyError(err))
 	}

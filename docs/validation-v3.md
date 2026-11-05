@@ -111,3 +111,27 @@ still pending (see the release notes in `docs/roadmap.md`).
   idempotently, different files conflict.
 - Mount outcomes: unconfirmed mount/unmount states exit 5 with
   `status=unknown` kept in the structured result.
+
+## Backup/restore review follow-up (2026-11-06)
+
+Local verification passed: `make check test test-race build docs-check`
+and `git diff --check`.
+
+- Submission results retain the resource type on rejected and uncertain
+  outcomes. Backup reports `effective_mode=unknown`. Restore reports
+  `post_config_status=skipped`. Service tests also verify retained UPIDs.
+- Sixteen CLI/HTTP cases cover VM and LXC backup and restore submissions.
+  HTTP 400 returns `failed` and exit 2. HTTP 500, HTTP 408 and client
+  timeouts return `unknown` and exit 5. Each case verifies one submission,
+  structured error fields and no invented task ID.
+- Restore bridge mapping requires a non-empty string digest and support
+  for digest-protected updates. Missing, empty, whitespace and non-string
+  digests, and unavailable update support, cause no configuration writes.
+  The result retains the restore UPID and reports a partial restore.
+  Existing tests verify successful digest submission and configuration read-back.
+
+These checks use local HTTP servers and fake backends. No real PVE resources
+were created, copied, restored or deleted during this follow-up.
+The cross-host acceptance requirement remains open before release.
+Use a disposable LXC to verify backup, copy, restore into a free VMID,
+bridge mapping, task state and configuration. Then remove the test resources.

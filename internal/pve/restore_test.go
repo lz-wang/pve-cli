@@ -535,3 +535,55 @@ func TestRestoreBridgeMapRequiresWait(t *testing.T) {
 		t.Fatalf("status = %q, want empty: the operation never started", result.Status)
 	}
 }
+
+// Expose only Guest to model a backend without digest submission support.
+type guestWithoutDigest struct{ Guest }
+
+type restoreWithoutDigestBackend struct{ *bridgeMapBackend }
+
+func (b *restoreWithoutDigestBackend) LXC(ctx context.Context, node string, id int) (Guest, error) {
+	guest, err := b.bridgeMapBackend.LXC(ctx, node, id)
+	return guestWithoutDigest{guest}, err
+}
+
+func TestRestoreBridgeMapRequiresDigestProtection(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		digest      any
+		unsupported bool
+	}{
+		{"missing", nil, false},
+		{"empty", "", false},
+		{"whitespace", "  ", false},
+		{"wrong_type", 123, false},
+		{"unsupported", "digest-1", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			backend := bridgeMapBackendOf("digest-1", "name=eth0,bridge=vmbr2")
+			if tc.digest == nil {
+				delete(backend.guestConfigs["lxc/pve1/201"], "digest")
+			} else {
+				backend.guestConfigs["lxc/pve1/201"]["digest"] = tc.digest
+			}
+			guest := backend.lxcs["pve1"][201]
+			var restoreBackend RestoreBackend = backend
+			if tc.unsupported {
+				restoreBackend = &restoreWithoutDigestBackend{backend}
+			}
+			svc := NewRestoreService(restoreBackend, TaskRunner{Wait: true, WaitTimeout: time.Second})
+			result, err := svc.Restore(context.Background(), RestoreOptions{
+				Kind: "lxc", Archive: "backup:backup/vzdump-lxc-200.tar.zst",
+				Node: "pve1", VMID: 201, Storage: "local-lvm", BridgeMap: map[string]string{"vmbr2": "vmbr0"},
+			})
+			if !errors.Is(err, ErrUnavailable) {
+				t.Fatalf("err=%v, want unavailable", err)
+			}
+			if result.Status != "partial" || result.RestoreStatus != "succeeded" || result.PostConfigStatus != "failed" || result.Task != "UPID:pve1:restore" || result.Error == "" {
+				t.Fatalf("result=%+v", result)
+			}
+			if guest.configCalls != 0 {
+				t.Fatalf("unprotected config writes=%d", guest.configCalls)
+			}
+		})
+	}
+}
