@@ -97,7 +97,16 @@ func (s *GuestService) RemoteMigrate(ctx context.Context, vmid int, node string,
 				return operation, writeErr
 			}
 		}
-		return operation, fmt.Errorf("submit remote migration: %w", ClassifyError(err))
+		// The exit-code contract maps an unconfirmed outcome to 5 (unknown
+		// final outcome — cannot safely retry), not to the transport kind's
+		// 3 (unavailable — transient). ErrUncertain rides the error chain
+		// while the classified error keeps its API message, HTTP status and
+		// semantic kind readable.
+		submitErr := ClassifyError(err)
+		if status == TaskStatusUnknown {
+			submitErr = fmt.Errorf("%w: %w", ErrUncertain, submitErr)
+		}
+		return operation, fmt.Errorf("submit remote migration: %w", submitErr)
 	}
 	operation, runErr := runner.Execute(ctx, task)
 	if runner.ResultWriter != nil {

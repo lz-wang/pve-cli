@@ -337,6 +337,11 @@ func TestRestoreSubmissionFailureKeepsUnknown(t *testing.T) {
 	if result.Status != "unknown" || result.RestoreStatus != "unknown" {
 		t.Fatalf("status = %q/%q, want unknown/unknown (submission outcome unproven)", result.Status, result.RestoreStatus)
 	}
+	// P1-4: the unconfirmed outcome must exit 5 (cannot safely retry), not
+	// the transport kind's 3 (transient).
+	if !errors.Is(err, ErrUncertain) {
+		t.Fatalf("err = %v, want ErrUncertain (exit code 5 contract)", err)
+	}
 	if result.Task != "UPID:pve1:restore" {
 		t.Fatalf("task = %q, want the UPID returned alongside the error", result.Task)
 	}
@@ -370,6 +375,11 @@ func TestRestoreSubmissionRejectionReportsFailed(t *testing.T) {
 	}
 	if result.Status != "failed" {
 		t.Fatalf("status = %q, want failed (provable rejection)", result.Status)
+	}
+	// P1-4: a provable rejection keeps its classified exit code — it must
+	// not read as uncertain.
+	if errors.Is(err, ErrUncertain) {
+		t.Fatalf("a provable rejection must not report uncertain: %v", err)
 	}
 }
 

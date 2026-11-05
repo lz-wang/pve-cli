@@ -507,6 +507,10 @@ func TestBackupCopyRestoreWorkflowKeepsUnknownOnBackupTimeout(t *testing.T) {
 	if result.Status != "unknown" {
 		t.Fatalf("status = %q, want unknown (backup outcome unconfirmed)", result.Status)
 	}
+	// P1-4: an unconfirmed workflow outcome exits 5, not the generic 1.
+	if !errors.Is(err, ErrUncertain) {
+		t.Fatalf("err = %v, want ErrUncertain (exit code 5 contract)", err)
+	}
 	var backup output.WorkflowStageResult
 	for _, stage := range result.Stages {
 		if stage.Stage == "backup" {
@@ -536,6 +540,10 @@ func TestBackupCopyRestoreWorkflowKeepsUnknownOnRestoreTimeout(t *testing.T) {
 	if result.Status != "unknown" {
 		t.Fatalf("status = %q, want unknown (restore outcome unconfirmed)", result.Status)
 	}
+	// P1-4: an unconfirmed workflow outcome exits 5, not the generic 1.
+	if !errors.Is(err, ErrUncertain) {
+		t.Fatalf("err = %v, want ErrUncertain (exit code 5 contract)", err)
+	}
 	var restore output.WorkflowStageResult
 	for _, stage := range result.Stages {
 		if stage.Stage == "restore" {
@@ -561,6 +569,10 @@ func TestBackupCopyRestoreWorkflowKeepsUnknownOnBackupSubmitFailure(t *testing.T
 	}
 	if result.Status != "unknown" {
 		t.Fatalf("status = %q, want unknown (backup outcome unproven)", result.Status)
+	}
+	// P1-4: an unconfirmed workflow outcome exits 5, not the generic 1.
+	if !errors.Is(err, ErrUncertain) {
+		t.Fatalf("err = %v, want ErrUncertain (exit code 5 contract)", err)
 	}
 	var backup output.WorkflowStageResult
 	for _, stage := range result.Stages {
@@ -589,6 +601,10 @@ func TestBackupCopyRestoreWorkflowKeepsUnknownOnRestoreSubmitFailure(t *testing.
 	}
 	if result.Status != "unknown" {
 		t.Fatalf("status = %q, want unknown (restore outcome unproven)", result.Status)
+	}
+	// P1-4: an unconfirmed workflow outcome exits 5, not the generic 1.
+	if !errors.Is(err, ErrUncertain) {
+		t.Fatalf("err = %v, want ErrUncertain (exit code 5 contract)", err)
 	}
 	var restore output.WorkflowStageResult
 	for _, stage := range result.Stages {

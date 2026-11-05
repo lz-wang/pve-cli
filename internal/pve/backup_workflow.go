@@ -77,6 +77,14 @@ func (w *BackupCopyRestoreWorkflow) Run(ctx context.Context, options BackupCopyR
 	// definite rejection or failure reports failed.
 	fail := func(stageStatus string, stageErr error) (output.WorkflowResult, error) {
 		result.Status = aggregateWorkflowStatus(stageStatus)
+		// P1-4: an unconfirmed workflow outcome must exit 5 (unknown final
+		// outcome — cannot safely retry), never the generic 1. ErrUncertain
+		// rides every unknown-stage error chain — including wait timeouts
+		// that already carry ErrTaskTimeout — so automation checks one
+		// sentinel. Definite failures keep their classified exit codes.
+		if result.Status == "unknown" && stageErr != nil && !errors.Is(stageErr, ErrUncertain) {
+			stageErr = fmt.Errorf("%w: %w", ErrUncertain, stageErr)
+		}
 		return result, stageErr
 	}
 

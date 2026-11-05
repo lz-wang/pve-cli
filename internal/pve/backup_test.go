@@ -2,6 +2,7 @@ package pve
 
 import (
 	"context"
+	"errors"
 	"strconv"
 	"strings"
 	"testing"
@@ -190,6 +191,11 @@ func TestBackupServiceSubmissionFailureKeepsUnknown(t *testing.T) {
 	if result.Status != "unknown" {
 		t.Fatalf("status = %q, want unknown (submission outcome unproven)", result.Status)
 	}
+	// P1-4: the unconfirmed outcome must exit 5 (cannot safely retry), not
+	// the transport kind's 3 (transient).
+	if !errors.Is(err, ErrUncertain) {
+		t.Fatalf("err = %v, want ErrUncertain (exit code 5 contract)", err)
+	}
 	if result.Task != "UPID:pve1:backup" {
 		t.Fatalf("task = %q, want the UPID returned alongside the error", result.Task)
 	}
@@ -219,6 +225,11 @@ func TestBackupServiceSubmissionRejectionReportsFailed(t *testing.T) {
 	}
 	if result.Status != "failed" {
 		t.Fatalf("status = %q, want failed (provable rejection)", result.Status)
+	}
+	// P1-4: a provable rejection keeps its classified exit code — it must
+	// not read as uncertain.
+	if errors.Is(err, ErrUncertain) {
+		t.Fatalf("a provable rejection must not report uncertain: %v", err)
 	}
 }
 

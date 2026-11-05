@@ -126,7 +126,14 @@ func (s *RestoreService) Restore(ctx context.Context, options RestoreOptions) (o
 		if task != nil {
 			result.Task = task.UPID()
 		}
-		return result, fmt.Errorf("submit restore: %w", ClassifyError(err))
+		// An unconfirmed outcome must exit 5 (cannot safely retry), not the
+		// transport kind's 3 (transient); a provable rejection keeps its
+		// classified code. The classified error stays in the chain either way.
+		submitErr := ClassifyError(err)
+		if status == TaskStatusUnknown {
+			submitErr = fmt.Errorf("%w: %w", ErrUncertain, submitErr)
+		}
+		return result, fmt.Errorf("submit restore: %w", submitErr)
 	}
 
 	result := output.RestoreResult{

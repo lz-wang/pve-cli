@@ -14,6 +14,7 @@ import (
 
 	"github.com/lz-wang/pve-cli/v3/internal/config"
 	"github.com/lz-wang/pve-cli/v3/internal/output"
+	"github.com/lz-wang/pve-cli/v3/internal/pve"
 )
 
 // The remote command runs the preflight plan first, transfers credentials
@@ -153,9 +154,73 @@ func TestLXCMigrateRemoteSubmissionFailureFailsCommand(t *testing.T) {
 	}
 }
 
-// A failing preflight aborts before any mutation.
-func TestLXCMigrateRemoteAbortsOnFailedPreflight(t *testing.T) {
+// P1-4: an HTTP 500 remote_migrate submission must agree across the two
+// automation interfaces: the JSON result reads status unknown AND the
+// process exit code is 5 (unknown final outcome, cannot safely retry) —
+// never 3 (unavailable, transient), which invites an unsafe rerun. The
+// classified API error (HTTP status, message) stays in the chain.
+func TestLXCMigrateRemoteHTTP500JSONUnknownWithExitFive(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/cluster/resources"):
+			_, _ = w.Write([]byte(`{"data":[{"id":"lxc/101","vmid":101,"name":"app","node":"n150","type":"lxc","status":"stopped"}]}`))
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/lxc/101/status/current"):
+			_, _ = w.Write([]byte(`{"data":{"vmid":101,"status":"stopped","name":"app"}}`))
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/lxc/101/config"):
+			_, _ = w.Write([]byte(`{"data":{"rootfs":"local-lvm:vm-101-disk-0,size=8G","net0":"name=eth0,bridge=vmbr2"}}`))
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/nodes/n150/status"):
+			_, _ = w.Write([]byte(`{"data":{"status":"online"}}`))
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/lxc/101/remote_migrate"):
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = w.Write([]byte(`{"data":null,"message":"migration server error"}`))
+		default:
+			t.Logf("unexpected %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
 	backend := migrationPlanBackends()
+	sourceBackend, err := pve.NewProxmoxBackend(config.Profile{Endpoint: server.URL, TokenID: "test@pve!cli"}, pve.ClientOptions{TokenSecret: "private-test-token"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	deps := Dependencies{Stdout: &stdout, Stderr: &stderr}
+	deps.BackendFactory = func(profile config.Profile, _ pve.ClientOptions) (pve.Backend, error) {
+		if strings.Contains(profile.Endpoint, "pve8845") {
+			return backend.target, nil
+		}
+		return sourceBackend, nil
+	}
+
+	err = RunWithDependencies([]string{
+		"pve", "--config", writeTwoProfileConfig(t), "--profile", "n150",
+		"lxc", "migrate", "remote", "101",
+		"--to", "pve8845", "--target-node", "pve8845",
+		"--storage-map", "local-lvm=local-lvm", "--bridge-map", "vmbr2=vmbr0",
+		"--yes", "-o", "json",
+	}, "test", deps)
+	if err == nil {
+		t.Fatalf("an HTTP 500 submission must fail the command (stdout %s)", stdout.String())
+	}
+	var result output.OperationResult
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatalf("stdout must carry the operation result json: %v (%q)", err, stdout.String())
+	}
+	if result.Status != "unknown" {
+		t.Fatalf("json status = %q, want unknown", result.Status)
+	}
+	if code := ExitCode(err); code != 5 {
+		t.Fatalf("exit code = %d, want 5 for an unconfirmed outcome (err %v)", code, err)
+	}
+	if !strings.Contains(err.Error(), "500") {
+		t.Fatalf("err = %v, want the preserved HTTP status", err)
+	}
+}
+
+// A failing preflight aborts before any mutation.
+func TestLXCMigrateRemoteAbortsOnFailedPreflight(t *testing.T) {	backend := migrationPlanBackends()
 	backend.target.networkRows = map[string][]output.NetworkRow{} // bridge missing
 	guest := &commandGuest{row: backend.source.lxcGuests["n150"][101].row}
 	backend.source.lxcGuests["n150"][101] = guest

@@ -197,29 +197,30 @@ func TestRemoteMigrateHTTPContract(t *testing.T) {
 // nil task or an empty UPID can never mean success either.
 func TestRemoteMigrateSubmissionFailureNeverReportsSuccess(t *testing.T) {
 	cases := []struct {
-		name         string
-		task         Task
-		err          error
-		wantStatus   string
-		wantKind     error
-		wantTaskKeep string
+		name          string
+		task          Task
+		err           error
+		wantStatus    string
+		wantKind      error
+		wantTaskKeep  string
+		wantUncertain bool
 	}{
-		{"http 400", nil, &APIError{HTTPStatus: 400, Category: CategoryInvalid, kind: ErrInvalid}, "failed", nil, ""},
-		{"http 408", nil, &APIError{HTTPStatus: 408, Category: CategoryUnavailable, kind: ErrUnavailable}, "unknown", nil, ""},
-		{"http 409", nil, &APIError{HTTPStatus: 409, Category: CategoryConflict, kind: ErrConflict}, "failed", nil, ""},
-		{"http 412", nil, &APIError{HTTPStatus: 412, Category: CategoryConflict, kind: ErrConflict}, "failed", nil, ""},
-		{"http 500", nil, &APIError{HTTPStatus: 500, Category: CategoryUnavailable, kind: ErrUnavailable}, "unknown", nil, ""},
-		{"http 502", nil, &APIError{HTTPStatus: 502, Category: CategoryUnavailable, kind: ErrUnavailable}, "unknown", nil, ""},
-		{"http 503", nil, &APIError{HTTPStatus: 503, Category: CategoryUnavailable, kind: ErrUnavailable}, "unknown", nil, ""},
-		{"http 504", nil, &APIError{HTTPStatus: 504, Category: CategoryUnavailable, kind: ErrUnavailable}, "unknown", nil, ""},
+		{"http 400", nil, &APIError{HTTPStatus: 400, Category: CategoryInvalid, kind: ErrInvalid}, "failed", nil, "", false},
+		{"http 408", nil, &APIError{HTTPStatus: 408, Category: CategoryUnavailable, kind: ErrUnavailable}, "unknown", nil, "", true},
+		{"http 409", nil, &APIError{HTTPStatus: 409, Category: CategoryConflict, kind: ErrConflict}, "failed", nil, "", false},
+		{"http 412", nil, &APIError{HTTPStatus: 412, Category: CategoryConflict, kind: ErrConflict}, "failed", nil, "", false},
+		{"http 500", nil, &APIError{HTTPStatus: 500, Category: CategoryUnavailable, kind: ErrUnavailable}, "unknown", nil, "", true},
+		{"http 502", nil, &APIError{HTTPStatus: 502, Category: CategoryUnavailable, kind: ErrUnavailable}, "unknown", nil, "", true},
+		{"http 503", nil, &APIError{HTTPStatus: 503, Category: CategoryUnavailable, kind: ErrUnavailable}, "unknown", nil, "", true},
+		{"http 504", nil, &APIError{HTTPStatus: 504, Category: CategoryUnavailable, kind: ErrUnavailable}, "unknown", nil, "", true},
 		// P1-4: a 500 body naming a missing resource is an ErrNotFound
 		// classification, never a proven rejection — the lookup can happen
 		// in a phase after the migration already started.
-		{"http 500 lookup failure", nil, &APIError{HTTPStatus: 500, Category: CategoryNotFound, Message: "no such guest", kind: ErrNotFound}, "unknown", nil, ""},
-		{"network timeout", nil, context.DeadlineExceeded, "unknown", ErrUnavailable, ""},
-		{"nil task without error", nil, nil, "unknown", ErrTaskTimeout, ""},
-		{"empty upid", &fakeTask{}, nil, "unknown", ErrTaskTimeout, ""},
-		{"upid preserved on uncertain error", &fakeTask{upid: "UPID:n150:rm:101:"}, context.DeadlineExceeded, "unknown", ErrUnavailable, "UPID:n150:rm:101:"},
+		{"http 500 lookup failure", nil, &APIError{HTTPStatus: 500, Category: CategoryNotFound, Message: "no such guest", kind: ErrNotFound}, "unknown", nil, "", true},
+		{"network timeout", nil, context.DeadlineExceeded, "unknown", ErrUnavailable, "", true},
+		{"nil task without error", nil, nil, "unknown", ErrTaskTimeout, "", false},
+		{"empty upid", &fakeTask{}, nil, "unknown", ErrTaskTimeout, "", false},
+		{"upid preserved on uncertain error", &fakeTask{upid: "UPID:n150:rm:101:"}, context.DeadlineExceeded, "unknown", ErrUnavailable, "UPID:n150:rm:101:", true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -233,6 +234,17 @@ func TestRemoteMigrateSubmissionFailureNeverReportsSuccess(t *testing.T) {
 			})
 			if err == nil {
 				t.Fatalf("expected error, got result %+v", operation)
+			}
+			// P1-4: an unconfirmed outcome must satisfy errors.Is(err,
+			// ErrUncertain) so the CLI exit code is a stable 5 (unknown final
+			// outcome, cannot safely retry) instead of the transport kind's
+			// 3 (unavailable, transient). A provable rejection must never
+			// report uncertain.
+			if tc.wantUncertain && !errors.Is(err, ErrUncertain) {
+				t.Fatalf("err = %v, want ErrUncertain (exit code 5 contract)", err)
+			}
+			if !tc.wantUncertain && errors.Is(err, ErrUncertain) {
+				t.Fatalf("a provable rejection must not report uncertain: %v", err)
 			}
 			if tc.wantKind != nil && !errors.Is(err, tc.wantKind) {
 				t.Fatalf("err = %v, want kind %v", err, tc.wantKind)
@@ -417,6 +429,20 @@ func TestRemoteMigrateHTTP500StaysUnknown(t *testing.T) {
 			}
 			if result.Status != tc.wantStatus {
 				t.Fatalf("HTTP %d: status = %q, want %q", tc.status, result.Status, tc.wantStatus)
+			}
+			// P1-4: the JSON status and the exit code must agree — status
+			// unknown exits 5 (ErrUncertain in the chain), status failed
+			// keeps the classified rejection code. The classified API error
+			// (message and HTTP status) stays readable either way.
+			if tc.wantStatus == "unknown" && !errors.Is(err, ErrUncertain) {
+				t.Fatalf("HTTP %d: err = %v, want ErrUncertain so the exit code is 5", tc.status, err)
+			}
+			if tc.wantStatus == "failed" && errors.Is(err, ErrUncertain) {
+				t.Fatalf("HTTP %d: a proven rejection must not exit 5: %v", tc.status, err)
+			}
+			var apiErr *APIError
+			if !errors.As(err, &apiErr) || apiErr.HTTPStatus != tc.status {
+				t.Fatalf("HTTP %d: err = %v, want the preserved APIError", tc.status, err)
 			}
 		})
 	}

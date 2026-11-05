@@ -295,7 +295,10 @@ conflict, digest mismatch) reports `failed`; every 5xx — including bodies
 that name a missing resource — and every transport interruption report
 `unknown`, because the server may have started the migration before
 failing. A UPID returned alongside an error is preserved for
-`task get/log/wait`. `--yes` is required and the command prints two
+`task get/log/wait`, and an unconfirmed outcome exits 5 (unknown final
+outcome — do not rerun blindly) while a proven rejection keeps its
+classified exit code; the JSON status and the process exit code never
+disagree. `--yes` is required and the command prints two
 notices first: the source PVE receives target API credentials for the
 transfer, and upstream remote migration is experimental with no automatic
 resume after interruption — use `task get/log/wait` to recover.
