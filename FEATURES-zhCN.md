@@ -1,5 +1,7 @@
 # pve v3 功能清单
 
+- `backup restore-plan` 在跨主机传输前读取归档配置，检查声明磁盘容量、存储映射、网桥及外部依赖；逐磁盘映射仅用于规划。
+
 面向个人 HomeLab 的资源式、单二进制 Proxmox VE CLI。
 全部命令、参数与默认值见[使用指南](docs/usage.md)，JSON/YAML 契约见
 [输出 Schema](docs/output-schema.md)。

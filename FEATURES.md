@@ -1,5 +1,7 @@
 # pve v3 features
 
+- `backup restore-plan` reads archive configuration before cross-host transfer and checks declared disk capacity, placement, bridges, and external dependencies. Per-disk placement is planning only.
+
 A resource-oriented, single-binary Proxmox VE CLI for a personal HomeLab.
 See [usage](docs/usage.md) for every command, flag, default and argument, and
 [output schema](docs/output-schema.md) for the JSON/YAML contract.

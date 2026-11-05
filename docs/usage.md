@@ -564,6 +564,32 @@ unknown timestamps and configuration exclusions.
 A strict success only confirms these checks, not complete recovery.
 Multi-profile output uses the same envelope as other read-only queries.
 
+### Plan a cross-host restore before transfer
+
+```bash
+pve backup restore-plan local:backup/vzdump-lxc-100-example.tar.zst \
+  --from source --to target --node source-node --target-node target-node \
+  --target-vmid 900 --type lxc --storage local-lvm --bridge-map vmbr0=vmbr1
+```
+
+`backup restore-plan` reads the source archive configuration through the PVE API.
+It checks the destination VMID, disk storage content types, declared disk sizes,
+and bridges. It sums disk sizes for each destination storage. Compressed archive
+size does not determine the restored disk capacity. This command does not copy,
+restore, start, or reserve resources. Both profiles must be different.
+
+Use repeated `--disk-storage rootfs=local-lvm` options to compare per-disk placements.
+These overrides are planning only. Existing restore commands accept one destination
+storage. Duplicate mappings and mappings for absent disks or bridges fail.
+Excluded mounts and external devices require separate recovery. CPU, firmware,
+EFI, TPM, and onboot settings require target compatibility checks. MAC addresses,
+IP addresses, and application identity can conflict after a restore.
+
+Failed checks return a nonzero exit status after the report. An unreadable archive
+configuration also returns nonzero. Unknown disk sizes or unavailable target
+inventory remain visible as unknown checks. A warning report does not prove that
+the guest will boot or that its applications and external data can recover.
+
 <!-- GENERATED_REFERENCE -->
 
 ## Global flags
@@ -1936,6 +1962,27 @@ pve backup audit
 | `--all-profiles` | --all-profiles query all configured profiles (read-only) (default: false) |
 | `--profiles` | --profiles value [ --profiles value ] profile names, comma-separated or repeatable |
 | `--workers` | --workers value parallel profile queries (1-8) (default: 4) |
+
+### `pve backup restore-plan`
+
+Inspect an archive and a separate destination before transfer (read-only)
+
+```text
+pve backup restore-plan ARCHIVE
+```
+
+| Flag | Description and default |
+|---|---|
+| `--from` | --from value source profile (default: selected profile) |
+| `--to` | --to value destination profile **Required.** |
+| `--node` | --node value source node **Required.** |
+| `--target-node` | --target-node value **Required.** |
+| `--target-vmid` | --target-vmid value (default: 0) **Required.** |
+| `--type` | --type value vm or lxc **Required.** |
+| `--storage` | --storage value destination disk storage |
+| `--disk-storage` | --disk-storage value [ --disk-storage value ] planning-only disk=storage override |
+| `--bridge-map` | --bridge-map value [ --bridge-map value ] source=target bridge mapping |
+| `--output`, `-o` | --output value, -o value output format: table,json,yaml |
 
 ### `pve backup copy`
 
