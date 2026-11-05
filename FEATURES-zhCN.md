@@ -72,6 +72,7 @@
   HTTP 状态行描述文本。
 - `config set` 写入后回读状态核验：新增 `verified`/`api_error` 字段区分
   已确认、不一致与结果未知；不确定状态绝不自动重试。
+- 提交异常保留来宾资源类型。备份报告实际模式未知，恢复报告后置配置已跳过。
 - 备份结果区分 `requested_mode` 与 `effective_mode`，实际模式仅来自任务
   日志证据，无法判定时为 `unknown`。
 - Mock Service、命令、HTTP 契约、JSON/YAML Golden 和竞态测试。

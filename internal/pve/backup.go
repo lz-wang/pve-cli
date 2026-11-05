@@ -153,6 +153,8 @@ func (s *BackupService) BackupGuest(ctx context.Context, options BackupCreateOpt
 			status = "failed"
 		}
 		result := output.BackupResult{
+			Resource:      kind,
+			EffectiveMode: BackupModeUnknown,
 			Kind:          kind,
 			VMID:          uint64(options.VMID),
 			Node:          row.Node,

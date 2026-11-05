@@ -114,14 +114,16 @@ func (s *RestoreService) Restore(ctx context.Context, options RestoreOptions) (o
 			status = "failed"
 		}
 		result := output.RestoreResult{
-			Kind:          kind,
-			VMID:          uint64(options.VMID),
-			Node:          node,
-			Archive:       archive,
-			Storage:       strings.TrimSpace(options.Storage),
-			Status:        status,
-			RestoreStatus: status,
-			Error:         err.Error(),
+			Resource:         kind,
+			PostConfigStatus: "skipped",
+			Kind:             kind,
+			VMID:             uint64(options.VMID),
+			Node:             node,
+			Archive:          archive,
+			Storage:          strings.TrimSpace(options.Storage),
+			Status:           status,
+			RestoreStatus:    status,
+			Error:            err.Error(),
 		}
 		if task != nil {
 			result.Task = task.UPID()

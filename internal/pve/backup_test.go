@@ -188,6 +188,9 @@ func TestBackupServiceSubmissionFailureKeepsUnknown(t *testing.T) {
 	if err == nil {
 		t.Fatal("a failed submission must fail the command")
 	}
+	if result.Resource != "vm" || result.EffectiveMode != BackupModeUnknown {
+		t.Fatalf("incomplete submission result: %+v", result)
+	}
 	if result.Status != "unknown" {
 		t.Fatalf("status = %q, want unknown (submission outcome unproven)", result.Status)
 	}
@@ -222,6 +225,9 @@ func TestBackupServiceSubmissionRejectionReportsFailed(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("a rejected submission must fail the command")
+	}
+	if result.Resource != "vm" || result.EffectiveMode != BackupModeUnknown {
+		t.Fatalf("incomplete submission result: %+v", result)
 	}
 	if result.Status != "failed" {
 		t.Fatalf("status = %q, want failed (provable rejection)", result.Status)

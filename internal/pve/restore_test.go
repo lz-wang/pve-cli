@@ -334,6 +334,9 @@ func TestRestoreSubmissionFailureKeepsUnknown(t *testing.T) {
 	if err == nil {
 		t.Fatal("a failed submission must fail the command")
 	}
+	if result.Resource != "lxc" || result.PostConfigStatus != "skipped" {
+		t.Fatalf("incomplete submission result: %+v", result)
+	}
 	if result.Status != "unknown" || result.RestoreStatus != "unknown" {
 		t.Fatalf("status = %q/%q, want unknown/unknown (submission outcome unproven)", result.Status, result.RestoreStatus)
 	}
@@ -372,6 +375,9 @@ func TestRestoreSubmissionRejectionReportsFailed(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("a rejected submission must fail the command")
+	}
+	if result.Resource != "lxc" || result.PostConfigStatus != "skipped" {
+		t.Fatalf("incomplete submission result: %+v", result)
 	}
 	if result.Status != "failed" {
 		t.Fatalf("status = %q, want failed (provable rejection)", result.Status)
