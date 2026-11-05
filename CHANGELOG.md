@@ -2,130 +2,99 @@
 
 ## Unreleased
 
+## v3.1.0 - 2026-11-06
+
 ### Added
 
-- `pve lxc mount`/`pve lxc unmount` for controlled offline emergency
-  maintenance over the host SSH transport: `--node` is required, running
-  guests and double mounts are refused, there is no `--force`, the real
-  host path is reported, and the observable mount state is re-verified
-  after every operation — unconfirmable outcomes report `unknown` with a
-  manual-cleanup hint instead of pretending success. `unmount` is
-  idempotent.
-- `pve backup copy-restore` composing backup → transfer (checksum verify)
-  → preflighted restore → post-check between two independent PVE hosts.
-  Each stage reports its own status/task; a failing stage stops the
-  pipeline with no automatic rollback. Resume is explicit and limited: an
-  existing target guest skips to the post-check, and `--archive` restarts
-  from an existing backup. `--wait` is required.
-- Restore preflight for `vm/lxc restore`: target VMID availability, archive
-  readability on its storage, target storage existence/activation/capacity
-  against the archive size, and `--bridge-map source=target` target-bridge
-  verification. Archive-internal facts (onboot, MAC/IP, mounts) stay honest
-  unknowns; the restored guest is never started automatically. A failing
-  preflight aborts before submission (exit 4, reasons in the error); with
-  `--wait` and a completed restore the bridge mapping is applied to the
-  restored guest's network devices.
-- `pve backup copy` cross-profile backup archive transfer between
-  independent PVE hosts over the two SSH transports (source `cat` → local
-  SHA-256/progress fan-out → target `dd`): dir-type storages only, target
-  never overwrites an existing archive (conflict), `.pve-cli-part` temporary
-  with checksum verification, limited resume of a complete part, atomic
-  rename publishing and interrupted-transfer cleanup. Observable progress on
-  stderr; `BackupCopyResult` reports bytes, the verified `sha256` and the
-  `resumed` flag.
-- `pve lxc migrate check` post-migration validation across both clusters:
-  source presence/running state, target guest existence, target storage and
-  bridge wiring, startability (locks), observable duplicate MACs (a running
-  source sharing the target's MAC fails), and bind mounts/device
-  passthrough requiring manual handling. Read-only; failures preserve both
-  sides for manual repair — no automatic rollback.
-- `pve lxc migrate remote` executing cross-cluster migrations through PVE's
-  native `remote_migrate` API on top of the plan preflight (failing checks
-  abort before any mutation). Defaults to offline migration; never deletes
-  the source container and never starts the target. The target endpoint
-  bundle is built from the `--to` profile plus an optional
-  `--target-fingerprint`; the target token is passed to the API request
-  only and is additionally registered with the source transport's error
-  sanitizer so it can never surface in errors or output. `--yes` is
-  required; the command prints explicit notices that the source PVE
-  receives target API credentials and that upstream remote migration is
-  experimental without automatic resume.
-- `pve lxc migrate plan` cross-profile migration preflight between two
-  independent PVE profiles (`--from` defaults to the current profile,
-  `--to` required): read-only checks covering both connections and the
-  target node, target-VMID availability across the target cluster, storage
-  mapping (existence, activation, capacity from declared volume sizes),
-  bridge mapping, autostart risk, bind mounts/device passthrough, and the
-  source running state. Checks that the API cannot observe — MAC/IP
-  conflicts from DHCP or guest-internal configuration — report `unknown`
-  instead of implying safety. The overall plan exits 1 on any failing
-  check. `lxc migrate VMID --target` keeps its intra-cluster behavior;
-  `--target` is now validated in the command action so the new
-  subcommands do not inherit the requirement.
-- `pve lxc exec` for SSH-backed command execution inside LXC containers via
-  `pct exec`: `--stdin` forwards standard input, `--timeout` bounds the run,
-  text mode passes the standard streams through live, and JSON mode returns
-  the existing agent-exec result structure with bounded output and a
-  `truncated` marker. Failing container commands preserve their actual exit
-  code as the process exit status; SSH connection/protocol failures are a
-  distinct error class (exit code 3). Requires a profile with an `ssh`
-  section (exit code 2 otherwise).
-- Optional per-profile host SSH transport (`internal/ssh`) reusing the
-  system OpenSSH client: profiles accept an `ssh` section (`host`, `user`,
-  `port`, `identity_file`, `known_hosts`). Host identity is always verified
-  (`accept-new`; verification cannot be disabled), BatchMode restricts auth
-  to key files/agent, remote arguments are strictly POSIX-quoted before the
-  remote shell sees them, output capture is bounded with truncation flags,
-  and SSH connection failures (`ConnectError`) are distinguished from remote
-  command exit codes. `config show` displays the SSH reference fields (no
-  secrets are stored in the section).
+- Optional per-profile host SSH transport uses the system OpenSSH client,
+  key or agent authentication, verified host keys and bounded output.
+  Host operations require an explicit `ssh.node` binding.
+- `pve lxc exec` runs commands inside containers through the host SSH transport.
+  It supports stdin forwarding, timeouts and bounded JSON output.
+  Container exit codes remain distinct from SSH connection failures.
+- `pve lxc net set` updates selected network attributes while preserving
+  unspecified attributes. It validates target bridges and uses the
+  configuration digest to reject concurrent changes.
+- `pve lxc migrate plan` checks independent source and target profiles.
+  `migrate remote` submits offline migrations through PVE's experimental
+  API after preflight and explicit confirmation. It retains the source
+  and does not start the target.
+- `pve lxc migrate check` reports source and target state, storage,
+  bridges, locks, duplicate MAC risks and mounts that require manual handling.
+  Unobservable risks remain explicit.
+- `pve backup copy` transfers archives between directory storages with
+  SHA-256 verification, progress on stderr and target inventory verification.
+  It reports bytes, checksum and whether an identical published archive was reused.
+- `pve backup copy-restore` combines backup, transfer, restore and post-check.
+  Each stage retains its status and task ID. Failures stop the pipeline
+  without automatic rollback. `--wait` is required.
+- `backup copy-restore --restore-storage` selects guest disk storage
+  independently of the archive destination selected by `--target-storage`.
+  Omitting the new option retains PVE's default storage selection.
+- Restore preflight checks target VMID availability, archive readability,
+  storage availability and capacity, and mapped target bridges.
+  Restored guests remain stopped.
+- `pve lxc mount` and `pve lxc unmount` support offline maintenance.
+  They require a node, refuse running containers and verify mount state.
+  Double mounts are refused. Unmount is idempotent, and uncertain outcomes
+  include manual cleanup guidance.
 
 ### Fixed
 
-- `pve lxc net set` for safe partial updates of LXC network devices: reads
-  the complete device configuration, modifies only the requested attributes
-  (`--bridge`, `--iface`, `--ip`, `--gw`, `--tag`, `--rate`), verifies the
-  target bridge exists on the node, and submits the merged value with the
-  configuration digest so concurrent modifications fail as conflicts (HTTP
-  412 now maps to the conflict exit code) instead of overwriting each other.
-  Unspecified attributes (name, ip, gw, hwaddr, ...) are preserved, and the
-  result shares the `verified`/`api_error` post-write semantics of
-  `config set`.
+- Backup, restore and remote migration preserve uncertain submission outcomes.
+  HTTP 5xx, HTTP 408 and transport failures report `unknown` with exit 5.
+  Explicit rejection reports `failed`. Available UPIDs remain in results.
+- Backup and restore submission errors now populate the resource type.
+  Backup reports `effective_mode=unknown`. Restore reports
+  `post_config_status=skipped`.
+- Backup results separate requested and effective modes. Only explicit
+  completed-task log evidence determines the effective mode.
+- Restore rejects `--bridge-map` without `--wait` before submission.
+  Mapping requires a non-empty configuration digest and protected updates.
+  Missing protection causes no configuration write.
+- Bridge mappings must match restored devices and pass configuration read-back.
+  A completed restore with failed post-configuration reports `partial`
+  and preserves the restore task ID.
+- Cross-host workflows refuse occupied target VMIDs and unreadable inventories.
+  Continuation requires an explicit `--archive` and an available target VMID.
+  An existing target guest never proves ownership by a previous workflow.
+- Backup selection requires the archive named in the task log to exist
+  in storage inventory. It never substitutes another archive when that
+  named archive is missing.
+- Transfers use unique temporary files and atomic publication without overwrite.
+  They reject truncated input and checksum mismatches.
+  They never adopt or delete another run's unfinished part file.
+  Existing published archives are reusable only when their checksums match.
+- Published archives with unconfirmed inventory, failed restore configuration,
+  and failed post-checks retain partial outcomes.
+  Unconfirmed post-check risks remain warnings.
+- Host transfers validate source and target SSH node bindings.
+  Backup paths resolve through PVE storage metadata.
+- Remote migration uses PVE endpoint and mapping formats.
+  Target credentials and sensitive API error details remain redacted.
+- Native configuration writes verify their effects through configuration read-back.
+  Results distinguish confirmed changes, mismatches and unknown final state,
+  while retaining sanitized API errors. Uncertain mutations are not retried.
+- HTTP errors retain bounded, sanitized status and validation details.
+  Digest conflicts map to the conflict category.
+  Async operations require task evidence instead of treating a missing task
+  as synchronous success.
 
-### Fixed
+### Validation
 
-- Backup results no longer report the request parameter as the executed mode.
-  `BackupResult` gains `requested_mode`, `effective_mode` and
-  `effective_mode_source`: the requested mode is always echoed, while the
-  effective mode is determined solely from explicit vzdump task-log markers
-  (last marker wins after a fallback) once the task completed with `--wait`;
-  it is `unknown` for pending tasks, unreadable logs, ambiguous logs and
-  failed tasks, and is never inferred from success. The table output now
-  shows REQUESTED and EFFECTIVE columns.
-
-- `vm/lxc config set` now verifies mutation outcomes by re-reading the
-  configuration after the write settles. `OperationResult` gains additive
-  `verified` (tri-state) and `api_error` fields: a write that errors but is
-  confirmed in effect reports `succeeded` + `verified=true` while preserving
-  the original sanitized API error in `api_error`; a clean write whose
-  re-read state differs reports `failed` + `verified=false` with mismatch
-  details; unreadable final states stay `unknown`. Value comparison
-  normalizes numeric strings ("0" vs `0`), matches PVE option strings
-  attribute-wise (hwaddr/digest appends), skips hashed credential fields,
-  and redacts sensitive values from mismatch output. Uncertain writes are
-  never automatically retried.
-
-- HTTP error responses now preserve sanitized PVE details instead of
-  discarding the body: `APIError` carries the HTTP status, CLI semantic
-  category, sanitized server message, field-level validation errors, and the
-  operation context (operation, resource, node, phase). Error bodies are
-  parsed with size limits, credentials (token secrets, echoed guest
-  credentials, URL userinfo, opaque long tokens) are redacted before anything
-  is surfaced, and sensitive-named field errors are reported as redacted.
-  Classification no longer depends on the HTTP status-line description text;
-  5xx bodies whose parsed message states a missing resource map to not-found.
-  Numeric HTTP status matching was removed from string-based classification;
-  SDK auth failures map through `ErrNotAuthorized`.
+- Local vet, tests, race tests, native build and generated-reference checks passed.
+  Sixteen CLI/HTTP cases cover VM/LXC backup and restore submission errors.
+- Real stopped-LXC acceptance passed in both directions between 8845h and 8600k.
+  It covered backup, checksum-verified transfer, restore, same-name bridge mapping,
+  task inspection and checksum-identical archive reuse.
+- The real test exposed the need for separate restore disk storage.
+  The corrected workflow passed with `--restore-storage local-lvm`.
+- All three test containers, their disks, four archive copies and two logs
+  were removed. Final inventories matched the pre-test baselines.
+- Real acceptance did not cover guest startup, application health,
+  different-name bridges, remote migration or network fault injection.
+  Exceptional outcomes remain covered by local contract tests.
+  See [the validation record](docs/validation-v3.md) for evidence and scope.
 
 ## v3.0.0 - 2026-10-29
 
